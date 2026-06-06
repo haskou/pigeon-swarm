@@ -81,6 +81,9 @@ COPY --from=sources /sources/pigeon-swarm-node/config ./config
 COPY --from=sources /sources/pigeon-swarm-node/tsconfig.json /sources/pigeon-swarm-node/tsconfig.build.json ./
 ENV NODE_ENV=build
 RUN yarn build
+RUN set -eu; \
+  find src/apps/apis -type f \( -name 'open-api.yaml' -o -name 'swagger.yaml' -o -name 'swagger.yml' \) \
+    -exec sh -c 'for file do target="/build/backend/api-specs/${file}"; mkdir -p "$(dirname "${target}")"; cp "${file}" "${target}"; done' sh {} +
 
 FROM ${NODE_IMAGE} AS production-deps
 WORKDIR /app
@@ -99,6 +102,7 @@ COPY --chown=node:node --from=sources /sources/pigeon-swarm-node/package.json ./
 COPY --chown=node:node --from=production-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=backend-build /build/backend/config ./config
 COPY --chown=node:node --from=backend-build /build/backend/dist ./dist
+COPY --chown=node:node --from=backend-build /build/backend/api-specs/src ./src
 COPY --chown=node:node --from=frontend-build /build/frontend/dist ./public
 ENV NODE_ENV=production \
     API_PORT=8080 \

@@ -64,8 +64,8 @@ RUN --mount=type=cache,id=pigeon-swarm-frontend-yarn,target=/tmp/yarn-cache,shar
 
 FROM frontend-deps AS frontend-build
 COPY --from=sources /sources/pigeon-swarm-ui/ ./
-RUN printf "export const API_SERVER_URL = import.meta.env.VITE_API_SERVER_URL ?? '/api';\n" > src/config.ts
 ARG VITE_API_SERVER_URL=/api
+RUN printf "export const API_SERVER_URL = '%s';\n" "${VITE_API_SERVER_URL}" > src/app/API_SERVER_URL.ts
 RUN VITE_API_SERVER_URL="${VITE_API_SERVER_URL}" yarn build
 
 FROM ${NODE_IMAGE} AS backend-deps

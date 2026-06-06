@@ -5,8 +5,10 @@ ARG NODE_IMAGE=node:24.15-bullseye
 FROM ${NODE_IMAGE} AS sources
 ARG PIGEON_SWARM_NODE_REF=main
 ARG PIGEON_SWARM_NODE_REPOSITORY=https://github.com/haskou/pigeon-swarm-node.git
+ARG PIGEON_SWARM_NODE_SHA=
 ARG PIGEON_SWARM_UI_REF=main
 ARG PIGEON_SWARM_UI_REPOSITORY=https://github.com/haskou/pigeon-swarm-ui.git
+ARG PIGEON_SWARM_UI_SHA=
 WORKDIR /sources
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git \
@@ -21,23 +23,36 @@ if [ -n "${github_token}" ]; then
   github_auth_header="$(printf 'x-access-token:%s' "${github_token}" | base64 | tr -d '\n')"
 fi
 
-clone_repository() {
-  repository="$1"
-  ref="$2"
-  destination="$3"
-
-  echo "Cloning ${repository} at ${ref}"
-
+git_with_auth() {
   if [ -n "${github_auth_header}" ]; then
-    git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${github_auth_header}" \
-      clone --depth 1 --single-branch --branch "${ref}" "${repository}" "${destination}"
+    git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${github_auth_header}" "$@"
   else
-    git clone --depth 1 --single-branch --branch "${ref}" "${repository}" "${destination}"
+    git "$@"
   fi
 }
 
-clone_repository "${PIGEON_SWARM_NODE_REPOSITORY}" "${PIGEON_SWARM_NODE_REF}" pigeon-swarm-node
-clone_repository "${PIGEON_SWARM_UI_REPOSITORY}" "${PIGEON_SWARM_UI_REF}" pigeon-swarm-ui
+clone_repository() {
+  repository="$1"
+  ref="$2"
+  sha="$3"
+  destination="$4"
+
+  echo "Cloning ${repository} at ${sha:-${ref}}"
+
+  if [ -n "${sha}" ]; then
+    git_with_auth init "${destination}"
+    git -C "${destination}" remote add origin "${repository}"
+    git_with_auth -C "${destination}" fetch --depth 1 origin "${sha}"
+    git -C "${destination}" checkout --detach FETCH_HEAD
+  else
+    git_with_auth clone --depth 1 --single-branch --branch "${ref}" "${repository}" "${destination}"
+  fi
+
+  rm -rf "${destination}/.git"
+}
+
+clone_repository "${PIGEON_SWARM_NODE_REPOSITORY}" "${PIGEON_SWARM_NODE_REF}" "${PIGEON_SWARM_NODE_SHA}" pigeon-swarm-node
+clone_repository "${PIGEON_SWARM_UI_REPOSITORY}" "${PIGEON_SWARM_UI_REF}" "${PIGEON_SWARM_UI_SHA}" pigeon-swarm-ui
 EOF
 
 FROM ${NODE_IMAGE} AS frontend-deps

@@ -32,11 +32,6 @@ jobs:
             exit 1
           fi
 
-          if grep -R "^[[:space:]]*volumes:" docker-compose.yml Dockerfile .github/workflows; then
-            echo "The Docker Compose example must not declare volumes."
-            exit 1
-          fi
-
           if grep -E "^(HOST_PORT|API_PORT|ROUTE_PREFIX|MONGO_URL|MONGO_DATABASE|TRANSPORT_DSN)=" .env.example; then
             echo ".env.example should expose PORT only; keep image internals out of user config."
             exit 1

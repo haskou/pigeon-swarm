@@ -1,4 +1,5 @@
 node_modules/
+ipfs_storage/
 .env
 .env.*
 !.env.example

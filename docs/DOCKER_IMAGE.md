@@ -27,7 +27,7 @@ Open:
 http://localhost:8080
 ```
 
-The included [`docker-compose.yml`](../docker-compose.yml) is intentionally small. It does not build the image and it does not declare volumes. It pulls `ghcr.io/haskou/pigeon-swarm:latest` and starts a temporary MongoDB service so newcomers can try the app quickly.
+The included [`docker-compose.yml`](../docker-compose.yml) is intentionally small. It does not build the image. It pulls `ghcr.io/haskou/pigeon-swarm:latest`, persists local IPFS storage in `IPFS_STORAGE_HOST_PATH`, and starts a MongoDB service so newcomers can try the app quickly.
 
 ## Configuration
 
@@ -42,6 +42,7 @@ Common settings:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `8080` | Port exposed on your machine by Docker Compose. |
+| `IPFS_STORAGE_HOST_PATH` | `./ipfs_storage` | Host path used by Docker Compose for IPFS storage. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |

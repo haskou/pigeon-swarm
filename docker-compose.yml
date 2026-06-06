@@ -10,6 +10,8 @@ services:
       PUSH_VAPID_PUBLIC_KEY: ${PUSH_VAPID_PUBLIC_KEY:-}
       PUSH_VAPID_PRIVATE_KEY: ${PUSH_VAPID_PRIVATE_KEY:-}
       PUSH_VAPID_SUBJECT: ${PUSH_VAPID_SUBJECT:-}
+    volumes:
+      - ${IPFS_STORAGE_HOST_PATH:-./ipfs_storage}:/data/ipfs
     ports:
       - "${PORT:-8080}:8080"
     depends_on:

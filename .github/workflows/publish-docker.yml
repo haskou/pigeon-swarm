@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Check out image project
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Resolve image and source inputs
         shell: bash

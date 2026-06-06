@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Check out image project
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate Docker Compose example
         run: docker compose --env-file /dev/null config

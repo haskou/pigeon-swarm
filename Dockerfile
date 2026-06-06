@@ -109,7 +109,7 @@ ENV NODE_ENV=production \
     PORT=8080 \
     ROUTE_PREFIX=/api \
     LOG_LEVEL=info \
-    LOG_URL=/logs \
+    LOG_URL=logs \
     SERVICE_NAME=pigeon-swarm \
     PM2_HOME=/data/pm2 \
     MONGO_URL=mongodb://mongodb:27017 \
@@ -122,7 +122,7 @@ ENV NODE_ENV=production \
     TRANSPORT_DSN=libp2p-gossipsub:// \
     TRANSPORT_MAX_RETRIES=3 \
     TRANSPORT_RETRY_DELAY=1000
-RUN install -d -o node -g node /logs /data/ipfs /data/pm2
+RUN install -d -o node -g node /app/logs /data/ipfs /data/pm2
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.API_PORT || process.env.PORT || '8080') + '/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"

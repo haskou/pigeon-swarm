@@ -83,7 +83,7 @@ ENV NODE_ENV=build
 RUN yarn build
 RUN set -eu; \
   find src/apps/apis -type f \( -name 'open-api.yaml' -o -name 'swagger.yaml' -o -name 'swagger.yml' \) \
-    -exec sh -c 'for file do target="/build/backend/api-specs/${file}"; mkdir -p "$(dirname "${target}")"; cp "${file}" "${target}"; done' sh {} +
+  -exec sh -c 'for file do target="/build/backend/api-specs/${file}"; mkdir -p "$(dirname "${target}")"; cp "${file}" "${target}"; done' sh {} +
 
 FROM ${NODE_IMAGE} AS production-deps
 WORKDIR /app
@@ -95,9 +95,9 @@ FROM ${NODE_IMAGE} AS production
 WORKDIR /app
 ARG IMAGE_SOURCE=https://github.com/haskou/pigeon-swarm
 LABEL org.opencontainers.image.title="Pigeon Swarm" \
-      org.opencontainers.image.description="Combined Pigeon Swarm backend and frontend image" \
-      org.opencontainers.image.source="${IMAGE_SOURCE}" \
-      org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0"
+  org.opencontainers.image.description="Combined Pigeon Swarm backend and frontend image" \
+  org.opencontainers.image.source="${IMAGE_SOURCE}" \
+  org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0"
 COPY --chown=node:node --from=sources /sources/pigeon-swarm-node/package.json ./
 COPY --chown=node:node --from=production-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=backend-build /build/backend/config ./config
@@ -105,23 +105,23 @@ COPY --chown=node:node --from=backend-build /build/backend/dist ./dist
 COPY --chown=node:node --from=backend-build /build/backend/api-specs/src ./src
 COPY --chown=node:node --from=frontend-build /build/frontend/dist ./public
 ENV NODE_ENV=production \
-    API_PORT=8080 \
-    PORT=8080 \
-    ROUTE_PREFIX=/api \
-    LOG_LEVEL=info \
-    LOG_URL=logs \
-    SERVICE_NAME=pigeon-swarm \
-    PM2_HOME=/data/pm2 \
-    MONGO_URL=mongodb://mongodb:27017 \
-    MONGO_DATABASE=pigeon-swarm \
-    MONGO_SERVER_SELECTION_TIMEOUT_MS=1000 \
-    IPFS_STORAGE_PATH=/data/ipfs \
-    IPFS_CONTENT_TIMEOUT_MS=3000 \
-    PUBSUB_TOPIC_PREFIX=pigeon-swarm \
-    STARTUP_SYNC_PEER_WAIT_MS=10000 \
-    TRANSPORT_DSN=libp2p-gossipsub:// \
-    TRANSPORT_MAX_RETRIES=3 \
-    TRANSPORT_RETRY_DELAY=1000
+  API_PORT=8080 \
+  PORT=8080 \
+  ROUTE_PREFIX=/api \
+  LOG_LEVEL=info \
+  LOG_URL=logs \
+  SERVICE_NAME=pigeon-swarm \
+  PM2_HOME=/data/pm2 \
+  MONGO_URL=mongodb://mongodb:27017 \
+  MONGO_DATABASE=pigeon_swarm \
+  MONGO_SERVER_SELECTION_TIMEOUT_MS=1000 \
+  IPFS_STORAGE_PATH=/data/ipfs \
+  IPFS_CONTENT_TIMEOUT_MS=3000 \
+  PUBSUB_TOPIC_PREFIX=pigeon-swarm \
+  STARTUP_SYNC_PEER_WAIT_MS=10000 \
+  TRANSPORT_DSN=libp2p-gossipsub:// \
+  TRANSPORT_MAX_RETRIES=3 \
+  TRANSPORT_RETRY_DELAY=1000
 RUN install -d -o node -g node /app/logs /data/ipfs /data/pm2
 USER node
 EXPOSE 8080

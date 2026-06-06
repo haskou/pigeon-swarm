@@ -47,7 +47,7 @@ Common settings:
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
 | `LOG_LEVEL` | `info` | Application log level. |
 
-MongoDB is already configured for the bundled Compose example. The app connects to the `mongodb` service and uses the `pigeon-swarm` database by default.
+MongoDB is already configured for the bundled Compose example. The app connects to the `mongodb` service and uses the `pigeon_swarm` database by default.
 
 Node-to-node transport is also configured by default. The image uses `libp2p-gossipsub://` without requiring anything in `.env`.
 

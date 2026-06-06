@@ -13,6 +13,8 @@ ghcr.io/haskou/pigeon-swarm:<branch>
 ghcr.io/haskou/pigeon-swarm:sha-<commit>
 ```
 
+Published tags are multi-architecture images for `linux/amd64` and `linux/arm64`.
+
 ## Quick Start
 
 Start the example stack:

@@ -116,6 +116,9 @@ jobs:
             echo "PIGEON_SWARM_UI_SHA=${ui_sha}"
           } >> "${GITHUB_ENV}"
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -143,6 +146,7 @@ jobs:
           context: .
           file: Dockerfile
           target: production
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

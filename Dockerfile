@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_IMAGE=node:24.15-bullseye
+ARG NODE_BUILD_IMAGE=node:24.15-bullseye
+ARG NODE_RUNTIME_IMAGE=node:24.15-bullseye-slim
 
-FROM ${NODE_IMAGE} AS sources
+FROM ${NODE_BUILD_IMAGE} AS sources
 ARG PIGEON_SWARM_NODE_REF=main
 ARG PIGEON_SWARM_NODE_REPOSITORY=https://github.com/haskou/pigeon-swarm-node.git
 ARG PIGEON_SWARM_NODE_SHA=
@@ -55,7 +56,7 @@ clone_repository "${PIGEON_SWARM_NODE_REPOSITORY}" "${PIGEON_SWARM_NODE_REF}" "$
 clone_repository "${PIGEON_SWARM_UI_REPOSITORY}" "${PIGEON_SWARM_UI_REF}" "${PIGEON_SWARM_UI_SHA}" pigeon-swarm-ui
 EOF
 
-FROM ${NODE_IMAGE} AS frontend-deps
+FROM ${NODE_BUILD_IMAGE} AS frontend-deps
 ENV NODE_OPTIONS=--max_old_space_size=4096
 WORKDIR /build/frontend
 COPY --from=sources /sources/pigeon-swarm-ui/package.json /sources/pigeon-swarm-ui/yarn.lock ./
@@ -68,7 +69,7 @@ ARG VITE_API_SERVER_URL=/api
 RUN printf "export const API_SERVER_URL = '%s';\n" "${VITE_API_SERVER_URL}" > src/app/API_SERVER_URL.ts
 RUN VITE_API_SERVER_URL="${VITE_API_SERVER_URL}" yarn build
 
-FROM ${NODE_IMAGE} AS backend-deps
+FROM ${NODE_BUILD_IMAGE} AS backend-deps
 ENV NODE_OPTIONS=--max_old_space_size=4096
 WORKDIR /build/backend
 COPY --from=sources /sources/pigeon-swarm-node/package.json /sources/pigeon-swarm-node/yarn.lock ./
@@ -85,13 +86,13 @@ RUN set -eu; \
   find src/apps/apis -type f \( -name 'open-api.yaml' -o -name 'swagger.yaml' -o -name 'swagger.yml' \) \
   -exec sh -c 'for file do target="/build/backend/api-specs/${file}"; mkdir -p "$(dirname "${target}")"; cp "${file}" "${target}"; done' sh {} +
 
-FROM ${NODE_IMAGE} AS production-deps
+FROM ${NODE_BUILD_IMAGE} AS production-deps
 WORKDIR /app
 COPY --from=sources /sources/pigeon-swarm-node/package.json /sources/pigeon-swarm-node/yarn.lock ./
 RUN --mount=type=cache,id=pigeon-swarm-production-yarn,target=/tmp/yarn-cache,sharing=locked \
   YARN_CACHE_FOLDER=/tmp/yarn-cache yarn --frozen-lockfile --ignore-engines --production
 
-FROM ${NODE_IMAGE} AS production
+FROM ${NODE_RUNTIME_IMAGE} AS production
 WORKDIR /app
 ARG IMAGE_SOURCE=https://github.com/haskou/pigeon-swarm
 LABEL org.opencontainers.image.title="Pigeon Swarm" \

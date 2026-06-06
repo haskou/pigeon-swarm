@@ -1,0 +1,65 @@
+name: Validate wrapper
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-wrapper-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Docker wrapper
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out image project
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose example
+        run: docker compose --env-file /dev/null config
+
+      - name: Guard simple runtime contract
+        run: |
+          forbidden_transport="in-""memory"
+
+          if grep -R "${forbidden_transport}" . --exclude-dir=.git; then
+            echo "Do not document or default to the forbidden single-node transport in this wrapper."
+            exit 1
+          fi
+
+          if grep -R "^[[:space:]]*volumes:" docker-compose.yml Dockerfile .github/workflows; then
+            echo "The Docker Compose example must not declare volumes."
+            exit 1
+          fi
+
+          if grep -E "^(HOST_PORT|API_PORT|ROUTE_PREFIX|MONGO_URL|MONGO_DATABASE|TRANSPORT_DSN)=" .env.example; then
+            echo ".env.example should expose PORT only; keep image internals out of user config."
+            exit 1
+          fi
+
+      - name: Check documented environment variables
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const envNames = fs.readFileSync('.env.example', 'utf8')
+            .split(/\r?\n/)
+            .map((line) => line.match(/^([A-Z0-9_]+)=/)?.[1])
+            .filter(Boolean);
+
+          const documentedNames = [...fs.readFileSync('docs/DOCKER_IMAGE.md', 'utf8')
+            .matchAll(/\| `([A-Z0-9_]+)` \|/g)]
+            .map((match) => match[1]);
+
+          const missing = envNames.filter((name) => !documentedNames.includes(name));
+
+          if (missing.length > 0) {
+            console.error(`Missing from docs/DOCKER_IMAGE.md: ${missing.join(', ')}`);
+            process.exit(1);
+          }
+          NODE

@@ -1,0 +1,33 @@
+services:
+  app:
+    image: ghcr.io/haskou/pigeon-swarm:latest
+    pull_policy: always
+    init: true
+    cap_drop:
+      - ALL
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PUSH_VAPID_PUBLIC_KEY: ${PUSH_VAPID_PUBLIC_KEY:-}
+      PUSH_VAPID_PRIVATE_KEY: ${PUSH_VAPID_PRIVATE_KEY:-}
+      PUSH_VAPID_SUBJECT: ${PUSH_VAPID_SUBJECT:-}
+    ports:
+      - "${PORT:-8080}:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  mongodb:
+    image: mongo:7
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

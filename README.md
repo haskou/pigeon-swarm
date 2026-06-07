@@ -2,6 +2,13 @@
   <img src="./docs/assets/logo.png" alt="pigeon-swarm logo">
 </p>
 
+<p align="center">
+  <a href="https://github.com/haskou/pigeon-swarm/actions/workflows/validate.yml"><img alt="Validate wrapper" src="https://github.com/haskou/pigeon-swarm/actions/workflows/validate.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue"></a>
+  <a href="https://github.com/haskou/pigeon-swarm/pkgs/container/pigeon-swarm"><img alt="Docker image: ghcr.io/haskou/pigeon-swarm" src="https://img.shields.io/badge/docker-ghcr.io%2Fhaskou%2Fpigeon--swarm-2496ED?logo=docker&logoColor=white"></a>
+  <a href="https://github.com/haskou/pigeon-swarm/actions/workflows/publish-docker.yml"><img alt="Platforms: linux/amd64 and linux/arm64" src="https://img.shields.io/badge/platforms-linux%2Famd64%20%7C%20linux%2Farm64-2ea44f"></a>
+</p>
+
 # Pigeon Swarm
 
 Pigeon Swarm is a peer-to-peer communication platform built around self-hosted nodes, user-owned identities, and client-side encrypted conversations.

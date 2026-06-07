@@ -48,6 +48,10 @@ This project is licensed under the PolyForm Noncommercial License 1.0.0. Commerc
 
 See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
+## Third-party assets
+
+This project may include or reference third-party assets. See [ATTRIBUTIONS.md](./ATTRIBUTIONS.md).
+
 ## Disclaimer
 
-Pigeon Swarm is not affiliated with, endorsed by, or sponsored by Discord Inc. Discord is a trademark of Discord Inc.
+Pigeon Swarm is not affiliated with, endorsed by, or sponsored by Discord Inc, NEXON, NEXON Games, Yostar, or the Blue Archive team.

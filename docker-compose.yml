@@ -7,29 +7,22 @@ services:
       - ALL
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      LINK_PREVIEW_RATE_LIMIT_PER_MINUTE: ${LINK_PREVIEW_RATE_LIMIT_PER_MINUTE:-30}
       PUSH_VAPID_PUBLIC_KEY: ${PUSH_VAPID_PUBLIC_KEY:-}
       PUSH_VAPID_PRIVATE_KEY: ${PUSH_VAPID_PRIVATE_KEY:-}
       PUSH_VAPID_SUBJECT: ${PUSH_VAPID_SUBJECT:-}
+      PIGEON_PRIVATE_RELAY_PORT_START: ${PIGEON_PRIVATE_RELAY_PORT_START:-}
+      PIGEON_PRIVATE_RELAY_PORT_END: ${PIGEON_PRIVATE_RELAY_PORT_END:-}
+      PIGEON_RELAY_DATA_LIMIT_BYTES: ${PIGEON_RELAY_DATA_LIMIT_BYTES:-67108864}
+      PIGEON_PUBLIC_HOST: ${PIGEON_PUBLIC_HOST:-}
     volumes:
       - ${IPFS_STORAGE_HOST_PATH:-./ipfs_storage}:/data/ipfs
+      - ${LOCAL_STORAGE_HOST_PATH:-./local_storage}:/data/local_storage
     ports:
       - "${PORT:-8080}:8080"
-    depends_on:
-      mongodb:
-        condition: service_healthy
+      # Private relay nodes must also publish the configured relay range, for example:
+      # - "${PIGEON_PRIVATE_RELAY_PORT_START:-4100}-${PIGEON_PRIVATE_RELAY_PORT_END:-4199}:${PIGEON_PRIVATE_RELAY_PORT_START:-4100}-${PIGEON_PRIVATE_RELAY_PORT_END:-4199}"
     restart: unless-stopped
     stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
-
-  mongodb:
-    image: mongo:7
-    init: true
-    restart: unless-stopped
-    healthcheck:
-      test:
-        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s

@@ -37,6 +37,8 @@ This repository provides:
 * one published image for the complete app: [`ghcr.io/haskou/pigeon-swarm`](https://github.com/haskou/pigeon-swarm/pkgs/container/pigeon-swarm)
 * a small [Docker Compose](docker-compose.yml) example for local startup
 * simple default runtime configuration
+* persistent IPFS and embedded local storage without an external database service
+* optional private relay port exposure for private-network nodes
 * automatic image publishing when `main` changes
 * a dispatch path for the source repositories to request a fresh image
 

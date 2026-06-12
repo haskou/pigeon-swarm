@@ -54,6 +54,7 @@ clone_repository() {
 
 clone_repository "${PIGEON_SWARM_NODE_REPOSITORY}" "${PIGEON_SWARM_NODE_REF}" "${PIGEON_SWARM_NODE_SHA}" pigeon-swarm-node
 clone_repository "${PIGEON_SWARM_UI_REPOSITORY}" "${PIGEON_SWARM_UI_REF}" "${PIGEON_SWARM_UI_SHA}" pigeon-swarm-ui
+mkdir -p pigeon-swarm-node/scripts
 EOF
 
 FROM ${NODE_BUILD_IMAGE} AS frontend-deps
@@ -73,6 +74,7 @@ FROM ${NODE_BUILD_IMAGE} AS backend-deps
 ENV NODE_OPTIONS=--max_old_space_size=4096
 WORKDIR /build/backend
 COPY --from=sources /sources/pigeon-swarm-node/package.json /sources/pigeon-swarm-node/yarn.lock ./
+COPY --from=sources /sources/pigeon-swarm-node/scripts ./scripts
 RUN --mount=type=cache,id=pigeon-swarm-backend-yarn,target=/tmp/yarn-cache,sharing=locked \
   YARN_CACHE_FOLDER=/tmp/yarn-cache yarn --frozen-lockfile --ignore-engines
 
@@ -89,6 +91,7 @@ RUN set -eu; \
 FROM ${NODE_BUILD_IMAGE} AS production-deps
 WORKDIR /app
 COPY --from=sources /sources/pigeon-swarm-node/package.json /sources/pigeon-swarm-node/yarn.lock ./
+COPY --from=sources /sources/pigeon-swarm-node/scripts ./scripts
 RUN --mount=type=cache,id=pigeon-swarm-production-yarn,target=/tmp/yarn-cache,sharing=locked \
   YARN_CACHE_FOLDER=/tmp/yarn-cache yarn --frozen-lockfile --ignore-engines --production
 
@@ -113,17 +116,17 @@ ENV NODE_ENV=production \
   LOG_URL=logs \
   SERVICE_NAME=pigeon-swarm \
   PM2_HOME=/data/pm2 \
-  MONGO_URL=mongodb://mongodb:27017 \
-  MONGO_DATABASE=pigeon_swarm \
-  MONGO_SERVER_SELECTION_TIMEOUT_MS=1000 \
   IPFS_STORAGE_PATH=/data/ipfs \
   IPFS_CONTENT_TIMEOUT_MS=3000 \
+  PIGEON_LOCAL_DB_PATH=/data/local_storage \
+  PIGEON_RELAY_DATA_LIMIT_BYTES=67108864 \
+  LINK_PREVIEW_RATE_LIMIT_PER_MINUTE=30 \
   PUBSUB_TOPIC_PREFIX=pigeon-swarm \
   STARTUP_SYNC_PEER_WAIT_MS=10000 \
   TRANSPORT_DSN=libp2p-gossipsub:// \
   TRANSPORT_MAX_RETRIES=3 \
   TRANSPORT_RETRY_DELAY=1000
-RUN install -d -o node -g node /app/logs /data/ipfs /data/pm2
+RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage /data/pm2
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.API_PORT || process.env.PORT || '8080') + '/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"

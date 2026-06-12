@@ -29,7 +29,7 @@ Open:
 http://localhost:8080
 ```
 
-The included [`docker-compose.yml`](../docker-compose.yml) is intentionally small. It does not build the image. It pulls `ghcr.io/haskou/pigeon-swarm:latest`, persists local IPFS storage in `IPFS_STORAGE_HOST_PATH`, and starts a MongoDB service so newcomers can try the app quickly.
+The included [`docker-compose.yml`](../docker-compose.yml) is intentionally small. It does not build the image. It pulls `ghcr.io/haskou/pigeon-swarm:latest` and persists both IPFS data and the node-local embedded database.
 
 ## Configuration
 
@@ -45,16 +45,67 @@ Common settings:
 | --- | --- | --- |
 | `PORT` | `8080` | Port exposed on your machine by Docker Compose. |
 | `IPFS_STORAGE_HOST_PATH` | `./ipfs_storage` | Host path used by Docker Compose for IPFS storage. |
+| `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host path used by Docker Compose for the embedded node-local database. |
+| `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
+| `PIGEON_PRIVATE_RELAY_PORT_START` | empty | First TCP port in the optional private network relay range. |
+| `PIGEON_PRIVATE_RELAY_PORT_END` | empty | Last TCP port in the optional private network relay range. |
+| `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation private relay data limit. Default is `64 MiB`. |
+| `PIGEON_PUBLIC_HOST` | empty | Public DNS name or IP advertised by reachable private relay nodes. Required only when this node relays private networks. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
 | `LOG_LEVEL` | `info` | Application log level. |
 
-MongoDB is already configured for the bundled Compose example. The app connects to the `mongodb` service and uses the `pigeon_swarm` database by default.
-
 Node-to-node transport is also configured by default. The image uses `libp2p-gossipsub://` without requiring anything in `.env`.
 
 The frontend is built into the image and already talks to the backend through `/api`. You do not need to configure frontend URLs or route prefixes.
+
+## Storage
+
+The image does not require MongoDB. The backend stores node-local state in an embedded LevelDB database and replicated application state through OrbitDB/IPFS.
+
+The Compose example persists:
+
+| Path | Purpose |
+| --- | --- |
+| `/data/ipfs` | IPFS, libp2p and OrbitDB replicated data. |
+| `/data/local_storage` | Embedded node-local database. |
+
+Back up both host folders if the node carries data you need to keep. Removing either folder creates a fresh local node state.
+
+## Peer-to-peer Networking
+
+The Compose example exposes only the web/API port by default:
+
+| Port | Purpose |
+| --- | --- |
+| `8080` | Web app and HTTP API. |
+
+For a simple local deployment, no extra ports are required.
+
+Private networks use private IPFS/libp2p runtimes. A node can act as a private relay only for private networks it belongs to, because the relay must know the private network key.
+
+Public networks do not require a relay. They can work without any relay node as long as peers can discover and reach each other through the public peer-to-peer layer.
+
+Private networks should have at least one reachable relay node per private network. Without one, nodes that cannot dial each other directly may join the same private network but fail to exchange IPFS/OrbitDB data reliably. One node can relay all private networks it belongs to, so a deployment does not need a separate relay machine per private network.
+
+To make a node act as a private relay, configure a relay port range:
+
+```dotenv
+PIGEON_PRIVATE_RELAY_PORT_START=4100
+PIGEON_PRIVATE_RELAY_PORT_END=4199
+PIGEON_PUBLIC_HOST=relay.example.com
+```
+
+The backend assigns one stable relay port from that range per private network. The configured range must be published in Docker and opened in the firewall/router. The Compose file includes a commented example:
+
+```yaml
+ports:
+  - "8080:8080"
+  - "4100-4199:4100-4199"
+```
+
+Nodes without a relay range remain leaf nodes. They can still use another reachable node as relay for shared private networks.
 
 ## Web Push Keys
 
@@ -113,10 +164,6 @@ SOURCE_REPOSITORIES_TOKEN
 The workflow also accepts `repository_dispatch` with the `source-published` event type. Source repositories can call that event after their own `main` branch changes to request a fresh combined image.
 
 Published images include OCI metadata labels, GitHub Actions cache, SBOM generation, and provenance attestation through Docker Buildx.
-
-## License
-
-This project is licensed under the PolyForm Noncommercial License 1.0.0. Commercial use requires a separate commercial license from the author.
 
 ## Source Branches
 

@@ -13,7 +13,8 @@ ARG PIGEON_SWARM_UI_SHA=
 WORKDIR /sources
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/log/apt/*
 RUN --mount=type=secret,id=github_token,required=false <<'EOF'
 set -eu
 
@@ -102,6 +103,11 @@ LABEL org.opencontainers.image.title="Pigeon Swarm" \
   org.opencontainers.image.description="Combined Pigeon Swarm backend and frontend image" \
   org.opencontainers.image.source="${IMAGE_SOURCE}" \
   org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0"
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gosu \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/log/apt/*
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --chown=node:node --from=sources /sources/pigeon-swarm-node/package.json ./
 COPY --chown=node:node --from=production-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=backend-build /build/backend/config ./config
@@ -127,7 +133,7 @@ ENV NODE_ENV=production \
   TRANSPORT_MAX_RETRIES=3 \
   TRANSPORT_RETRY_DELAY=1000
 RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage /data/pm2
-USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.API_PORT || process.env.PORT || '8080') + '/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["./node_modules/.bin/pm2-runtime", "start", "dist/index.js"]

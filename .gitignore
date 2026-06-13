@@ -1,5 +1,6 @@
 node_modules/
 ipfs_storage/
+local_storage/
 .env
 .env.*
 !.env.example

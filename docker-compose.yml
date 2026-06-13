@@ -5,6 +5,11 @@ services:
     init: true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - KILL
+      - SETGID
+      - SETUID
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LINK_PREVIEW_RATE_LIMIT_PER_MINUTE: ${LINK_PREVIEW_RATE_LIMIT_PER_MINUTE:-30}

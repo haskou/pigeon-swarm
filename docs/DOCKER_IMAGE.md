@@ -44,8 +44,8 @@ Common settings:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `8080` | Port exposed on your machine by Docker Compose. |
-| `IPFS_STORAGE_HOST_PATH` | `./ipfs_storage` | Host path used by Docker Compose for IPFS storage. |
-| `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host path used by Docker Compose for the embedded node-local database. |
+| `IPFS_STORAGE_HOST_PATH` | `./ipfs_storage` | Host folder used by Docker Compose for IPFS storage. |
+| `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_PRIVATE_RELAY_PORT_START` | empty | First TCP port in the optional private network relay range. |
 | `PIGEON_PRIVATE_RELAY_PORT_END` | empty | Last TCP port in the optional private network relay range. |
@@ -70,6 +70,15 @@ The Compose example persists:
 | --- | --- |
 | `/data/ipfs` | IPFS, libp2p and OrbitDB replicated data. |
 | `/data/local_storage` | Embedded node-local database. |
+
+The example Compose file uses host folders by default:
+
+```text
+./ipfs_storage
+./local_storage
+```
+
+The image starts as root only long enough to create and assign ownership for `/data/ipfs`, `/data/local_storage`, `/data/pm2`, and `/app/logs`. The application process then runs as the non-root `node` user.
 
 Back up both host folders if the node carries data you need to keep. Removing either folder creates a fresh local node state.
 

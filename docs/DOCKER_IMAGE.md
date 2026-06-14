@@ -47,6 +47,7 @@ Common settings:
 | `IPFS_STORAGE_HOST_PATH` | `./ipfs_storage` | Host folder used by Docker Compose for IPFS storage. |
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
+| `PIGEON_RELAY_ENABLED` | empty | Optional relay override. Leave empty for defaults. Set `true` to force the public relay server. Set `false`, `0`, `no`, or `off` to disable relay servers. |
 | `PIGEON_PRIVATE_RELAY_PORT_START` | empty | First TCP port in the optional private network relay range. |
 | `PIGEON_PRIVATE_RELAY_PORT_END` | empty | Last TCP port in the optional private network relay range. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation private relay data limit. Default is `64 MiB`. |
@@ -93,6 +94,8 @@ The Compose example exposes only the web/API port by default:
 For a simple local deployment, no extra ports are required.
 
 Private networks use private IPFS/libp2p runtimes. A node can act as a private relay only for private networks it belongs to, because the relay must know the private network key.
+
+`PIGEON_RELAY_ENABLED` is optional. Leave it empty for the default behavior. Set it to `true` only when this node should force-enable the public relay server. Set it to `false`, `0`, `no`, or `off` only when this node should not run relay servers.
 
 Public networks do not require a relay. They can work without any relay node as long as peers can discover and reach each other through the public peer-to-peer layer.
 

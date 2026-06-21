@@ -1,0 +1,229 @@
+---
+import "../styles/global.css";
+
+const base = import.meta.env.BASE_URL;
+const asset = (name: string) => `${base}assets/${name}`;
+
+const privacyCards = [
+  {
+    title: "No ID gate",
+    text: "No passport, phone number, real name, government ID, or platform account ceremony just to use community software.",
+  },
+  {
+    title: "Password stays local",
+    text: "Your password unlocks your identity on your device. It is not sent to a company, a login server, or even your own node.",
+  },
+  {
+    title: "End-to-end encrypted",
+    text: "Messages are encrypted before they leave your device. The people in the conversation can read them. The infrastructure should not.",
+  },
+  {
+    title: "Blind nodes",
+    text: "Nodes can deliver, store, and sync encrypted data without knowing what people are saying. Useful. Apparently still controversial, because humans invented dashboards.",
+  },
+];
+
+const productPills = [
+  "Public communities",
+  "Private communities",
+  "Public networks",
+  "Private networks",
+  "Channels",
+  "Direct messages",
+  "1-to-1 calls",
+  "Group calls",
+  "Stickers",
+  "File sharing",
+];
+
+const syncCards = [
+  {
+    title: "Nodes sync",
+    text: "Participating nodes can keep community data available without one central database becoming the tiny king of everything.",
+  },
+  {
+    title: "Data is checked",
+    text: "Replicated data is verified so modified copies do not get silently accepted as valid. Very rude to attackers, tragic.",
+  },
+  {
+    title: "Public source",
+    text: "The code is public and inspectable under the PolyForm Noncommercial license. Commercial use needs a separate license.",
+  },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Pigeon Swarm is a private peer-to-peer communication platform with self-hosted nodes, public and private networks, public and private communities, local passwords, and end-to-end encrypted conversations."
+    />
+    <meta name="theme-color" content="#070914" />
+    <meta property="og:title" content="Pigeon Swarm · Your node. Your networks. Your rules." />
+    <meta
+      property="og:description"
+      content="No ID gate. Passwords stay on your device. Conversations are end-to-end encrypted. Nodes sync data without needing to read it."
+    />
+    <meta property="og:image" content={`${base}assets/pigeon-demo-landing-community-en.png`} />
+    <link rel="icon" href={`${base}favicon.svg`} />
+    <title>Pigeon Swarm · Your node. Your networks. Your rules.</title>
+  </head>
+  <body>
+    <div class="page-glow" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Pigeon Swarm home">
+        <img src={asset("logo.png")} alt="" />
+        <span>Pigeon Swarm</span>
+      </a>
+
+      <nav class="nav" aria-label="Main navigation">
+        <a href="#privacy">Privacy</a>
+        <a href="#deploy">Deploy</a>
+        <a href="https://github.com/haskou/pigeon-swarm">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="view hero-view" aria-label="Pigeon Swarm overview">
+        <div class="hero-copy">
+          <p class="eyebrow">Private peer-to-peer communities</p>
+          <h1>Your node. Your networks. Your rules.</h1>
+          <p class="lead">
+            Pigeon Swarm lets you create public or private communities on public or private networks, with channels,
+            calls, stickers, file sharing, and conversations encrypted before the network ever touches them.
+          </p>
+          <p class="lead-subtle">
+            No ID desk. No platform landlord. No company quietly reading the room.
+            Your password stays on your device. Nodes move and sync data, they do not get the script.
+          </p>
+
+          <div class="hero-actions">
+            <a class="button button-primary" href="#deploy">Run your node</a>
+            <a class="button button-ghost" href="https://github.com/haskou/pigeon-swarm">View public source</a>
+          </div>
+
+          <div class="feature-cloud compact" aria-label="Product features">
+            {productPills.map((feature) => <span>{feature}</span>)}
+          </div>
+        </div>
+
+        <aside class="hero-visual" aria-label="Pigeon Swarm product screenshot">
+          <div class="screenshot-shell">
+            <div class="window-bar" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <img
+              src={asset("pigeon-demo-landing-community-en.png")}
+              alt="Pigeon Swarm community screen showing the product interface"
+              loading="eager"
+            />
+          </div>
+          <div class="floating-note note-a">
+            <strong>Password</strong>
+            <span>never leaves device</span>
+          </div>
+          <div class="floating-note note-b">
+            <strong>Nodes</strong>
+            <span>sync encrypted data</span>
+          </div>
+          <div class="floating-note note-c">
+            <strong>Calls</strong>
+            <span>1-to-1 and groups</span>
+          </div>
+        </aside>
+      </section>
+
+      <section id="privacy" class="view privacy-view" aria-label="Pigeon Swarm privacy model">
+        <article class="statement">
+          <img src={asset("logo.png")} alt="" />
+          <p>
+            The network should help your community exist. It should not demand your ID,
+            read your messages, or become the switch someone else gets to flip.
+          </p>
+        </article>
+
+        <div class="privacy-layout">
+          <div class="section-heading">
+            <p class="eyebrow">Privacy model</p>
+            <h2>Your secrets stay boringly yours.</h2>
+            <p>
+              Your device handles your secrets, conversations are encrypted end-to-end, and nodes do not need to know
+              what people are saying. Revolutionary stuff, apparently, because the internet became a panopticon with buttons.
+            </p>
+          </div>
+
+          <div class="promise-grid">
+            {privacyCards.map((promise) => (
+              <article class="promise-card">
+                <h3>{promise.title}</h3>
+                <p>{promise.text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div class="privacy-steps" aria-label="Encryption flow">
+          <div>
+            <span class="strip-number">01</span>
+            <h3>You unlock locally</h3>
+            <p>Your password unlocks your identity on your own device.</p>
+          </div>
+          <div>
+            <span class="strip-number">02</span>
+            <h3>Your device encrypts</h3>
+            <p>Messages are protected before they leave the client.</p>
+          </div>
+          <div>
+            <span class="strip-number">03</span>
+            <h3>Nodes stay out of it</h3>
+            <p>Nodes deliver, store, sync, and verify encrypted data without reading the conversation.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="deploy" class="view deploy-view" aria-label="Deploy Pigeon Swarm">
+        <div class="deploy-top">
+          <div class="deploy-copy">
+            <p class="eyebrow">Deploy</p>
+            <h2>Run the whole app as one image.</h2>
+            <p>
+              The wrapper repository packages Pigeon Swarm into a single Docker image with default runtime configuration,
+              persistent local storage, and optional private relay exposure for private-network nodes.
+            </p>
+          </div>
+
+          <div class="code-card">
+            <div class="window-bar" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <pre><code>git clone https://github.com/haskou/pigeon-swarm.git
+cd pigeon-swarm
+docker compose up -d</code></pre>
+          </div>
+        </div>
+
+        <div class="sync-grid" aria-label="Synchronization and source model">
+          {syncCards.map((item) => (
+            <article class="sync-card">
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </article>
+          ))}
+        </div>
+
+        <article class="final-cta">
+          <p class="eyebrow">Pigeon Swarm</p>
+          <h2>Build communities that do not need permission to keep breathing.</h2>
+          <div class="hero-actions center">
+            <a class="button button-primary" href="https://github.com/haskou/pigeon-swarm">Open GitHub</a>
+            <a class="button button-ghost" href="#privacy">Read privacy model</a>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

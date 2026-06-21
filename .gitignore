@@ -5,3 +5,6 @@ local_storage/
 .env.*
 !.env.example
 *.zip
+site/node_modules/
+site/dist/
+site/.astro

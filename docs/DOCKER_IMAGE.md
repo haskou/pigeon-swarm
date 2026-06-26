@@ -79,7 +79,7 @@ The example Compose file uses host folders by default:
 ./local_storage
 ```
 
-The image starts as root only long enough to create and assign ownership for `/data/ipfs`, `/data/local_storage`, `/data/pm2`, and `/app/logs`. The application process then runs as the non-root `node` user.
+The image starts as root only long enough to create and assign ownership for `/data/ipfs`, `/data/local_storage`, and `/app/logs`. The application process then runs as the non-root `node` user.
 
 Back up both host folders if the node carries data you need to keep. Removing either folder creates a fresh local node state.
 

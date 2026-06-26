@@ -121,7 +121,6 @@ ENV NODE_ENV=production \
   LOG_LEVEL=info \
   LOG_URL=logs \
   SERVICE_NAME=pigeon-swarm \
-  PM2_HOME=/data/pm2 \
   IPFS_STORAGE_PATH=/data/ipfs \
   IPFS_CONTENT_TIMEOUT_MS=3000 \
   PIGEON_LOCAL_DB_PATH=/data/local_storage \
@@ -132,8 +131,8 @@ ENV NODE_ENV=production \
   TRANSPORT_DSN=libp2p-gossipsub:// \
   TRANSPORT_MAX_RETRIES=3 \
   TRANSPORT_RETRY_DELAY=1000
-RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage /data/pm2
+RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.API_PORT || process.env.PORT || '8080') + '/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["./node_modules/.bin/pm2-runtime", "start", "dist/index.js"]
+CMD ["node", "dist/index.js"]

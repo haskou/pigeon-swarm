@@ -3,7 +3,7 @@
 ARG NODE_BUILD_IMAGE=node:24.15-bullseye
 ARG NODE_RUNTIME_IMAGE=node:24.15-bullseye-slim
 
-FROM ${NODE_BUILD_IMAGE} AS sources
+FROM --platform=$BUILDPLATFORM ${NODE_BUILD_IMAGE} AS sources
 ARG PIGEON_SWARM_NODE_REF=main
 ARG PIGEON_SWARM_NODE_REPOSITORY=https://github.com/haskou/pigeon-swarm-node.git
 ARG PIGEON_SWARM_NODE_SHA=
@@ -58,7 +58,7 @@ clone_repository "${PIGEON_SWARM_UI_REPOSITORY}" "${PIGEON_SWARM_UI_REF}" "${PIG
 mkdir -p pigeon-swarm-node/scripts
 EOF
 
-FROM ${NODE_BUILD_IMAGE} AS frontend-deps
+FROM --platform=$BUILDPLATFORM ${NODE_BUILD_IMAGE} AS frontend-deps
 ENV NODE_OPTIONS=--max_old_space_size=4096
 WORKDIR /build/frontend
 COPY --from=sources /sources/pigeon-swarm-ui/package.json /sources/pigeon-swarm-ui/yarn.lock ./
@@ -71,7 +71,7 @@ ARG VITE_API_SERVER_URL=/api
 RUN printf "export const API_SERVER_URL = '%s';\n" "${VITE_API_SERVER_URL}" > src/app/API_SERVER_URL.ts
 RUN VITE_API_SERVER_URL="${VITE_API_SERVER_URL}" yarn build
 
-FROM ${NODE_BUILD_IMAGE} AS backend-deps
+FROM --platform=$BUILDPLATFORM ${NODE_BUILD_IMAGE} AS backend-deps
 ENV NODE_OPTIONS=--max_old_space_size=4096
 WORKDIR /build/backend
 COPY --from=sources /sources/pigeon-swarm-node/package.json /sources/pigeon-swarm-node/yarn.lock ./

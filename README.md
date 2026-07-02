@@ -40,7 +40,7 @@ This repository provides:
 * a small [Docker Compose](docker-compose.yml) example for local startup with host folders
 * simple default runtime configuration
 * persistent IPFS and embedded local storage without an external database service
-* optional private relay port exposure for private-network nodes
+* owner-managed relay configuration for private-network nodes
 * automatic image publishing when `main` changes
 * a dispatch path for the source repositories to request a fresh image
 

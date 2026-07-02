@@ -47,6 +47,7 @@ Common settings:
 | `IPFS_STORAGE_HOST_PATH` | `./ipfs_storage` | Host folder used by Docker Compose for IPFS storage. |
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
+| `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
@@ -90,7 +91,7 @@ For a simple local deployment, no extra ports are required.
 
 Private networks use private IPFS/libp2p runtimes. A node can act as a private relay only for private networks it belongs to, because the relay must know the private network key.
 
-Relay configuration is owner-managed at runtime instead of being configured through Docker environment variables. This image intentionally does not expose relay-specific environment variables.
+Relay node selection and relay port configuration are owner-managed at runtime instead of being configured through Docker environment variables. The image only keeps `PIGEON_RELAY_DATA_LIMIT_BYTES` as an optional relay data-limit override.
 
 Public networks do not require a relay. They can work without any relay node as long as peers can discover and reach each other through the public peer-to-peer layer.
 

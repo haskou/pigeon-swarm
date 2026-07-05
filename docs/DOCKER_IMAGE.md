@@ -47,11 +47,7 @@ Common settings:
 | `IPFS_STORAGE_HOST_PATH` | `./ipfs_storage` | Host folder used by Docker Compose for IPFS storage. |
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
-| `PIGEON_RELAY_ENABLED` | empty | Optional relay override. Leave empty for defaults. Set `true` to force the public relay server. Set `false`, `0`, `no`, or `off` to disable relay servers. |
-| `PIGEON_PRIVATE_RELAY_PORT_START` | empty | First TCP port in the optional private network relay range. |
-| `PIGEON_PRIVATE_RELAY_PORT_END` | empty | Last TCP port in the optional private network relay range. |
-| `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation private relay data limit. Default is `64 MiB`. |
-| `PIGEON_PUBLIC_HOST` | empty | Public DNS name or IP advertised by reachable private relay nodes. Required only when this node relays private networks. |
+| `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
@@ -95,29 +91,15 @@ For a simple local deployment, no extra ports are required.
 
 Private networks use private IPFS/libp2p runtimes. A node can act as a private relay only for private networks it belongs to, because the relay must know the private network key.
 
-`PIGEON_RELAY_ENABLED` is optional. Leave it empty for the default behavior. Set it to `true` only when this node should force-enable the public relay server. Set it to `false`, `0`, `no`, or `off` only when this node should not run relay servers.
+Relay node selection and relay port configuration are owner-managed during node startup instead of being configured through Docker environment variables. The image only keeps `PIGEON_RELAY_DATA_LIMIT_BYTES` as an optional relay data-limit override.
 
 Public networks do not require a relay. They can work without any relay node as long as peers can discover and reach each other through the public peer-to-peer layer.
 
 Private networks should have at least one reachable relay node per private network. Without one, nodes that cannot dial each other directly may join the same private network but fail to exchange IPFS/OrbitDB data reliably. One node can relay all private networks it belongs to, so a deployment does not need a separate relay machine per private network.
 
-To make a node act as a private relay, configure a relay port range:
+If this node is configured as a relay, publish the ports selected during startup and open them in Docker, the firewall, and the router. Reserve at least one TCP port per private network this node will relay. For example, a node expected to relay up to 100 private networks needs a published range with at least 100 ports, such as `4100-4199`.
 
-```dotenv
-PIGEON_PRIVATE_RELAY_PORT_START=4100
-PIGEON_PRIVATE_RELAY_PORT_END=4199
-PIGEON_PUBLIC_HOST=relay.example.com
-```
-
-The backend assigns one stable relay port from that range per private network. The configured range must be published in Docker and opened in the firewall/router. The Compose file includes a commented example:
-
-```yaml
-ports:
-  - "8080:8080"
-  - "4100-4199:4100-4199"
-```
-
-Nodes without a relay range remain leaf nodes. They can still use another reachable node as relay for shared private networks.
+Nodes without relay configuration remain leaf nodes. They can still use another reachable node as relay for shared private networks.
 
 ## Web Push Keys
 

@@ -22,6 +22,10 @@ services:
       - ${LOCAL_STORAGE_HOST_PATH:-./local_storage}:/data/local_storage
     ports:
       - "${PORT:-8080}:8080"
+      # Private relay nodes must also publish the relay ports configured during
+      # node startup. Reserve at least one TCP port per private network this
+      # node will relay, for example:
+      # - "4100-4199:4100-4199"
     restart: unless-stopped
     stop_grace_period: 30s
     security_opt:

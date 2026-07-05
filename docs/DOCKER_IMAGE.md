@@ -91,13 +91,15 @@ For a simple local deployment, no extra ports are required.
 
 Private networks use private IPFS/libp2p runtimes. A node can act as a private relay only for private networks it belongs to, because the relay must know the private network key.
 
-Relay node selection and relay port configuration are owner-managed at runtime instead of being configured through Docker environment variables. The image only keeps `PIGEON_RELAY_DATA_LIMIT_BYTES` as an optional relay data-limit override.
+Relay node selection and relay port configuration are owner-managed during node startup instead of being configured through Docker environment variables. The image only keeps `PIGEON_RELAY_DATA_LIMIT_BYTES` as an optional relay data-limit override.
 
 Public networks do not require a relay. They can work without any relay node as long as peers can discover and reach each other through the public peer-to-peer layer.
 
 Private networks should have at least one reachable relay node per private network. Without one, nodes that cannot dial each other directly may join the same private network but fail to exchange IPFS/OrbitDB data reliably. One node can relay all private networks it belongs to, so a deployment does not need a separate relay machine per private network.
 
-If this node is configured as a relay, publish the ports selected by the owner-managed relay configuration and open them in the firewall/router. Nodes without relay configuration remain leaf nodes. They can still use another reachable node as relay for shared private networks.
+If this node is configured as a relay, publish the ports selected during startup and open them in Docker, the firewall, and the router. Reserve at least one TCP port per private network this node will relay. For example, a node expected to relay up to 100 private networks needs a published range with at least 100 ports, such as `4100-4199`.
+
+Nodes without relay configuration remain leaf nodes. They can still use another reachable node as relay for shared private networks.
 
 ## Web Push Keys
 

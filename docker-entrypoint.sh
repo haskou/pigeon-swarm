@@ -17,7 +17,6 @@ if [ "$(id -u)" = "0" ]; then
   ensure_node_owned_directory /app/logs
   ensure_node_owned_directory /data/ipfs
   ensure_node_owned_directory /data/local_storage
-  ensure_node_owned_directory /data/local_storage/node-reports
 
   exec gosu node "$@"
 fi

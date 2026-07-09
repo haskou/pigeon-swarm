@@ -130,9 +130,8 @@ ENV NODE_ENV=production \
   STARTUP_SYNC_PEER_WAIT_MS=10000 \
   TRANSPORT_DSN=libp2p-gossipsub:// \
   TRANSPORT_MAX_RETRIES=3 \
-  TRANSPORT_RETRY_DELAY=1000 \
-  NODE_OPTIONS="--max_old_space_size=4096 --report-on-fatalerror --report-on-signal --report-signal=SIGUSR1 --report-directory=/data/local_storage/node-reports --perf-basic-prof --interpreted-frames-native-stack"
-RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage /data/local_storage/node-reports
+  TRANSPORT_RETRY_DELAY=1000
+RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.API_PORT || process.env.PORT || '8080') + '/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
 ENTRYPOINT ["docker-entrypoint.sh"]

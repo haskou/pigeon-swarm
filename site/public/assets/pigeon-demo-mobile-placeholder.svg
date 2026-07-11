@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1480" viewBox="0 0 720 1480" role="img" aria-labelledby="title description">
+  <title id="title">Pigeon Swarm mobile screenshot placeholder</title>
+  <desc id="description">Temporary branded placeholder to be replaced by a mobile product screenshot.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#292c51"/>
+      <stop offset="1" stop-color="#17192f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.85" cy="0.8" r="0.7">
+      <stop offset="0" stop-color="#d62ebd" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#d62ebd" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#f4f3f8" stroke-opacity=".06"/>
+    </pattern>
+  </defs>
+  <rect width="720" height="1480" rx="74" fill="url(#background)"/>
+  <rect width="720" height="1480" rx="74" fill="url(#grid)"/>
+  <rect width="720" height="1480" rx="74" fill="url(#glow)"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">
+    <circle cx="360" cy="610" r="74" fill="#64e2ba" fill-opacity=".1" stroke="#64e2ba" stroke-opacity=".5"/>
+    <path d="M327 610h66M360 577v66" stroke="#64e2ba" stroke-width="4" stroke-linecap="round"/>
+    <text x="360" y="746" fill="#f4f3f8" font-size="26" font-weight="600" letter-spacing="2">MOBILE PRODUCT IMAGE</text>
+    <text x="360" y="792" fill="#a9a9ba" font-size="18" letter-spacing="1">TEMPORARY PLACEHOLDER</text>
+    <text x="360" y="1220" fill="#64e2ba" font-size="16" letter-spacing="2">PIGEON SWARM / 9:19.5</text>
+  </g>
+</svg>

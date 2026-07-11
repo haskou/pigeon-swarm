@@ -4,52 +4,50 @@ import "../styles/global.css";
 const base = import.meta.env.BASE_URL;
 const asset = (name: string) => `${base}assets/${name}`;
 
-const privacyCards = [
+const productFeatures = [
+  "Desktop and mobile",
+  "Profiles and contacts",
+  "Channels and direct messages",
+  "Voice and group calls",
+  "Files, video, and stickers",
+];
+
+const applicationFeatures = [
   {
-    title: "No ID gate",
-    text: "No passport, phone number, real name, government ID, or platform account ceremony just to use community software.",
+    label: "Talk",
+    title: "Messages, channels, and calls",
+    text: "Move between direct messages, channel conversations, voice rooms, and group calls from the same application.",
   },
   {
-    title: "Password stays local",
-    text: "Your password unlocks your identity on your device. It is not sent to a company, a login server, or even your own node.",
+    label: "Share",
+    title: "Files and rich media",
+    text: "Send files, images, video, stickers, and replies without handing the conversation to a separate service.",
   },
   {
-    title: "End-to-end encrypted",
-    text: "Messages are encrypted before they leave your device. The people in the conversation can read them. The infrastructure should not.",
-  },
-  {
-    title: "Blind nodes",
-    text: "Nodes can deliver, store, and sync encrypted data without knowing what people are saying. Useful. Apparently still controversial, because humans invented dashboards.",
+    label: "Organise",
+    title: "Profiles, contacts, and spaces",
+    text: "Manage your identity, contacts, networks, and shared spaces from desktop or mobile interfaces.",
   },
 ];
 
-const productPills = [
-  "Public communities",
-  "Private communities",
-  "Public networks",
-  "Private networks",
-  "Channels",
-  "Direct messages",
-  "1-to-1 calls",
-  "Group calls",
-  "Stickers",
-  "File sharing",
+const privacyPrinciples = [
+  {
+    number: "01",
+    title: "You hold the identity",
+    text: "Your private keys and password remain on your device. You do not need a phone number, government ID, or account with a central platform.",
+  },
+  {
+    number: "02",
+    title: "Nodes store encrypted data",
+    text: "Servers may retain and replicate the data they receive. The client encrypts private conversations before transmission, and the nodes do not receive your password or private keys.",
+  },
+  {
+    number: "03",
+    title: "You choose the network",
+    text: "Run an open network or require permission before other nodes connect. Communities set their own membership and visibility rules.",
+  },
 ];
 
-const syncCards = [
-  {
-    title: "Nodes sync",
-    text: "Participating nodes can keep community data available without one central database becoming the tiny king of everything.",
-  },
-  {
-    title: "Data is checked",
-    text: "Replicated data is verified so modified copies do not get silently accepted as valid. Very rude to attackers, tragic.",
-  },
-  {
-    title: "Public source",
-    text: "The code is public and inspectable under the PolyForm Noncommercial license. Commercial use needs a separate license.",
-  },
-];
 ---
 
 <!doctype html>
@@ -59,21 +57,19 @@ const syncCards = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Pigeon Swarm is a private peer-to-peer communication platform with self-hosted nodes, public and private networks, public and private communities, local passwords, and end-to-end encrypted conversations."
+      content="Pigeon Swarm is a self-hosted communication application for desktop and mobile, with messages, channels, calls, file sharing, user-owned identities, and peer-to-peer networks."
     />
-    <meta name="theme-color" content="#070914" />
-    <meta property="og:title" content="Pigeon Swarm · Your node. Your networks. Your rules." />
+    <meta name="theme-color" content="#111328" />
+    <meta property="og:title" content="Pigeon Swarm · Private communication, under your control" />
     <meta
       property="og:description"
-      content="No ID gate. Passwords stay on your device. Conversations are end-to-end encrypted. Nodes sync data without needing to read it."
+      content="Messages, channels, calls, and file sharing across self-hosted peer-to-peer networks. Private keys and passwords stay on your device."
     />
-    <meta property="og:image" content={`${base}assets/pigeon-demo-landing-community-en.png`} />
+    <meta property="og:image" content={asset("pigeon-demo-mobile-placeholder.svg")} />
     <link rel="icon" href={`${base}favicon.svg`} />
-    <title>Pigeon Swarm · Your node. Your networks. Your rules.</title>
+    <title>Pigeon Swarm · Private communication, under your control</title>
   </head>
   <body>
-    <div class="page-glow" aria-hidden="true"></div>
-
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Pigeon Swarm home">
         <img src={asset("logo.png")} alt="" />
@@ -81,149 +77,188 @@ const syncCards = [
       </a>
 
       <nav class="nav" aria-label="Main navigation">
+        <a href="#application">Product</a>
         <a href="#privacy">Privacy</a>
-        <a href="#deploy">Deploy</a>
-        <a href="https://github.com/haskou/pigeon-swarm">GitHub</a>
+        <a href="#legislation">Legislation</a>
+        <a href="#self-host">Self-host</a>
+        <a class="nav-source" href="https://github.com/haskou/pigeon-swarm">Source code <span aria-hidden="true">↗</span></a>
       </nav>
     </header>
 
     <main id="top">
-      <section class="view hero-view" aria-label="Pigeon Swarm overview">
+      <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow">Private peer-to-peer communities</p>
-          <h1>Your node. Your networks. Your rules.</h1>
-          <p class="lead">
-            Pigeon Swarm lets you create public or private communities on public or private networks, with channels,
-            calls, stickers, file sharing, and conversations encrypted before the network ever touches them.
-          </p>
-          <p class="lead-subtle">
-            No ID desk. No platform landlord. No company quietly reading the room.
-            Your password stays on your device. Nodes move and sync data, they do not get the script.
+          <p class="eyebrow"><span></span> Communication without a platform owner</p>
+          <h1 id="hero-title">Communicate on a network you control.</h1>
+          <p class="hero-lead">
+            Pigeon Swarm is a desktop and mobile application for messages, channels, calls, and file sharing. Run your
+            own node, join other networks, and use one identity without a central platform account.
           </p>
 
           <div class="hero-actions">
-            <a class="button button-primary" href="#deploy">Run your node</a>
-            <a class="button button-ghost" href="https://github.com/haskou/pigeon-swarm">View public source</a>
+            <a class="button button-primary" href="#self-host">Run Pigeon Swarm</a>
+            <a class="button button-secondary" href="https://github.com/haskou/pigeon-swarm">Explore the source</a>
           </div>
 
-          <div class="feature-cloud compact" aria-label="Product features">
-            {productPills.map((feature) => <span>{feature}</span>)}
-          </div>
+          <dl class="hero-facts">
+            <div>
+              <dt>Local</dt>
+              <dd>Keys and passwords</dd>
+            </div>
+            <div>
+              <dt>Desktop + mobile</dt>
+              <dd>One communication app</dd>
+            </div>
+            <div>
+              <dt>Self-hosted</dt>
+              <dd>Your node, your policy</dd>
+            </div>
+          </dl>
         </div>
 
-        <aside class="hero-visual" aria-label="Pigeon Swarm product screenshot">
-          <div class="screenshot-shell">
-            <div class="window-bar" aria-hidden="true">
-              <span></span><span></span><span></span>
-            </div>
+        <div class="product-stage" aria-label="Placeholder for the forthcoming Pigeon Swarm mobile screenshot">
+          <div class="stage-caption">
+            <span>Mobile interface</span>
+            <span>Image placeholder · replace before release</span>
+          </div>
+          <div class="phone-frame">
+            <div class="phone-speaker" aria-hidden="true"></div>
             <img
-              src={asset("pigeon-demo-landing-community-en.png")}
-              alt="Pigeon Swarm community screen showing the product interface"
+              src={asset("pigeon-demo-mobile-placeholder.svg")}
+              alt="Placeholder for a mobile screenshot of Pigeon Swarm"
               loading="eager"
             />
           </div>
-          <div class="floating-note note-a">
-            <strong>Password</strong>
-            <span>never leaves device</span>
+          <div class="platform-reference">
+            <span class="platform-active">Mobile</span>
+            <span>Desktop interface available</span>
           </div>
-          <div class="floating-note note-b">
-            <strong>Nodes</strong>
-            <span>sync encrypted data</span>
-          </div>
-          <div class="floating-note note-c">
-            <strong>Calls</strong>
-            <span>1-to-1 and groups</span>
-          </div>
-        </aside>
+        </div>
       </section>
 
-      <section id="privacy" class="view privacy-view" aria-label="Pigeon Swarm privacy model">
-        <article class="statement">
-          <img src={asset("logo.png")} alt="" />
+      <section class="feature-strip" aria-label="Product capabilities">
+        <p>Built for real communities</p>
+        <ul>
+          {productFeatures.map((feature) => <li>{feature}</li>)}
+        </ul>
+      </section>
+
+      <section id="application" class="section application-section" aria-labelledby="application-title">
+        <div class="application-heading">
+          <p class="eyebrow"><span></span> The application</p>
+          <h2 id="application-title">Messages, calls, and files in one application.</h2>
           <p>
-            The network should help your community exist. It should not demand your ID,
-            read your messages, or become the switch someone else gets to flip.
+            Use Pigeon Swarm from its desktop or mobile interface. The application brings conversations, calls, media,
+            and network management into one place.
           </p>
-        </article>
-
-        <div class="privacy-layout">
-          <div class="section-heading">
-            <p class="eyebrow">Privacy model</p>
-            <h2>Your secrets stay boringly yours.</h2>
-            <p>
-              Your device handles your secrets, conversations are encrypted end-to-end, and nodes do not need to know
-              what people are saying. Revolutionary stuff, apparently, because the internet became a panopticon with buttons.
-            </p>
-          </div>
-
-          <div class="promise-grid">
-            {privacyCards.map((promise) => (
-              <article class="promise-card">
-                <h3>{promise.title}</h3>
-                <p>{promise.text}</p>
-              </article>
-            ))}
-          </div>
         </div>
 
-        <div class="privacy-steps" aria-label="Encryption flow">
-          <div>
-            <span class="strip-number">01</span>
-            <h3>You unlock locally</h3>
-            <p>Your password unlocks your identity on your own device.</p>
-          </div>
-          <div>
-            <span class="strip-number">02</span>
-            <h3>Your device encrypts</h3>
-            <p>Messages are protected before they leave the client.</p>
-          </div>
-          <div>
-            <span class="strip-number">03</span>
-            <h3>Nodes stay out of it</h3>
-            <p>Nodes deliver, store, sync, and verify encrypted data without reading the conversation.</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="deploy" class="view deploy-view" aria-label="Deploy Pigeon Swarm">
-        <div class="deploy-top">
-          <div class="deploy-copy">
-            <p class="eyebrow">Deploy</p>
-            <h2>Run the whole app as one image.</h2>
-            <p>
-              The wrapper repository packages Pigeon Swarm into a single Docker image with default runtime configuration,
-              persistent local storage, and optional private relay exposure for private-network nodes.
-            </p>
-          </div>
-
-          <div class="code-card">
-            <div class="window-bar" aria-hidden="true">
-              <span></span><span></span><span></span>
-            </div>
-            <pre><code>git clone https://github.com/haskou/pigeon-swarm.git
-cd pigeon-swarm
-docker compose up -d</code></pre>
-          </div>
-        </div>
-
-        <div class="sync-grid" aria-label="Synchronization and source model">
-          {syncCards.map((item) => (
-            <article class="sync-card">
-              <h3>{item.title}</h3>
-              <p>{item.text}</p>
+        <div class="application-grid">
+          {applicationFeatures.map((feature) => (
+            <article class="application-card">
+              <p>{feature.label}</p>
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
             </article>
           ))}
         </div>
 
-        <article class="final-cta">
-          <p class="eyebrow">Pigeon Swarm</p>
-          <h2>Build communities that do not need permission to keep breathing.</h2>
-          <div class="hero-actions center">
-            <a class="button button-primary" href="https://github.com/haskou/pigeon-swarm">Open GitHub</a>
-            <a class="button button-ghost" href="#privacy">Read privacy model</a>
+        <div class="desktop-reference" aria-label="Pigeon Swarm desktop interface reference">
+          <div class="desktop-window" aria-hidden="true">
+            <div class="desktop-sidebar"></div>
+            <div class="desktop-content">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="desktop-members"></div>
           </div>
-        </article>
+          <div>
+            <p class="reference-label">Desktop interface</p>
+            <h3>Designed for long conversations and larger screens.</h3>
+            <p>
+              The desktop layout keeps networks, channels, conversations, and participants visible without turning the
+              mobile experience into a reduced copy of it.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy" class="section privacy-section" aria-labelledby="privacy-title">
+        <div class="section-intro">
+          <p class="eyebrow"><span></span> Privacy by architecture</p>
+          <h2 id="privacy-title">Servers keep copies. You keep the keys.</h2>
+          <p>
+            Nodes store and replicate application data so the network works. Your device keeps your private keys and
+            password, while the client encrypts private conversations before a node receives them.
+          </p>
+        </div>
+
+        <div class="principle-list">
+          {privacyPrinciples.map((principle) => (
+            <article class="principle">
+              <span class="principle-number">{principle.number}</span>
+              <div>
+                <h3>{principle.title}</h3>
+                <p>{principle.text}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="legislation" class="section legislation-section" aria-labelledby="legislation-title">
+        <p class="eyebrow eyebrow-warm"><span></span> Our position</p>
+        <div class="position-statement">
+          <h2 id="legislation-title">No Chat Control. No mandatory scanning. No backdoors.</h2>
+          <div>
+            <p>
+              You have the right to communicate in private. Pigeon Swarm opposes Chat Control, identity gates, message
+              scanning, and any requirement that gives a government or company access to private conversations.
+            </p>
+            <p>
+              The internet should remain open and permissionless. The person using the tool decides what to say, whom to
+              trust, and which network to join. Pigeon Swarm provides the software; the user alone decides how to use it.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="self-host" class="section self-host-section" aria-labelledby="self-host-title">
+        <div class="self-host-copy">
+          <p class="eyebrow"><span></span> Operate your own node</p>
+          <h2 id="self-host-title">Deploy one image with local storage.</h2>
+          <p>
+            The wrapper repository packages the frontend and backend into one Docker image. It includes persistent IPFS
+            and local application storage, plus relay configuration for private-network nodes.
+          </p>
+          <a class="text-link" href="https://github.com/haskou/pigeon-swarm/blob/main/docs/DOCKER_IMAGE.md">
+            Read the deployment guide <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+
+        <div class="terminal" aria-label="Commands to start Pigeon Swarm">
+          <div class="terminal-bar">
+            <span>Quick start</span>
+            <span>Docker Compose</span>
+          </div>
+          <pre><code><span class="prompt">$</span> git clone https://github.com/haskou/pigeon-swarm.git
+<span class="prompt">$</span> cd pigeon-swarm
+<span class="prompt">$</span> docker compose up -d</code></pre>
+        </div>
       </section>
     </main>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <img src={asset("logo.png")} alt="" />
+        <div>
+          <strong>Pigeon Swarm</strong>
+          <p>Private, peer-to-peer communication software.</p>
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/haskou/pigeon-swarm">GitHub</a>
+        <a href="https://github.com/haskou/pigeon-swarm/blob/main/LICENSE">PolyForm Noncommercial 1.0.0</a>
+      </div>
+    </footer>
   </body>
 </html>

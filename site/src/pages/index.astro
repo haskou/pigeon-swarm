@@ -65,7 +65,7 @@ const privacyPrinciples = [
       property="og:description"
       content="Messages, channels, calls, and file sharing across self-hosted peer-to-peer networks. Private keys and passwords stay on your device."
     />
-    <meta property="og:image" content={asset("pigeon-demo-mobile-placeholder.svg")} />
+    <meta property="og:image" content={asset("landing-desktop-call-one-camera.png")} />
     <link rel="icon" type="image/x-icon" href={`${base}favicon/favicon.ico`} />
     <link rel="icon" type="image/png" sizes="32x32" href={`${base}favicon/favicon-32x32.png`} />
     <link rel="icon" type="image/png" sizes="16x16" href={`${base}favicon/favicon-16x16.png`} />
@@ -121,16 +121,15 @@ const privacyPrinciples = [
           </dl>
         </div>
 
-        <div class="product-stage" aria-label="Placeholder for the forthcoming Pigeon Swarm mobile screenshot">
+        <div class="product-stage" aria-label="Pigeon Swarm mobile interface">
           <div class="stage-caption">
             <span>Mobile interface</span>
-            <span>Image placeholder · replace before release</span>
+            <span>Messages · media · stickers</span>
           </div>
           <div class="phone-frame">
-            <div class="phone-speaker" aria-hidden="true"></div>
             <img
-              src={asset("pigeon-demo-mobile-placeholder.svg")}
-              alt="Placeholder for a mobile screenshot of Pigeon Swarm"
+              src={asset("landing-mobile-iphone14promax-online.png")}
+              alt="Pigeon Swarm mobile interface showing a private channel conversation"
               loading="eager"
             />
           </div>
@@ -168,13 +167,14 @@ const privacyPrinciples = [
         </div>
 
         <div class="desktop-reference" aria-label="Pigeon Swarm desktop interface reference">
-          <div class="desktop-window" aria-hidden="true">
-            <div class="desktop-sidebar"></div>
-            <div class="desktop-content">
-              <span></span><span></span><span></span>
-            </div>
-            <div class="desktop-members"></div>
-          </div>
+          <img
+            class="desktop-screenshot"
+            src={asset("landing-desktop-call-one-camera.png")}
+            alt="Pigeon Swarm desktop interface showing channels, a conversation, members, and an active voice call"
+            width="1440"
+            height="1000"
+            loading="eager"
+          />
           <div>
             <p class="reference-label">Desktop interface</p>
             <h3>Designed for long conversations and larger screens.</h3>

@@ -16,17 +16,17 @@ const applicationFeatures = [
   {
     label: "Talk",
     title: "Messages, channels, and calls",
-    text: "Move between direct messages, channel conversations, voice rooms, and group calls from the same application.",
+    text: "Direct messages, channels, voice rooms, and group calls.",
   },
   {
     label: "Share",
     title: "Files and rich media",
-    text: "Send files, images, video, stickers, and replies without handing the conversation to a separate service.",
+    text: "Files, images, video, stickers, and replies inside the conversation.",
   },
   {
     label: "Organise",
     title: "Profiles, contacts, and spaces",
-    text: "Manage your identity, contacts, networks, and shared spaces from desktop or mobile interfaces.",
+    text: "Your identity, contacts, networks, and shared spaces on desktop or mobile.",
   },
 ];
 
@@ -34,17 +34,17 @@ const privacyPrinciples = [
   {
     number: "01",
     title: "You hold the identity",
-    text: "Your private keys and password remain on your device. You do not need a phone number, government ID, or account with a central platform.",
+    text: "Your private keys and password remain on your device. No phone number, government ID, or central platform account is required.",
   },
   {
     number: "02",
     title: "Nodes store encrypted data",
-    text: "Servers may retain and replicate the data they receive. The client encrypts private conversations before transmission, and the nodes do not receive your password or private keys.",
+    text: "Each node keeps a copy of network data. Private conversations arrive encrypted, and nodes do not receive your password or private keys.",
   },
   {
     number: "03",
     title: "You choose the network",
-    text: "Run an open network or require permission before other nodes connect. Communities set their own membership and visibility rules.",
+    text: "Run an open network or require permission before other nodes connect.",
   },
 ];
 
@@ -66,7 +66,11 @@ const privacyPrinciples = [
       content="Messages, channels, calls, and file sharing across self-hosted peer-to-peer networks. Private keys and passwords stay on your device."
     />
     <meta property="og:image" content={asset("pigeon-demo-mobile-placeholder.svg")} />
-    <link rel="icon" href={`${base}favicon.svg`} />
+    <link rel="icon" type="image/x-icon" href={`${base}favicon/favicon.ico`} />
+    <link rel="icon" type="image/png" sizes="32x32" href={`${base}favicon/favicon-32x32.png`} />
+    <link rel="icon" type="image/png" sizes="16x16" href={`${base}favicon/favicon-16x16.png`} />
+    <link rel="apple-touch-icon" sizes="180x180" href={`${base}favicon/apple-touch-icon.png`} />
+    <link rel="manifest" href={`${base}favicon/site.webmanifest`} />
     <title>Pigeon Swarm · Private communication, under your control</title>
   </head>
   <body>
@@ -78,8 +82,9 @@ const privacyPrinciples = [
 
       <nav class="nav" aria-label="Main navigation">
         <a href="#application">Product</a>
+        <a href="#network">Network</a>
         <a href="#privacy">Privacy</a>
-        <a href="#legislation">Legislation</a>
+        <a href="#source">Source</a>
         <a href="#self-host">Self-host</a>
         <a class="nav-source" href="https://github.com/haskou/pigeon-swarm">Source code <span aria-hidden="true">↗</span></a>
       </nav>
@@ -91,8 +96,8 @@ const privacyPrinciples = [
           <p class="eyebrow"><span></span> Communication without a platform owner</p>
           <h1 id="hero-title">Communicate on a network you control.</h1>
           <p class="hero-lead">
-            Pigeon Swarm is a desktop and mobile application for messages, channels, calls, and file sharing. Run your
-            own node, join other networks, and use one identity without a central platform account.
+            Messages, channels, calls, and files across peer-to-peer networks. Nodes replicate the data, so one server
+            going offline does not take the network with it.
           </p>
 
           <div class="hero-actions">
@@ -110,8 +115,8 @@ const privacyPrinciples = [
               <dd>One communication app</dd>
             </div>
             <div>
-              <dt>Self-hosted</dt>
-              <dd>Your node, your policy</dd>
+              <dt>Replicated</dt>
+              <dd>Same data across nodes</dd>
             </div>
           </dl>
         </div>
@@ -148,8 +153,7 @@ const privacyPrinciples = [
           <p class="eyebrow"><span></span> The application</p>
           <h2 id="application-title">Messages, calls, and files in one application.</h2>
           <p>
-            Use Pigeon Swarm from its desktop or mobile interface. The application brings conversations, calls, media,
-            and network management into one place.
+            Desktop and mobile clients keep conversations, calls, media, and network management in one place.
           </p>
         </div>
 
@@ -175,11 +179,58 @@ const privacyPrinciples = [
             <p class="reference-label">Desktop interface</p>
             <h3>Designed for long conversations and larger screens.</h3>
             <p>
-              The desktop layout keeps networks, channels, conversations, and participants visible without turning the
-              mobile experience into a reduced copy of it.
+              Networks, channels, conversations, and participants remain visible on larger screens.
             </p>
           </div>
         </div>
+      </section>
+
+      <section id="network" class="section network-section" aria-labelledby="network-title">
+        <div class="network-heading">
+          <p class="eyebrow"><span></span> Peer-to-peer by design</p>
+          <h2 id="network-title">One network, multiple ways back in.</h2>
+          <p>
+            Nodes in the same network replicate its content. Your identity belongs to you, not to the node you used last.
+          </p>
+        </div>
+
+        <div class="network-diagram" aria-label="One identity connecting to replicated nodes">
+          <div class="identity-chip">
+            <span class="diagram-icon" aria-hidden="true">ID</span>
+            <div>
+              <strong>Your identity</strong>
+              <span>Same credentials</span>
+            </div>
+          </div>
+
+          <div class="connection-lines" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+
+          <div class="node-cluster">
+            <article class="node-card node-offline">
+              <div><span></span> Node A</div>
+              <strong>Offline</strong>
+              <p>Last node used</p>
+            </article>
+            <article class="node-card node-online">
+              <div><span></span> Node B</div>
+              <strong>Available</strong>
+              <p>Same network data</p>
+            </article>
+            <article class="node-card node-online">
+              <div><span></span> Node C</div>
+              <strong>Available</strong>
+              <p>Same network data</p>
+            </article>
+          </div>
+        </div>
+
+        <ol class="network-steps">
+          <li><span>01</span><p>Nodes replicate the network content between them.</p></li>
+          <li><span>02</span><p>If one node goes down, connect to another node in that network.</p></li>
+          <li><span>03</span><p>Use the same credentials and continue with the same data.</p></li>
+        </ol>
       </section>
 
       <section id="privacy" class="section privacy-section" aria-labelledby="privacy-title">
@@ -187,8 +238,8 @@ const privacyPrinciples = [
           <p class="eyebrow"><span></span> Privacy by architecture</p>
           <h2 id="privacy-title">Servers keep copies. You keep the keys.</h2>
           <p>
-            Nodes store and replicate application data so the network works. Your device keeps your private keys and
-            password, while the client encrypts private conversations before a node receives them.
+            Nodes store and replicate data. Your device keeps the credentials and encrypts private conversations before
+            transmission.
           </p>
         </div>
 
@@ -203,6 +254,25 @@ const privacyPrinciples = [
             </article>
           ))}
         </div>
+
+        <div class="crypto-flow" aria-label="Private conversation encryption flow">
+          <div class="flow-block flow-device">
+            <span class="flow-label">Your device</span>
+            <strong>Password + private keys</strong>
+            <p>Kept locally</p>
+          </div>
+          <div class="flow-arrow flow-encrypt" aria-hidden="true"><span>Encrypt</span><i>→</i></div>
+          <div class="flow-block flow-message">
+            <span class="flow-label">In transit</span>
+            <strong>Encrypted conversation</strong>
+            <p>No plain-text copy for the node</p>
+          </div>
+          <div class="flow-arrow flow-replicate" aria-hidden="true"><span>Replicate</span><i>→</i></div>
+          <div class="flow-node-group">
+            <div class="flow-block"><span>Node A</span><strong>Ciphertext</strong></div>
+            <div class="flow-block"><span>Node B</span><strong>Ciphertext</strong></div>
+          </div>
+        </div>
       </section>
 
       <section id="legislation" class="section legislation-section" aria-labelledby="legislation-title">
@@ -211,14 +281,68 @@ const privacyPrinciples = [
           <h2 id="legislation-title">No Chat Control. No mandatory scanning. No backdoors.</h2>
           <div>
             <p>
-              You have the right to communicate in private. Pigeon Swarm opposes Chat Control, identity gates, message
-              scanning, and any requirement that gives a government or company access to private conversations.
+              Chat Control proposals seek to make communication services detect content inside private messages. Scanning
+              on a server or on the user's device turns private correspondence into an inspection point.
             </p>
             <p>
-              The internet should remain open and permissionless. The person using the tool decides what to say, whom to
-              trust, and which network to join. Pigeon Swarm provides the software; the user alone decides how to use it.
+              Pigeon Swarm opposes Chat Control, identity gates, message scanning, and backdoors. The internet should
+              remain open and permissionless; the user decides how to use the software.
             </p>
+            <div class="rights-links">
+              <a href="https://eur-lex.europa.eu/eli/treaty/char_2016/art_7/oj/eng">
+                EU Charter, Article 7 <span>Private communications ↗</span>
+              </a>
+              <a href="https://eur-lex.europa.eu/eli/treaty/char_2012/art_8/oj/eng">
+                EU Charter, Article 8 <span>Personal data ↗</span>
+              </a>
+              <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=COM%3A2022%3A209%3AFIN">
+                COM(2022) 209 <span>EU proposal ↗</span>
+              </a>
+            </div>
           </div>
+        </div>
+      </section>
+
+      <section id="source" class="section source-section" aria-labelledby="source-title">
+        <div class="source-heading">
+          <p class="eyebrow"><span></span> Public source</p>
+          <h2 id="source-title">Read the code before you trust it.</h2>
+          <p>
+            The client, node, and deployment wrapper are public. Anyone can inspect how identities, encryption, and
+            replication work, report a problem, or propose a change.
+          </p>
+        </div>
+
+        <div class="source-map" aria-label="Pigeon Swarm public source repositories">
+          <a class="repo-card" href="https://github.com/haskou/pigeon-swarm-ui">
+            <span>01 / Client</span>
+            <strong>pigeon-swarm-ui</strong>
+            <p>Desktop and mobile interface</p>
+          </a>
+          <span class="repo-connector" aria-hidden="true">+</span>
+          <a class="repo-card" href="https://github.com/haskou/pigeon-swarm-node">
+            <span>02 / Node</span>
+            <strong>pigeon-swarm-node</strong>
+            <p>Network and application services</p>
+          </a>
+          <span class="repo-connector" aria-hidden="true">→</span>
+          <a class="repo-card repo-wrapper" href="https://github.com/haskou/pigeon-swarm">
+            <span>03 / Distribution</span>
+            <strong>pigeon-swarm</strong>
+            <p>Runnable application image</p>
+          </a>
+        </div>
+
+        <div class="license-note">
+          <div>
+            <span>License</span>
+            <strong>PolyForm Noncommercial 1.0.0</strong>
+          </div>
+          <p>
+            This is not the MIT license and it does not grant unrestricted commercial use. Commercial use requires a
+            separate license from the author.
+          </p>
+          <a href="https://github.com/haskou/pigeon-swarm/blob/main/LICENSE">Read the license ↗</a>
         </div>
       </section>
 
@@ -227,8 +351,8 @@ const privacyPrinciples = [
           <p class="eyebrow"><span></span> Operate your own node</p>
           <h2 id="self-host-title">Deploy one image with local storage.</h2>
           <p>
-            The wrapper repository packages the frontend and backend into one Docker image. It includes persistent IPFS
-            and local application storage, plus relay configuration for private-network nodes.
+            The repository packages the frontend, backend, and persistent storage into one Docker image, with relay
+            configuration for private-network nodes.
           </p>
           <a class="text-link" href="https://github.com/haskou/pigeon-swarm/blob/main/docs/DOCKER_IMAGE.md">
             Read the deployment guide <span aria-hidden="true">↗</span>

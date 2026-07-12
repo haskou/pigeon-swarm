@@ -5,11 +5,11 @@ const base = import.meta.env.BASE_URL;
 const asset = (name: string) => `${base}assets/${name}`;
 
 const productFeatures = [
+  "Portable identity",
+  "Multi-node replication",
+  "Public or private networks",
   "Desktop and mobile",
-  "Profiles and contacts",
-  "Channels and direct messages",
-  "Voice and group calls",
-  "Files, video, and stickers",
+  "Channels, calls, and files",
 ];
 
 const applicationFeatures = [
@@ -39,7 +39,7 @@ const privacyPrinciples = [
   {
     number: "02",
     title: "Nodes store encrypted data",
-    text: "Each node keeps a copy of network data. Private conversations arrive encrypted, and nodes do not receive your password or private keys.",
+    text: "Each node keeps a copy of network data. Private message content arrives encrypted, and nodes do not receive your password or private keys.",
   },
   {
     number: "03",
@@ -78,6 +78,7 @@ const privacyPrinciples = [
       <a class="brand" href="#top" aria-label="Pigeon Swarm home">
         <img src={asset("logo.png")} alt="" />
         <span>Pigeon Swarm</span>
+        <span class="alpha-badge">Public alpha</span>
       </a>
 
       <nav class="nav" aria-label="Main navigation">
@@ -96,12 +97,21 @@ const privacyPrinciples = [
           <p class="eyebrow"><span></span> Communication without a platform owner</p>
           <h1 id="hero-title">Communicate on a network you control.</h1>
           <p class="hero-lead">
-            Messages, channels, calls, and files across peer-to-peer networks. Nodes replicate the data, so one server
-            going offline does not take the network with it.
+            Messages, channels, calls, and files in one application. The network replicates application data, so one
+            server going offline does not take the network with it.
+          </p>
+
+          <p class="hero-audience">
+            A self-hosted alternative to Discord for private groups that want a familiar chat app without a central account.
+          </p>
+
+          <p class="alpha-notice">
+            <strong>Public alpha</strong>
+            <span>Most features work. Expect instability and frequent changes while the platform evolves.</span>
           </p>
 
           <div class="hero-actions">
-            <a class="button button-primary" href="#self-host">Run Pigeon Swarm</a>
+            <a class="button button-primary" href="#self-host">Deploy with Docker</a>
             <a class="button button-secondary" href="https://github.com/haskou/pigeon-swarm">Explore the source</a>
           </div>
 
@@ -141,7 +151,7 @@ const privacyPrinciples = [
       </section>
 
       <section class="feature-strip" aria-label="Product capabilities">
-        <p>Built for real communities</p>
+        <p>The app includes</p>
         <ul>
           {productFeatures.map((feature) => <li>{feature}</li>)}
         </ul>
@@ -265,7 +275,7 @@ const privacyPrinciples = [
           <div class="flow-block flow-message">
             <span class="flow-label">In transit</span>
             <strong>Encrypted conversation</strong>
-            <p>No plain-text copy for the node</p>
+            <p>No plaintext message content for the node</p>
           </div>
           <div class="flow-arrow flow-replicate" aria-hidden="true"><span>Replicate</span><i>→</i></div>
           <div class="flow-node-group">
@@ -282,7 +292,7 @@ const privacyPrinciples = [
           <div>
             <p>
               Chat Control proposals seek to make communication services detect content inside private messages. Scanning
-              on a server or on the user's device turns private correspondence into an inspection point.
+              on a server or on your device turns private correspondence into an inspection point.
             </p>
             <p>
               Pigeon Swarm opposes Chat Control, identity gates, message scanning, and backdoors. The internet should
@@ -354,9 +364,20 @@ const privacyPrinciples = [
             The repository packages the frontend, backend, and persistent storage into one Docker image, with relay
             configuration for private-network nodes.
           </p>
-          <a class="text-link" href="https://github.com/haskou/pigeon-swarm/blob/main/docs/DOCKER_IMAGE.md">
-            Read the deployment guide <span aria-hidden="true">↗</span>
-          </a>
+          <ul class="ops-facts" aria-label="Deployment facts">
+            <li>Docker Compose</li>
+            <li>Persistent storage</li>
+            <li>Public and private networks</li>
+            <li>Manual relay setup for private networks</li>
+          </ul>
+          <div class="ops-links">
+            <a class="text-link" href="https://github.com/haskou/pigeon-swarm/blob/main/docs/DOCKER_IMAGE.md">
+              Deployment guide <span aria-hidden="true">↗</span>
+            </a>
+            <a class="text-link" href="https://github.com/haskou/pigeon-swarm">
+              GitHub <span aria-hidden="true">↗</span>
+            </a>
+          </div>
         </div>
 
         <div class="terminal" aria-label="Commands to start Pigeon Swarm">

@@ -13,10 +13,12 @@
 
 Pigeon Swarm is a peer-to-peer communication platform built around self-hosted nodes, user-owned identities, and client-side encrypted conversations.
 
+**Status: Public alpha.** Most features work, but expect instability and frequent changes while the platform evolves.
+
 Landing page: [haskou.github.io/pigeon-swarm](https://haskou.github.io/pigeon-swarm/)
 
 <p align="center">
-  <img src="./docs/assets/landing-desktop-call-one-camera.png" alt="Pigeon Swarm mobile interface showing a private channel conversation">
+  <img src="./docs/assets/landing-desktop-call-one-camera.png" alt="Pigeon Swarm desktop interface showing channels, a conversation, members, and an active voice call">
 </p>
 
 It is meant for communities that want channels, direct messages, profiles, attachments, realtime updates, and shared spaces without depending on one central platform account or one database that owns the whole graph.

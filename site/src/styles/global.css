@@ -101,6 +101,18 @@ main,
   object-fit: contain;
 }
 
+.alpha-badge {
+  padding: 0.28rem 0.48rem;
+  border: 1px solid rgba(241, 184, 120, 0.42);
+  border-radius: 6px;
+  color: var(--warm);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .nav {
   display: flex;
   align-items: center;
@@ -191,6 +203,36 @@ h3 {
   color: #c8c7d2;
   font-size: clamp(1.08rem, 1.6vw, 1.3rem);
   line-height: 1.65;
+}
+
+.hero-audience {
+  max-width: 680px;
+  margin-top: 0.9rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.alpha-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.8rem;
+  align-items: baseline;
+  max-width: 680px;
+  margin-top: 1.15rem;
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--warm);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.alpha-notice strong {
+  color: var(--warm);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .hero-actions {
@@ -1052,6 +1094,37 @@ h3 {
 
 .self-host-copy > p {
   max-width: 600px;
+}
+
+.ops-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  margin-top: 1.4rem;
+}
+
+.ops-facts li {
+  position: relative;
+  padding-left: 0.75rem;
+  color: #c5c4cf;
+  font-size: 0.72rem;
+}
+
+.ops-facts li::before {
+  position: absolute;
+  top: 0.52em;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  content: "";
+  background: var(--mint);
+}
+
+.ops-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.3rem;
 }
 
 .terminal {

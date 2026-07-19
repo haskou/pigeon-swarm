@@ -10,7 +10,14 @@ services:
       - KILL
       - SETGID
       - SETUID
+    depends_on:
+      turn:
+        condition: service_healthy
     environment:
+      CALLS_ICE_TRANSPORT_POLICY: ${CALLS_ICE_TRANSPORT_POLICY:-all}
+      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Set CALLS_TURN_SHARED_SECRET in .env}
+      CALLS_TURN_TRANSPORTS: ${CALLS_TURN_TRANSPORTS:-udp,tcp}
+      CALLS_TURN_URLS: ${CALLS_TURN_URLS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LINK_PREVIEW_RATE_LIMIT_PER_MINUTE: ${LINK_PREVIEW_RATE_LIMIT_PER_MINUTE:-30}
       PIGEON_RELAY_DATA_LIMIT_BYTES: ${PIGEON_RELAY_DATA_LIMIT_BYTES:-67108864}
@@ -28,5 +35,42 @@ services:
       # - "4100-4199:4100-4199"
     restart: unless-stopped
     stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  turn:
+    image: coturn/coturn:4.11.0-r0-alpine
+    network_mode: host
+    command:
+      - --log-file=stdout
+      - --fingerprint
+      - --use-auth-secret
+      - --static-auth-secret=$${CALLS_TURN_SHARED_SECRET}
+      - --realm=${CALLS_TURN_REALM:-pigeon-swarm}
+      - --listening-port=${CALLS_TURN_PORT:-3478}
+      - --external-ip=$${CALLS_TURN_EXTERNAL_IP:-$$(detect-external-ip)}
+      - --min-port=${CALLS_TURN_RELAY_MIN_PORT:-49160}
+      - --max-port=${CALLS_TURN_RELAY_MAX_PORT:-49200}
+      - --pidfile=/tmp/turnserver.pid
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --stale-nonce=600
+    environment:
+      CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
+      CALLS_TURN_PORT: ${CALLS_TURN_PORT:-3478}
+      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Set CALLS_TURN_SHARED_SECRET in .env}
+    healthcheck:
+      test:
+        - CMD
+        - turnutils_stunclient
+        - -p
+        - ${CALLS_TURN_PORT:-3478}
+        - 127.0.0.1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
     security_opt:
       - no-new-privileges:true

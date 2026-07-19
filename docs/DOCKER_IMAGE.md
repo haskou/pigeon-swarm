@@ -20,8 +20,20 @@ Published tags are multi-architecture images for `linux/amd64` and `linux/arm64`
 Start the example stack:
 
 ```bash
+cp .env.example .env
+openssl rand -hex 32
+# Put the generated value in CALLS_TURN_SHARED_SECRET inside .env.
 docker compose up
 ```
+
+The secret is mandatory because the backend uses it to mint temporary TURN
+credentials and coturn uses the same value to validate them. Compose refuses to
+start with an empty secret instead of silently returning an unusable
+`iceServers: []` response.
+
+The TURN entrypoint writes the secret to a mode-`0600` configuration file on
+tmpfs and removes it from the long-running `turnserver` environment. It is not
+passed in the process command line.
 
 Open:
 
@@ -33,7 +45,9 @@ The included [`docker-compose.yml`](../docker-compose.yml) is intentionally smal
 
 ## Configuration
 
-The image works with defaults. Copy [`.env.example`](../.env.example) to `.env` only when you want to change something:
+The application image keeps its runtime defaults, but the Compose stack requires
+one deployment-specific TURN secret. Copy [`.env.example`](../.env.example) to
+`.env` and set `CALLS_TURN_SHARED_SECRET` before startup:
 
 ```bash
 cp .env.example .env
@@ -48,6 +62,15 @@ Common settings:
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
+| `CALLS_TURN_SHARED_SECRET` | required | Shared coturn REST secret. Generate it once and configure the same value on every backend and coturn instance in the relay pool. |
+| `CALLS_TURN_PORT` | `3478` | Public UDP/TCP TURN listening port. It must match `callsRelay.port` in the node relay configuration. |
+| `CALLS_TURN_EXTERNAL_IP` | detected | Optional public IPv4 override for coturn. Leave empty to detect it at startup. |
+| `CALLS_TURN_RELAY_MIN_PORT` | `49160` | First UDP media relay port exposed by coturn. |
+| `CALLS_TURN_RELAY_MAX_PORT` | `49200` | Last UDP media relay port exposed by coturn. |
+| `CALLS_TURN_REALM` | `pigeon-swarm` | Authentication realm reported by coturn. |
+| `CALLS_TURN_TRANSPORTS` | `udp,tcp` | TURN transports advertised by the backend. |
+| `CALLS_ICE_TRANSPORT_POLICY` | `all` | Browser ICE policy returned by `/calls/ice-servers`. |
+| `CALLS_TURN_URLS` | empty | Optional explicit comma-separated TURN/TURNS URLs. By default the backend derives TURN URLs from the node relay configuration. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
@@ -56,6 +79,57 @@ Common settings:
 Node-to-node transport is also configured by default. The image uses `libp2p-gossipsub://` without requiring anything in `.env`.
 
 The frontend is built into the image and already talks to the backend through `/api`. You do not need to configure frontend URLs or route prefixes.
+
+## TURN For WebRTC Calls
+
+The Compose stack runs coturn separately from the application container. It
+uses host networking, as recommended by the
+[official coturn image documentation](https://github.com/coturn/coturn/blob/master/docker/coturn/README.md)
+for relay port ranges. This stack therefore targets Linux hosts.
+
+After choosing the public hostname, configure the backend node with a
+`callsRelay.port` equal to `CALLS_TURN_PORT`:
+
+```http
+PUT /api/node/relay-configuration
+```
+
+```json
+{
+  "publicHost": "relay.example.com",
+  "callsRelay": {
+    "port": 3478
+  }
+}
+```
+
+Open or forward all of these ports to the host without translating the media
+port numbers:
+
+- `${CALLS_TURN_PORT}` over UDP and TCP;
+- `${CALLS_TURN_RELAY_MIN_PORT}-${CALLS_TURN_RELAY_MAX_PORT}` over UDP.
+
+Coturn detects the host's external IPv4 address at startup. If the host sits
+behind NAT, the router must preserve the UDP relay port numbers because coturn
+returns those ports to WebRTC clients. `turns:` is not enabled by this minimal
+stack; add an explicit `CALLS_TURN_URLS` entry only after terminating TURN TLS
+with a valid certificate.
+
+Verify the local listener and REST credentials from the running service:
+
+```bash
+docker compose ps turn
+./scripts/verify-turn.sh
+```
+
+Run an equivalent allocation test from a machine outside the server's LAN to
+verify the public firewall and NAT path. A TCP port probe alone does not verify
+that coturn can allocate and exchange media through its UDP relay range.
+
+Once the node relay configuration is saved, authenticated calls to
+`GET /api/calls/ice-servers` return the local TURN URLs plus a temporary
+`username` and `credential`. Leaf nodes use records from their currently
+connected relay, provided they share the same TURN secret.
 
 ## Storage
 

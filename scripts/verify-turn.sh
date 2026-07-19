@@ -1,6 +1,38 @@
 #!/bin/sh
 set -eu
 
+docker compose exec -T turn sh -lc '
+  if [ "$(stat -c "%a" /run/pigeon-turn/turnserver.conf)" != "600" ]; then
+    echo "TURN secret configuration does not have mode 600." >&2
+    exit 1
+  fi
+
+  turn_pid=""
+
+  for comm in /proc/[0-9]*/comm; do
+    if [ "$(cat "$comm" 2>/dev/null || true)" = "turnserver" ]; then
+      turn_pid="${comm#/proc/}"
+      turn_pid="${turn_pid%/comm}"
+      break
+    fi
+  done
+
+  if [ -z "$turn_pid" ]; then
+    echo "The turnserver process is not running." >&2
+    exit 1
+  fi
+
+  command_line="$(tr "\0" "\n" < "/proc/$turn_pid/cmdline")"
+  environment="$(tr "\0" "\n" < "/proc/$turn_pid/environ")"
+
+  case "$command_line$environment" in
+    *"$CALLS_TURN_SHARED_SECRET"*)
+      echo "TURN secret is exposed in the turnserver process." >&2
+      exit 1
+      ;;
+  esac
+'
+
 if ! output="$({
   docker compose exec -T turn sh -lc \
     'turnutils_uclient -v -Y alloc -n 1 -u smoke-test -W "$CALLS_TURN_SHARED_SECRET" -p "$CALLS_TURN_PORT" 127.0.0.1'

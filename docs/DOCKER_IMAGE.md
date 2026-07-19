@@ -31,6 +31,10 @@ credentials and coturn uses the same value to validate them. Compose refuses to
 start with an empty secret instead of silently returning an unusable
 `iceServers: []` response.
 
+The TURN entrypoint writes the secret to a mode-`0600` configuration file on
+tmpfs and removes it from the long-running `turnserver` environment. It is not
+passed in the process command line.
+
 Open:
 
 ```text

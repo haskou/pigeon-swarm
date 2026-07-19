@@ -41,14 +41,15 @@ services:
   turn:
     image: coturn/coturn:4.11.0-r0-alpine
     network_mode: host
+    entrypoint:
+      - /bin/sh
+      - /opt/pigeon/start-turn.sh
     command:
       - --log-file=stdout
       - --fingerprint
       - --use-auth-secret
-      - --static-auth-secret=$${CALLS_TURN_SHARED_SECRET}
       - --realm=${CALLS_TURN_REALM:-pigeon-swarm}
       - --listening-port=${CALLS_TURN_PORT:-3478}
-      - --external-ip=$${CALLS_TURN_EXTERNAL_IP:-$$(detect-external-ip)}
       - --min-port=${CALLS_TURN_RELAY_MIN_PORT:-49160}
       - --max-port=${CALLS_TURN_RELAY_MAX_PORT:-49200}
       - --pidfile=/tmp/turnserver.pid
@@ -60,6 +61,10 @@ services:
       CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
       CALLS_TURN_PORT: ${CALLS_TURN_PORT:-3478}
       CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Set CALLS_TURN_SHARED_SECRET in .env}
+    volumes:
+      - ./scripts/start-turn.sh:/opt/pigeon/start-turn.sh:ro
+    tmpfs:
+      - /run/pigeon-turn:mode=0700,uid=65534,gid=65533
     healthcheck:
       test:
         - CMD

@@ -21,6 +21,9 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Validate Docker Compose example
+        env:
+          CALLS_TURN_EXTERNAL_IP: 127.0.0.1
+          CALLS_TURN_SHARED_SECRET: ci-only-turn-secret
         run: docker compose --env-file /dev/null config
 
       - name: Guard simple runtime contract
@@ -34,6 +37,16 @@ jobs:
 
           if grep -E "^(HOST_PORT|API_PORT|ROUTE_PREFIX|MONGO_URL|MONGO_DATABASE|TRANSPORT_DSN)=" .env.example; then
             echo ".env.example should expose PORT only; keep image internals out of user config."
+            exit 1
+          fi
+
+          if ! grep -F 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?' docker-compose.yml; then
+            echo "The backend and coturn must reject an empty shared TURN secret."
+            exit 1
+          fi
+
+          if [ "$(grep -Fc 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?' docker-compose.yml)" -ne 2 ]; then
+            echo "The same required TURN secret must be wired to the backend and coturn."
             exit 1
           fi
 
@@ -58,3 +71,18 @@ jobs:
             process.exit(1);
           }
           NODE
+
+      - name: Verify authenticated TURN allocation
+        env:
+          CALLS_TURN_EXTERNAL_IP: 127.0.0.1
+          CALLS_TURN_SHARED_SECRET: ci-only-turn-secret
+        run: |
+          docker compose --env-file /dev/null up -d --wait turn
+          ./scripts/verify-turn.sh
+
+      - name: Stop TURN test service
+        if: always()
+        env:
+          CALLS_TURN_EXTERNAL_IP: 127.0.0.1
+          CALLS_TURN_SHARED_SECRET: ci-only-turn-secret
+        run: docker compose --env-file /dev/null down

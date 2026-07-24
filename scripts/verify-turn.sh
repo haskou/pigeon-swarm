@@ -1,6 +1,35 @@
 #!/bin/sh
 set -eu
 
+readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'
+readonly default_warning='WARNING: TURN is using the built-in shared secret.'
+
+secret_source="$(
+  docker compose exec -T \
+    -e TURN_TEST_DEFAULT_SHARED_SECRET="$default_shared_secret" \
+    turn sh -lc '
+      if [ "$CALLS_TURN_SHARED_SECRET" = "$TURN_TEST_DEFAULT_SHARED_SECRET" ]; then
+        printf default
+      else
+        printf custom
+      fi
+    '
+)"
+warning_count="$(
+  docker compose logs --no-color turn 2>&1 |
+    grep -Fc "$default_warning" || true
+)"
+
+if [ "$secret_source" = 'default' ] && [ "$warning_count" -ne 1 ]; then
+  echo 'TURN did not warn exactly once that it is using the built-in shared secret.' >&2
+  exit 1
+fi
+
+if [ "$secret_source" = 'custom' ] && [ "$warning_count" -ne 0 ]; then
+  echo 'TURN emitted the built-in shared-secret warning with a custom secret.' >&2
+  exit 1
+fi
+
 docker compose exec -T turn sh -lc '
   if [ "$(stat -c "%a" /run/pigeon-turn/turnserver.conf)" != "600" ]; then
     echo "TURN secret configuration does not have mode 600." >&2

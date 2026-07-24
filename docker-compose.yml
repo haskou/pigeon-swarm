@@ -15,7 +15,7 @@ services:
         condition: service_healthy
     environment:
       CALLS_ICE_TRANSPORT_POLICY: ${CALLS_ICE_TRANSPORT_POLICY:-all}
-      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Set CALLS_TURN_SHARED_SECRET in .env}
+      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-}
       CALLS_TURN_TRANSPORTS: ${CALLS_TURN_TRANSPORTS:-udp,tcp}
       CALLS_TURN_URLS: ${CALLS_TURN_URLS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -60,7 +60,7 @@ services:
     environment:
       CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
       CALLS_TURN_PORT: ${CALLS_TURN_PORT:-3478}
-      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Set CALLS_TURN_SHARED_SECRET in .env}
+      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3}
     volumes:
       - ./scripts/start-turn.sh:/opt/pigeon/start-turn.sh:ro
     tmpfs:

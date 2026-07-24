@@ -21,15 +21,16 @@ Start the example stack:
 
 ```bash
 cp .env.example .env
+# Optional but strongly recommended for production:
 openssl rand -hex 32
 # Put the generated value in CALLS_TURN_SHARED_SECRET inside .env.
 docker compose up
 ```
 
-The secret is mandatory because the backend uses it to mint temporary TURN
-credentials and coturn uses the same value to validate them. Compose refuses to
-start with an empty secret instead of silently returning an unusable
-`iceServers: []` response.
+When the variable is empty, the backend and coturn use the same public built-in
+bootstrap value and log a warning. This keeps TURN functional without initial
+secret configuration. Production relay pools should replace it with one custom
+secret because anyone can use the public fallback to mint valid credentials.
 
 The TURN entrypoint writes the secret to a mode-`0600` configuration file on
 tmpfs and removes it from the long-running `turnserver` environment. It is not
@@ -45,9 +46,9 @@ The included [`docker-compose.yml`](../docker-compose.yml) is intentionally smal
 
 ## Configuration
 
-The application image keeps its runtime defaults, but the Compose stack requires
-one deployment-specific TURN secret. Copy [`.env.example`](../.env.example) to
-`.env` and set `CALLS_TURN_SHARED_SECRET` before startup:
+The application image and Compose stack share a built-in TURN secret fallback.
+Copy [`.env.example`](../.env.example) to `.env`; set
+`CALLS_TURN_SHARED_SECRET` to replace the public fallback in production:
 
 ```bash
 cp .env.example .env
@@ -62,7 +63,7 @@ Common settings:
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
-| `CALLS_TURN_SHARED_SECRET` | required | Shared coturn REST secret. Generate it once and configure the same value on every backend and coturn instance in the relay pool. |
+| `CALLS_TURN_SHARED_SECRET` | built-in public fallback | Shared coturn REST secret. Generate a custom value once and configure it on every backend and coturn instance in a production relay pool. |
 | `CALLS_TURN_PORT` | `3478` | Public UDP/TCP TURN listening port. It must match `callsRelay.port` in the node relay configuration. |
 | `CALLS_TURN_EXTERNAL_IP` | detected | Optional public IPv4 override for coturn. Leave empty to detect it at startup. |
 | `CALLS_TURN_RELAY_MIN_PORT` | `49160` | First UDP media relay port exposed by coturn. |

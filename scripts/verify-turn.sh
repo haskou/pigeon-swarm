@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+if [ -z "${CALLS_TURN_SHARED_SECRET:-}" ]; then
+  if ! docker compose logs --no-color turn 2>&1 |
+    grep -Fq 'WARNING: TURN is using the built-in shared secret.'; then
+    echo 'TURN did not warn that it is using the built-in shared secret.' >&2
+    exit 1
+  fi
+fi
+
 docker compose exec -T turn sh -lc '
   if [ "$(stat -c "%a" /run/pigeon-turn/turnserver.conf)" != "600" ]; then
     echo "TURN secret configuration does not have mode 600." >&2

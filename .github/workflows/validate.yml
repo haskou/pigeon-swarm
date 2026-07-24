@@ -23,7 +23,6 @@ jobs:
       - name: Validate Docker Compose example
         env:
           CALLS_TURN_EXTERNAL_IP: 127.0.0.1
-          CALLS_TURN_SHARED_SECRET: ci-only-turn-secret
         run: docker compose --env-file /dev/null config
 
       - name: Guard simple runtime contract
@@ -40,13 +39,18 @@ jobs:
             exit 1
           fi
 
-          if ! grep -F 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?' docker-compose.yml; then
-            echo "The backend and coturn must reject an empty shared TURN secret."
+          if ! grep -F 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-}' docker-compose.yml; then
+            echo "The backend must receive the optional TURN secret override."
             exit 1
           fi
 
-          if [ "$(grep -Fc 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?' docker-compose.yml)" -ne 2 ]; then
-            echo "The same required TURN secret must be wired to the backend and coturn."
+          if ! grep -F 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3}' docker-compose.yml; then
+            echo "Coturn must use the backend built-in shared secret by default."
+            exit 1
+          fi
+
+          if ! grep -F "readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'" scripts/start-turn.sh; then
+            echo "The coturn entrypoint fallback must match the Compose fallback."
             exit 1
           fi
 
@@ -75,7 +79,6 @@ jobs:
       - name: Verify authenticated TURN allocation
         env:
           CALLS_TURN_EXTERNAL_IP: 127.0.0.1
-          CALLS_TURN_SHARED_SECRET: ci-only-turn-secret
         run: |
           docker compose --env-file /dev/null up -d --wait turn
           ./scripts/verify-turn.sh
@@ -84,5 +87,4 @@ jobs:
         if: always()
         env:
           CALLS_TURN_EXTERNAL_IP: 127.0.0.1
-          CALLS_TURN_SHARED_SECRET: ci-only-turn-secret
         run: docker compose --env-file /dev/null down

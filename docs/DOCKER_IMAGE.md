@@ -64,14 +64,6 @@ Common settings:
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
 | `CALLS_TURN_SHARED_SECRET` | built-in public fallback | Shared coturn REST secret. Generate a custom value once and configure it on every backend and coturn instance in a production relay pool. |
-| `CALLS_TURN_PORT` | `3478` | Public UDP/TCP TURN listening port. It must match `callsRelay.port` in the node relay configuration. |
-| `CALLS_TURN_EXTERNAL_IP` | detected | Optional public IPv4 override for coturn. Leave empty to detect it at startup. |
-| `CALLS_TURN_RELAY_MIN_PORT` | `49160` | First UDP media relay port exposed by coturn. |
-| `CALLS_TURN_RELAY_MAX_PORT` | `49200` | Last UDP media relay port exposed by coturn. |
-| `CALLS_TURN_REALM` | `pigeon-swarm` | Authentication realm reported by coturn. |
-| `CALLS_TURN_TRANSPORTS` | `udp,tcp` | TURN transports advertised by the backend. |
-| `CALLS_ICE_TRANSPORT_POLICY` | `all` | Browser ICE policy returned by `/calls/ice-servers`. |
-| `CALLS_TURN_URLS` | empty | Optional explicit comma-separated TURN/TURNS URLs. By default the backend derives TURN URLs from the node relay configuration. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
@@ -83,13 +75,14 @@ The frontend is built into the image and already talks to the backend through `/
 
 ## TURN For WebRTC Calls
 
-The Compose stack runs coturn separately from the application container. It
-uses host networking, as recommended by the
-[official coturn image documentation](https://github.com/coturn/coturn/blob/master/docker/coturn/README.md)
-for relay port ranges. This stack therefore targets Linux hosts.
+The Compose stack runs coturn separately while sharing the application's
+network namespace. The backend writes a local runtime contract whenever the
+persisted node relay configuration changes. Coturn observes that contract and
+starts, stops, or reloads automatically. TURN ports and browser ICE policy do
+not need environment variables.
 
-After choosing the public hostname, configure the backend node with a
-`callsRelay.port` equal to `CALLS_TURN_PORT`:
+After choosing the public hostname, configure the backend node with a calls
+relay listener and a private relay range:
 
 ```http
 PUT /api/node/relay-configuration
@@ -99,22 +92,26 @@ PUT /api/node/relay-configuration
 {
   "publicHost": "relay.example.com",
   "callsRelay": {
-    "port": 3478
+    "port": 4101
+  },
+  "privateRelay": {
+    "enabled": true,
+    "portStart": 4102,
+    "portEnd": 4199
   }
 }
 ```
 
-Open or forward all of these ports to the host without translating the media
-port numbers:
+Publish and forward:
 
-- `${CALLS_TURN_PORT}` over UDP and TCP;
-- `${CALLS_TURN_RELAY_MIN_PORT}-${CALLS_TURN_RELAY_MAX_PORT}` over UDP.
+- `callsRelay.port` over UDP and TCP;
+- `privateRelay.portStart-privateRelay.portEnd` over TCP for private IPFS and
+  UDP for TURN media.
 
-Coturn detects the host's external IPv4 address at startup. If the host sits
-behind NAT, the router must preserve the UDP relay port numbers because coturn
-returns those ports to WebRTC clients. `turns:` is not enabled by this minimal
-stack; add an explicit `CALLS_TURN_URLS` entry only after terminating TURN TLS
-with a valid certificate.
+The TURN listener must be outside the configured media range. Coturn detects
+the host's external IPv4 address when it starts. If the host sits behind NAT,
+the router must preserve the UDP relay port numbers because coturn returns
+those ports to WebRTC clients.
 
 Verify the local listener and REST credentials from the running service:
 

@@ -21,8 +21,6 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Validate Docker Compose example
-        env:
-          CALLS_TURN_EXTERNAL_IP: 127.0.0.1
         run: docker compose --env-file /dev/null config
 
       - name: Guard simple runtime contract
@@ -49,8 +47,13 @@ jobs:
             exit 1
           fi
 
-          if ! grep -F "readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'" scripts/start-turn.sh; then
-            echo "The coturn entrypoint fallback must match the Compose fallback."
+          if ! grep -F "readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'" scripts/run-turn-from-runtime-config.sh; then
+            echo "The coturn runtime fallback must match the Compose fallback."
+            exit 1
+          fi
+
+          if grep -E '^(CALLS_ICE_TRANSPORT_POLICY|CALLS_TURN_PORT|CALLS_TURN_RELAY_MIN_PORT|CALLS_TURN_RELAY_MAX_PORT)=' .env.example; then
+            echo "TURN policy and ports must come from persisted node configuration."
             exit 1
           fi
 
@@ -77,14 +80,12 @@ jobs:
           NODE
 
       - name: Verify authenticated TURN allocation
-        env:
-          CALLS_TURN_EXTERNAL_IP: 127.0.0.1
         run: |
-          docker compose --env-file /dev/null up -d --wait turn
+          docker compose --env-file /dev/null up -d --wait app turn
+          docker compose --env-file /dev/null exec -T -u 1000:1000 app sh -lc \
+            'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4105\n" > /run/pigeon/calls-turn-runtime.conf'
           ./scripts/verify-turn.sh
 
       - name: Stop TURN test service
         if: always()
-        env:
-          CALLS_TURN_EXTERNAL_IP: 127.0.0.1
         run: docker compose --env-file /dev/null down

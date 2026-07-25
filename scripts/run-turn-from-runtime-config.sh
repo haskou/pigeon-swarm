@@ -1,0 +1,121 @@
+#!/bin/sh
+set -eu
+
+readonly runtime_config_path='/run/pigeon/calls-turn-runtime.conf'
+readonly turn_config_path='/run/pigeon-turn/turnserver.conf'
+readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'
+
+turn_pid=''
+last_signature=''
+
+read_setting() {
+  setting_name="$1"
+
+  awk -F= -v setting_name="$setting_name" \
+    '$1 == setting_name { print $2; exit }' "$runtime_config_path"
+}
+
+is_port() {
+  case "$1" in
+    '' | *[!0-9]*)
+      return 1
+      ;;
+  esac
+
+  [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+stop_turn() {
+  if [ -z "$turn_pid" ]; then
+    return
+  fi
+
+  kill "$turn_pid" 2>/dev/null || true
+  wait "$turn_pid" 2>/dev/null || true
+  turn_pid=''
+}
+
+start_turn() {
+  listening_port="$1"
+  relay_port_start="$2"
+  relay_port_end="$3"
+  shift 3
+  external_ip="$(detect-external-ip)"
+
+  echo "Starting TURN from persisted node configuration: listeningPort=$listening_port relayPortStart=$relay_port_start relayPortEnd=$relay_port_end" >&2
+
+  turnserver \
+    -c "$turn_config_path" \
+    --external-ip="$external_ip" \
+    --listening-port="$listening_port" \
+    --min-port="$relay_port_start" \
+    --max-port="$relay_port_end" \
+    "$@" &
+  turn_pid="$!"
+}
+
+reload_runtime_configuration() {
+  stop_turn
+
+  if [ ! -f "$runtime_config_path" ]; then
+    echo 'Waiting for persisted node TURN configuration.' >&2
+    return
+  fi
+
+  enabled="$(read_setting enabled)"
+
+  if [ "$enabled" != 'true' ]; then
+    echo 'TURN disabled by persisted node configuration.' >&2
+    return
+  fi
+
+  listening_port="$(read_setting listening_port)"
+  relay_port_start="$(read_setting relay_port_start)"
+  relay_port_end="$(read_setting relay_port_end)"
+
+  if ! is_port "$listening_port" ||
+    ! is_port "$relay_port_start" ||
+    ! is_port "$relay_port_end" ||
+    [ "$relay_port_end" -lt "$relay_port_start" ]; then
+    echo 'Persisted node TURN configuration contains an invalid port range.' >&2
+    return
+  fi
+
+  start_turn "$listening_port" "$relay_port_start" "$relay_port_end" "$@"
+}
+
+shared_secret="${CALLS_TURN_SHARED_SECRET:-$default_shared_secret}"
+
+if [ "$shared_secret" = "$default_shared_secret" ]; then
+  echo 'WARNING: TURN is using the built-in shared secret. Set CALLS_TURN_SHARED_SECRET to the same custom value on every backend and coturn service in the relay pool.' >&2
+fi
+
+umask 077
+printf 'static-auth-secret=%s\n' "$shared_secret" > "$turn_config_path"
+unset shared_secret CALLS_TURN_SHARED_SECRET
+
+trap 'stop_turn; exit 0' INT TERM
+
+while true; do
+  signature="$(
+    if [ -f "$runtime_config_path" ]; then
+      cksum "$runtime_config_path"
+    else
+      printf missing
+    fi
+  )"
+
+  if [ "$signature" != "$last_signature" ]; then
+    last_signature="$signature"
+    reload_runtime_configuration "$@"
+  fi
+
+  if [ -n "$turn_pid" ] && ! kill -0 "$turn_pid" 2>/dev/null; then
+    status=0
+    wait "$turn_pid" || status="$?"
+    echo "TURN stopped unexpectedly: status=$status" >&2
+    exit 1
+  fi
+
+  sleep 2
+done

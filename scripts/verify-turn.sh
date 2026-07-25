@@ -30,6 +30,15 @@ if [ "$secret_source" = 'custom' ] && [ "$warning_count" -ne 0 ]; then
   exit 1
 fi
 
+for _attempt in $(seq 1 15); do
+  if docker compose exec -T turn sh -lc \
+    'pidof turnserver >/dev/null 2>&1'; then
+    break
+  fi
+
+  sleep 2
+done
+
 docker compose exec -T turn sh -lc '
   if [ "$(stat -c "%a" /run/pigeon-turn/turnserver.conf)" != "600" ]; then
     echo "TURN secret configuration does not have mode 600." >&2
@@ -64,7 +73,7 @@ docker compose exec -T turn sh -lc '
 
 if ! output="$({
   docker compose exec -T turn sh -lc \
-    'turnutils_uclient -v -Y alloc -n 1 -u smoke-test -W "$CALLS_TURN_SHARED_SECRET" -p "$CALLS_TURN_PORT" 127.0.0.1'
+    'port="$(awk -F= '\''$1 == "listening_port" { print $2; exit }'\'' /run/pigeon/calls-turn-runtime.conf)"; turnutils_uclient -v -Y alloc -n 1 -u smoke-test -W "$CALLS_TURN_SHARED_SECRET" -p "$port" 127.0.0.1'
 } 2>&1)"; then
   printf '%s\n' "$output"
   echo 'Authenticated TURN allocation failed.' >&2
@@ -82,7 +91,7 @@ invalid_result=0
 invalid_output="$({
   docker compose exec -T -e TURN_TEST_SHARED_SECRET=invalid-test-secret \
     turn sh -lc \
-    'turnutils_uclient -v -Y alloc -n 1 -u smoke-test -W "$TURN_TEST_SHARED_SECRET" -p "$CALLS_TURN_PORT" 127.0.0.1'
+    'port="$(awk -F= '\''$1 == "listening_port" { print $2; exit }'\'' /run/pigeon/calls-turn-runtime.conf)"; turnutils_uclient -v -Y alloc -n 1 -u smoke-test -W "$TURN_TEST_SHARED_SECRET" -p "$port" 127.0.0.1'
 } 2>&1)" || invalid_result=$?
 
 if [ "$invalid_result" -eq 0 ] || printf '%s\n' "$invalid_output" | grep -q 'Received relay addr:'; then

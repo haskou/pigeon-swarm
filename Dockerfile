@@ -124,6 +124,7 @@ ENV NODE_ENV=production \
   IPFS_STORAGE_PATH=/data/ipfs \
   IPFS_CONTENT_TIMEOUT_MS=3000 \
   PIGEON_LOCAL_DB_PATH=/data/local_storage \
+  PIGEON_TURN_RUNTIME_CONFIG_PATH=/run/pigeon/calls-turn-runtime.conf \
   PIGEON_RELAY_DATA_LIMIT_BYTES=67108864 \
   LINK_PREVIEW_RATE_LIMIT_PER_MINUTE=30 \
   PUBSUB_TOPIC_PREFIX=pigeon-swarm \
@@ -131,7 +132,7 @@ ENV NODE_ENV=production \
   TRANSPORT_DSN=libp2p-gossipsub:// \
   TRANSPORT_MAX_RETRIES=3 \
   TRANSPORT_RETRY_DELAY=1000
-RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage
+RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage /run/pigeon
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.API_PORT || process.env.PORT || '8080') + '/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
 ENTRYPOINT ["docker-entrypoint.sh"]

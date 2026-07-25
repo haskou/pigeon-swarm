@@ -82,6 +82,8 @@ jobs:
       - name: Verify authenticated TURN allocation
         run: |
           docker compose --env-file /dev/null up -d --wait app turn
+          docker compose --env-file /dev/null exec -T app \
+            chown 1000:1000 /run/pigeon
           docker compose --env-file /dev/null exec -T -u 1000:1000 app sh -lc \
             'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4105\n" > /run/pigeon/calls-turn-runtime.conf'
           ./scripts/verify-turn.sh

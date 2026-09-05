@@ -142,6 +142,13 @@ fi
 
 case "${CALLS_TURN_TLS_ENABLED:-false}" in
   true)
+    tls_port="${CALLS_TURN_TLS_PORT:-5349}"
+    web_port="${PIGEON_WEB_HOST_PORT:-8080}"
+    if is_port "$tls_port" &&
+      { [ "$tls_port" -eq 8080 ] || { is_port "$web_port" && [ "$tls_port" -eq "$web_port" ]; }; }; then
+      echo 'TURN TLS port conflicts with the internal or published web listener.' >&2
+      exit 1
+    fi
     if [ ! -r /run/pigeon-turn-tls/fullchain.pem ] || [ ! -s /run/pigeon-turn-tls/fullchain.pem ] ||
       [ ! -r /run/pigeon-turn-tls/privkey.pem ] || [ ! -s /run/pigeon-turn-tls/privkey.pem ]; then
       echo 'TURN TLS requires readable fullchain.pem and privkey.pem in /run/pigeon-turn-tls.' >&2

@@ -222,7 +222,8 @@ The backend can advertise these explicit URLs alongside URLs derived from its
 persisted relay configuration. Keep the hostname and port aligned with the
 certificate, public DNS and Docker/router mapping. Configure the persisted
 plain listener and relay range as shown above; the TLS port is additional and
-must be outside both. The ordinary stack keeps TLS disabled unless the overlay
+must be outside both. It must also differ from the application's internal
+port `8080` and its published web port (`PORT`). The ordinary stack keeps TLS disabled unless the overlay
 is selected; DTLS remains disabled.
 
 ```sh

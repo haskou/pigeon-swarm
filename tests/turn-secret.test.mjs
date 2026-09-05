@@ -68,3 +68,15 @@ test('explicit TLS refuses missing certificate files', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /TURN TLS requires readable fullchain.pem and privkey.pem/);
 });
+
+for (const [tlsPort, webPort] of [['8080', '9000'], ['9000', '9000']]) {
+  test('TLS refuses collisions with the internal or published web listener', () => {
+    const result = spawnSync('sh', ['scripts/run-turn-from-runtime-config.sh'], {
+      encoding: 'utf8', timeout: 2000,
+      env: { ...process.env, CALLS_TURN_SHARED_SECRET: randomBytes(32).toString('hex'),
+        CALLS_TURN_TLS_ENABLED: 'true', CALLS_TURN_TLS_PORT: tlsPort, PIGEON_WEB_HOST_PORT: webPort },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /TURN TLS port conflicts with the internal or published web listener/);
+  });
+}

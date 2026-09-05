@@ -11,6 +11,7 @@ services:
     environment:
       CALLS_TURN_TLS_ENABLED: 'true'
       CALLS_TURN_TLS_PORT: ${CALLS_TURN_TLS_PORT:-5349}
+      PIGEON_WEB_HOST_PORT: ${PORT:-8080}
     volumes:
       - type: bind
         source: ${CALLS_TURN_TLS_CERTS_DIR:?Set the directory containing fullchain.pem and privkey.pem}

@@ -25,6 +25,23 @@ is_port() {
   [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
 }
 
+is_ipv4_mapping() {
+  printf '%s\n' "$1" | awk '
+    NR != 1 { invalid=1 }
+    {
+      count=split($0, addresses, "/")
+      if (count < 1 || count > 2) invalid=1
+      for (i=1; i<=count; i++) {
+        if (split(addresses[i], octets, ".") != 4) invalid=1
+        for (j=1; j<=4; j++) {
+          if (octets[j] !~ /^[0-9]+$/ || length(octets[j]) > 3 ||
+              octets[j]+0 > 255 || (length(octets[j]) > 1 && substr(octets[j],1,1) == "0")) invalid=1
+        }
+      }
+    }
+    END { exit invalid || NR != 1 }'
+}
+
 stop_turn() {
   if [ -z "$turn_pid" ]; then
     return
@@ -40,7 +57,27 @@ start_turn() {
   relay_port_start="$2"
   relay_port_end="$3"
   shift 3
-  external_ip="$(detect-external-ip)"
+  external_ip="${CALLS_TURN_EXTERNAL_IP:-}"
+  if [ -z "$external_ip" ]; then
+    external_ip="$(detect-external-ip)"
+  fi
+  if ! is_ipv4_mapping "$external_ip"; then
+    echo 'TURN external IPv4 detection failed; configure CALLS_TURN_EXTERNAL_IP explicitly.' >&2
+    exit 1
+  fi
+
+  if [ "${CALLS_TURN_TLS_ENABLED:-false}" = true ]; then
+    tls_port="${CALLS_TURN_TLS_PORT:-5349}"
+    if ! is_port "$tls_port" || [ "$tls_port" -eq "$listening_port" ] ||
+      { [ "$tls_port" -ge "$relay_port_start" ] && [ "$tls_port" -le "$relay_port_end" ]; }; then
+      echo 'TURN TLS port must be valid and outside the plain listener and relay range.' >&2
+      exit 1
+    fi
+    set -- "$@" --tls-listening-port="$tls_port" \
+      --cert=/run/pigeon-turn-tls/fullchain.pem --pkey=/run/pigeon-turn-tls/privkey.pem
+  else
+    set -- "$@" --no-tls
+  fi
 
   echo "Starting TURN from persisted node configuration: listeningPort=$listening_port relayPortStart=$relay_port_start relayPortEnd=$relay_port_end" >&2
 
@@ -97,6 +134,30 @@ if [ "$valid_secret" != true ] ||
   echo 'CALLS_TURN_SHARED_SECRET must be a private deployment secret of 32-256 base64/hex-compatible characters. The public fallback is rejected. Configure the same value on its backend credential issuer and coturn.' >&2
   exit 1
 fi
+
+if [ -n "${CALLS_TURN_EXTERNAL_IP:-}" ] && ! is_ipv4_mapping "$CALLS_TURN_EXTERNAL_IP"; then
+  echo 'CALLS_TURN_EXTERNAL_IP must be an IPv4 address or public/private IPv4 mapping.' >&2
+  exit 1
+fi
+
+case "${CALLS_TURN_TLS_ENABLED:-false}" in
+  true)
+    tls_port="${CALLS_TURN_TLS_PORT:-5349}"
+    web_port="${PIGEON_WEB_HOST_PORT:-8080}"
+    if is_port "$tls_port" &&
+      { [ "$tls_port" -eq 8080 ] || { is_port "$web_port" && [ "$tls_port" -eq "$web_port" ]; }; }; then
+      echo 'TURN TLS port conflicts with the internal or published web listener.' >&2
+      exit 1
+    fi
+    if [ ! -r /run/pigeon-turn-tls/fullchain.pem ] || [ ! -s /run/pigeon-turn-tls/fullchain.pem ] ||
+      [ ! -r /run/pigeon-turn-tls/privkey.pem ] || [ ! -s /run/pigeon-turn-tls/privkey.pem ]; then
+      echo 'TURN TLS requires readable fullchain.pem and privkey.pem in /run/pigeon-turn-tls.' >&2
+      exit 1
+    fi
+    ;;
+  false) ;;
+  *) echo 'CALLS_TURN_TLS_ENABLED must be true or false.' >&2; exit 1 ;;
+esac
 
 umask 077
 secret_config="$(mktemp "${turn_config_path}.XXXXXX")"

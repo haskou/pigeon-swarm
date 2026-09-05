@@ -69,6 +69,11 @@ Common settings:
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
 | `CALLS_TURN_SHARED_SECRET` | required; no default | Private coturn REST secret, 32–256 base64/hex-compatible characters. Generate 32 random bytes as hex; length validation alone cannot establish entropy. Backend and coturn receive the same value. |
+| `CALLS_TURN_EXTERNAL_IP` | auto-detected IPv4 | Explicit IPv4 address or `public/private` IPv4 mapping. No hostnames; this override currently supports IPv4 only. |
+| `CALLS_TURN_TLS_PORT` | `5349` | Dedicated TLS listener/published TCP port when using the TLS overlay. Must not overlap the plain listener or relay range. |
+| `CALLS_TURN_TLS_SERVER_NAME` | required for TLS | DNS hostname covered by the server certificate, used for local TLS verification. |
+| `CALLS_TURN_TLS_CERTS_DIR` | required for TLS | Existing directory with `fullchain.pem` and `privkey.pem`, mounted read-only by the TLS overlay. |
+| `CALLS_TURN_URLS` | required for TLS overlay | Explicit advertised TURN URLs, including `turns:hostname:port?transport=tcp` for the configured certificate and TLS listener. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
@@ -153,7 +158,13 @@ Publish and forward:
   UDP for TURN media.
 
 The TURN listener must be outside the configured media range. Coturn detects
-the host's external IPv4 address when it starts. If the host sits behind NAT,
+the host's external IPv4 address when it starts unless `CALLS_TURN_EXTERNAL_IP`
+is set. For a known mapping, set it to `203.0.113.10/10.0.0.10`, replacing those
+example addresses with the actual public and container-reachable local IPv4
+addresses. The private address must belong to coturn's shared network namespace.
+The diagnostic checks that allocations advertise the configured public IPv4.
+Syntax validation and an advertised address do not establish reachability.
+If the host sits behind NAT,
 the router must preserve the UDP relay port numbers because coturn returns
 those ports to WebRTC clients.
 
@@ -180,12 +191,79 @@ Run an equivalent allocation test from a machine outside the server's LAN to
 verify the public firewall and NAT path. A TCP port probe alone does not verify
 that coturn can allocate and exchange media through its UDP relay range.
 
-These local checks do not prove public reachability, TLS fallback or browser
-audio. TLS support and an external network acceptance test remain tracked in
+These local checks do not prove public reachability or browser audio.
+An external network acceptance test remains tracked in
 [#29](https://github.com/haskou/pigeon-swarm/issues/29). Behind CGNAT without
 forwardable ports, detecting an external IP does not make this host a public
 relay; use a reachable relay host. For ordinary NAT, publish and forward the
 listener and full media range with unchanged port numbers.
+
+### Optional TLS Listener
+
+Obtain a valid certificate for the relay hostname and place its full chain and
+unencrypted private key in an existing directory outside the repository (or
+the ignored `turn-certs/` directory). Coturn runs as UID 65534 / GID 65533 in
+the pinned image: grant that identity read access, restrict the private key
+to that identity and its administrator, and mount the directory read-only.
+Do not commit the key or relax it to world-readable for a production deployment.
+The launcher refuses missing or unreadable files. Certificate/key validity is
+checked by coturn and by the TLS diagnostic below.
+
+Configure `.env`, using the real hostname and certificate directory:
+
+```dotenv
+CALLS_TURN_TLS_PORT=5349
+CALLS_TURN_TLS_SERVER_NAME=relay.example.com
+CALLS_TURN_TLS_CERTS_DIR=/absolute/path/to/turn-certificates
+CALLS_TURN_URLS=turns:relay.example.com:5349?transport=tcp
+```
+
+The backend can advertise these explicit URLs alongside URLs derived from its
+persisted relay configuration. Keep the hostname and port aligned with the
+certificate, public DNS and Docker/router mapping. Configure the persisted
+plain listener and relay range as shown above; the TLS port is additional and
+must be outside both. It must also differ from the application's internal
+port `8080` and its published web port (`PORT`). The ordinary stack keeps TLS disabled unless the overlay
+is selected; DTLS remains disabled.
+
+```sh
+export COMPOSE_FILE=docker-compose.yml:docker-compose.turn-tls.yml
+docker compose up -d --force-recreate app turn
+./scripts/verify-turn.sh
+```
+
+Keep the same `COMPOSE_FILE` selection for subsequent commands. The overlay
+publishes the TLS TCP port on the app because coturn shares its network
+namespace. Publish the plain listener and media range separately in the base
+Compose file. For the example configuration, the complete port matrix is:
+
+| Host/container ports | Protocol | Purpose | Router/firewall requirement |
+| --- | --- | --- | --- |
+| `8080` (or `PORT`) | TCP | Web/API | Expose according to the web deployment, usually behind HTTPS. |
+| `4101` | UDP and TCP | Plain TURN listener | Forward both if advertising the corresponding `turn:` URLs. |
+| `5349` | TCP | TLS TURN listener | Forward TCP and advertise the certificate hostname with this port. |
+| `4102–4199` | UDP | TURN relay allocations | Forward the whole range with unchanged port numbers. |
+| `4102–4199` | TCP | Private IPFS relay nodes | Publish the range selected for private relays. |
+
+TLS on the client-to-TURN connection still uses UDP relay allocations in this
+configuration. Opening only the TLS port is insufficient for media forwarding.
+The local probe now also authenticates over TLS, checks server trust and the
+configured hostname, and rejects invalid/expired TURN credentials over TLS.
+It requires TLS 1.2 or newer and never disables certificate verification.
+For a private CA, install that CA in the diagnostic client's trust store; never
+copy the TURN private key to a client or disable verification.
+
+After certificate renewal, restart coturn and rerun the probe. Certificates are
+loaded on process startup, not automatically reloaded by the runtime-config
+watcher. The container healthcheck is still a local STUN check; it does not
+establish TLS certificate validity. A failed TLS probe is a deployment failure
+even when that healthcheck is green.
+
+The integration suite generates an isolated test certificate, verifies TLS
+allocation before and after restart, and rejects an untrusted certificate and
+an incorrect hostname. It verifies an explicit advertised IPv4 mapping, but it
+does not emulate a router or test a real external network. Quotas, destination
+restrictions and browser media acceptance remain open in #29.
 
 Once the node relay configuration is saved, authenticated calls to
 `GET /api/calls/ice-servers` return the local TURN URLs plus a temporary

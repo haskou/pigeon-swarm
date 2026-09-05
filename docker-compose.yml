@@ -12,6 +12,7 @@ services:
       - SETUID
     environment:
       CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Configure a private TURN secret in .env before starting the stack}
+      CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LINK_PREVIEW_RATE_LIMIT_PER_MINUTE: ${LINK_PREVIEW_RATE_LIMIT_PER_MINUTE:-30}
       PIGEON_RELAY_DATA_LIMIT_BYTES: ${PIGEON_RELAY_DATA_LIMIT_BYTES:-67108864}
@@ -50,12 +51,12 @@ services:
       - --use-auth-secret
       - --realm=pigeon-swarm
       - --pidfile=/tmp/turnserver.pid
-      - --no-tls
       - --no-dtls
       - --no-multicast-peers
       - --stale-nonce=600
     environment:
       CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Configure a private TURN secret in .env before starting the stack}
+      CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
     volumes:
       - ./scripts/check-turn-runtime.sh:/opt/pigeon/check-turn-runtime.sh:ro
       - ./scripts/run-turn-from-runtime-config.sh:/opt/pigeon/run-turn-from-runtime-config.sh:ro

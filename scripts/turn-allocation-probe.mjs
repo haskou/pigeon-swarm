@@ -3,6 +3,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createSocket } from 'node:dgram';
 import { createConnection } from 'node:net';
+import { connect as connectTls } from 'node:tls';
 import { readFileSync } from 'node:fs';
 import { once } from 'node:events';
 
@@ -64,16 +65,18 @@ function errorCode(response) {
 }
 
 async function openTransport(transport, port) {
-  const socket = transport === 'udp' ? createSocket('udp4') : createConnection({ host: '127.0.0.1', port });
+  const socket = transport === 'udp' ? createSocket('udp4') : transport === 'tls'
+    ? connectTls({ host: '127.0.0.1', port, servername: process.env.CALLS_TURN_TLS_SERVER_NAME, rejectUnauthorized: true, minVersion: 'TLSv1.2' })
+    : createConnection({ host: '127.0.0.1', port });
   let socketError;
   socket.on('error', (error) => { socketError = error; });
   if (transport === 'udp') socket.connect(port, '127.0.0.1');
   try {
-    await once(socket, 'connect', { signal: AbortSignal.timeout(5000) });
+    await once(socket, transport === 'tls' ? 'secureConnect' : 'connect', { signal: AbortSignal.timeout(5000) });
   } catch {
     if (transport === 'udp') socket.close();
     else socket.destroy();
-    throw new Error('Cannot connect to the local TURN listener.');
+    throw new Error(transport === 'tls' ? 'TURN TLS connection or certificate validation failed.' : 'Cannot connect to the local TURN listener.');
   }
   return {
     close: () => transport === 'udp' ? socket.close() : socket.destroy(),
@@ -92,7 +95,7 @@ async function openTransport(transport, port) {
       const closed = () => finish(new Error('TURN connection closed before a response.'));
       const receive = (chunk) => {
         pending = Buffer.concat([pending, chunk]);
-        if (transport === 'tcp' && (pending.length < 20 || pending.length < 20 + pending.readUInt16BE(2))) return;
+        if (transport !== 'udp' && (pending.length < 20 || pending.length < 20 + pending.readUInt16BE(2))) return;
         try { finish(null, parse(pending, request, key)); } catch (error) { finish(error); }
       };
       const timer = setTimeout(() => finish(new Error('TURN response timed out.')), 5000);
@@ -127,6 +130,17 @@ async function check(transport, port, secret, expiresIn, expectedAllocation) {
     if (result.type !== 0x0103 || !result.integrityValid || !result.attributes.has(0x0016)) {
       throw new Error('Authenticated allocation failed; check that backend and coturn use the same secret.');
     }
+    const expectedIp = process.env.CALLS_TURN_EXTERNAL_IP?.split('/')[0];
+    const relayAddress = result.attributes.get(0x0016);
+    if (expectedIp) {
+      const decoded = Buffer.alloc(4);
+      if (relayAddress.length === 8 && relayAddress[1] === 1) {
+        decoded.writeUInt32BE((relayAddress.readUInt32BE(4) ^ cookie) >>> 0);
+      }
+      if (relayAddress.length !== 8 || relayAddress[1] !== 1 || [...decoded].join('.') !== expectedIp) {
+        throw new Error('TURN allocated an unexpected advertised IPv4 address.');
+      }
+    }
     const released = await connection.exchange(message(0x0004, [attribute(0x000d, Buffer.alloc(4)), ...auth], key), key);
     if (released.type !== 0x0104 || !released.integrityValid) throw new Error('TURN allocation cleanup failed.');
   } finally {
@@ -144,13 +158,21 @@ try {
   if (settings.get('enabled') !== 'true' || !Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('Enable TURN with a valid persisted listener port before running this check.');
   }
-  for (const transport of ['udp', 'tcp']) {
-    await check(transport, port, secret, 60, true);
-    await check(transport, port, randomBytes(32).toString('hex'), 60, false);
-    await check(transport, port, secret, -60, false);
+  const transports = [['udp', port], ['tcp', port]];
+  if (process.env.CALLS_TURN_TLS_PORT) {
+    const tlsPort = Number(process.env.CALLS_TURN_TLS_PORT);
+    if (!Number.isInteger(tlsPort) || tlsPort < 1 || tlsPort > 65535 || !process.env.CALLS_TURN_TLS_SERVER_NAME) {
+      throw new Error('TLS verification requires a valid port and certificate hostname.');
+    }
+    transports.push(['tls', tlsPort]);
+  }
+  for (const [transport, targetPort] of transports) {
+    await check(transport, targetPort, secret, 60, true);
+    await check(transport, targetPort, randomBytes(32).toString('hex'), 60, false);
+    await check(transport, targetPort, secret, -60, false);
     console.log(`PASS ${transport}: authenticated allocation; wrong and expired credentials rejected.`);
   }
-  console.log('Local allocation checks only. Public reachability, TLS and WebRTC media remain unverified.');
+  console.log('Local allocation checks only. Public reachability and WebRTC media remain unverified.');
 } catch (error) {
   // Never print packets, keys, credentials or raw socket errors.
   const code = typeof error.code === 'string' && /^[A-Z_]+$/.test(error.code) ? ` (${error.code})` : '';

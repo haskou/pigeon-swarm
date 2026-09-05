@@ -143,7 +143,8 @@ existing trusted device or an out-of-band fingerprint/QR exchange. Public key
 lookup alone cannot rule out an equivocating directory. Unknown or changed
 credentials require explicit verification; no automatic trust reset.
 
-The crypto package owns the standard-protocol adapter, key lifecycle, canonical
+The [crypto implementation task](https://github.com/haskou/pigeon-swarm-crypto/issues/5)
+owns the standard-protocol adapter, key lifecycle, canonical
 operation encoding and interoperability vectors. This ADR selects the protocol,
 not an unreviewed library: package selection, licensing compatibility, supported
 browser/Node builds, independent review and cross-implementation vectors are
@@ -347,7 +348,7 @@ separate privacy choices.
 | --- | --- | --- |
 | Operation authorization and partition policy | node #288 | Same proof/revision rules on local and remote paths; adversarial tests |
 | Private queues, capabilities, expiry and replicas | node #289 | Durable states and strict outer contract; restart/loss/abuse tests |
-| Vault, local unlock and recovery | UI #172, #173, #175; node #292; crypto package | Encrypted metadata at rest, safe migration, protocol vectors and independently reviewed key lifecycle |
+| Vault, local unlock and recovery | UI #172, #173, #175; node #292; [crypto #5](https://github.com/haskou/pigeon-swarm-crypto/issues/5) | Encrypted metadata at rest, safe migration, protocol vectors and independently reviewed key lifecycle |
 | Attachments | node #290; client attachment adapter | Private blobs and encrypted manifests; no public CID fallback |
 | Presence, push and logging | node #291 | Remove identity-to-node broadcasts and event identifiers from wakeups/logs |
 | Private groups and moderation | node #288; UI #174 | Scoped roster/policy and authorized commits; no global private catalog |

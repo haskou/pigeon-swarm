@@ -18,7 +18,7 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9+/]+={0,2}$",
           "minLength": 4,
-          "maxLength": 349528
+          "maxLength": 240000
         },
         "kind": {
           "const": "mls-application"
@@ -42,7 +42,7 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9+/]+={0,2}$",
           "minLength": 4,
-          "maxLength": 349528
+          "maxLength": 240000
         },
         "kind": {
           "const": "mls-commit"
@@ -91,7 +91,7 @@
             "signatures": {
               "type": "object",
               "minProperties": 1,
-              "maxProperties": 16,
+              "maxProperties": 128,
               "propertyNames": {
                 "pattern": "^[A-Za-z0-9_-]{43}$"
               },
@@ -129,7 +129,7 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9+/]+={0,2}$",
           "minLength": 4,
-          "maxLength": 349528
+          "maxLength": 240000
         },
         "kind": {
           "const": "mls-welcome"
@@ -178,7 +178,7 @@
             "signatures": {
               "type": "object",
               "minProperties": 1,
-              "maxProperties": 16,
+              "maxProperties": 128,
               "propertyNames": {
                 "pattern": "^[A-Za-z0-9_-]{43}$"
               },

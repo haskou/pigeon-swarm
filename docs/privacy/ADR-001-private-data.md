@@ -185,7 +185,9 @@ Public discovery remains separate and requires an explicit publication action.
 Each private scope has one signed, monotonically increasing authorization head
 and a designated sequencer chosen in its membership policy. The sequencer orders
 commits but cannot invent the required administrator signatures. Version 1 uses
-one pinned owner as the default authority; a configured administrator quorum is
+one pinned owner as the default authority; policies admit at most 128 authority
+keys with a threshold from one to the admitted key count. Reject unsatisfiable
+policies before adoption. A configured administrator quorum is
 recorded in the previous signed policy. Do not silently create concurrent
 leaders during a partition. Authority recovery needs the previously authorized
 quorum or the owner's offline recovery credential.

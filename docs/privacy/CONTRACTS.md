@@ -60,6 +60,17 @@ Reconnect after the tombstone window by exchanging only still-valid rows.
 
 ## Protected operation boundary
 
+The binary recipient wrapper is the 32-byte X25519 encapsulated key followed by
+HPKE ciphertext and its 16-byte GCM tag. The encrypted plaintext contains a
+4-byte unsigned big-endian frame length, the canonical UTF-8 JSON frame and zero
+padding to the selected bucket. Reject inconsistent lengths or nonzero padding.
+Each protected frame limits `mlsMessage` to 240,000 base64 characters. Even a
+control frame with 128 signatures and maximum integer fields fits the 256 KiB
+bucket including the 52 bytes of wrapping/length overhead. Check the actual
+serialized size before encryption; larger MLS outputs must fail before committing
+a local transition, not produce an undeliverable operation. The crypto integration
+must demonstrate that supported 128-device transitions fit this budget before release.
+
 After recipient HPKE processing, decode the
 [protected frame](contracts/protected-frame-v1.schema.json). The frame distinguishes
 `mls-application`, `mls-commit` and `mls-welcome`; its kind and MLS framing never
@@ -91,6 +102,8 @@ JCS encoding excluding `signatures` and domain separator
 `pigeon.private-control.v1` followed by a zero byte. The candidate MLS context
 must match `mlsContextHash` before committing state. `signatures` is a map from
 admitted administrator public key to signature, not an array of countable entries.
+Policies admit at most 128 authority keys and require a threshold between one
+and the number of admitted keys; reject an unsatisfiable policy before adoption.
 Count distinct authorized keys from the previous policy only; reject unknown
 signers and invalid signatures. Reject duplicate JSON property names before
 parsing/canonicalization, so duplicate signer keys cannot be hidden by a parser.

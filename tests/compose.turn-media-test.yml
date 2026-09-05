@@ -1,0 +1,26 @@
+# Actual application and real browsers, isolated from host data and the Internet.
+services:
+  app:
+    image: ${PIGEON_TEST_IMAGE:-ghcr.io/haskou/pigeon-swarm:latest}
+    pull_policy: missing
+    ports: !reset []
+    environment:
+      LOG_LEVEL: error
+    volumes: !override
+      - media_ipfs:/data/ipfs
+      - media_local:/data/local_storage
+      - turn_runtime:/run/pigeon
+  browser:
+    image: mcr.microsoft.com/playwright:v1.60.0-noble
+    network_mode: service:app
+    entrypoint: ["node", "-e", "setInterval(() => {}, 60000)"]
+    shm_size: 256mb
+    volumes:
+      - ./tests:/opt/pigeon/tests:ro
+      - ./node_modules:/opt/pigeon/node_modules:ro
+volumes:
+  media_ipfs:
+  media_local:
+networks:
+  default:
+    internal: true

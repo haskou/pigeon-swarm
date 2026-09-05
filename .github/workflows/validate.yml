@@ -66,3 +66,9 @@ jobs:
 
       - name: Verify TURN authentication and restart against real coturn
         run: node --test tests/turn-runtime.integration.mjs
+
+      - name: Install browser test tooling
+        run: npm ci --ignore-scripts
+
+      - name: Verify backend-issued credentials and bidirectional browser audio
+        run: npm run test:media

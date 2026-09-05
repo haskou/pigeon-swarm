@@ -117,6 +117,8 @@ try {
   for (const session of sessions) await session.release?.();
   const ipv6 = await allocate('ipv6-policy', undefined, 0, 2);
   for (const groups of [
+    [0, 0, 0, 0, 0xffff, 0, 0x0a00, 1],
+    [0, 0, 0, 0, 0xffff, 0, 0xffff, 0xffff],
     [0xfec0, 0, 0, 0, 0, 0, 0, 1],
     [0xfeff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff],
     [0xfc00, 0, 0, 0, 0, 0, 0, 1],

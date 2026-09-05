@@ -285,10 +285,10 @@ not bandwidth, request rate or account creation.
 
 The peer policy blocks IPv4 private, loopback, link-local, shared CGNAT,
 benchmark and multicast/reserved ranges. It also blocks IPv6 loopback,
-unspecified, mapped/compatible IPv4, NAT64, discard, unique-local, link-local,
-deprecated site-local and multicast ranges. TURN TCP relay allocations and the coturn CLI are
-disabled. Browsers may still connect to TURN over UDP, TCP or TLS and relay
-UDP media to public peers.
+unspecified, IPv4-mapped, IPv4-compatible, IPv4-translated, NAT64, discard,
+unique-local, link-local, deprecated site-local and multicast ranges. TURN TCP
+relay allocations and the coturn CLI are disabled. Browsers may still connect
+to TURN over UDP, TCP or TLS and relay UDP media to public peers.
 
 For a private deployment with dedicated media relays, add only their individual
 RFC1918 IPv4 addresses to `CALLS_TURN_ALLOWED_PEER_IPS`, then recreate coturn:
@@ -306,6 +306,10 @@ other services on the relay host.
 This is an IP destination policy, not anonymity or application authorization.
 It does not hide traffic relationships from relay operators, restrict services
 on otherwise allowed public addresses, or solve IPFS metadata exposure.
+The standard [SIIT translated prefix](https://www.rfc-editor.org/rfc/rfc2765)
+is blocked separately from IPv4-mapped addresses. Deployments with custom
+translation prefixes must enforce their private-destination boundary in the
+network firewall; a fixed IP list cannot identify arbitrary translation rules.
 
 The real-coturn suite verifies per-user quotas across renewed credentials,
 global quotas, capacity reclamation, denied CreatePermission and ChannelBind

@@ -1,0 +1,85 @@
+{
+  "measuredAt": "2026-09-05T22:29:23.070Z",
+  "environment": {
+    "node": "v24.18.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M5",
+    "mongoVersion": "8.0.29",
+    "levelVersion": "10.0.0",
+    "mongoDriverVersion": "6.20.0"
+  },
+  "workload": {
+    "count": 10000,
+    "batchSize": 100,
+    "payloadBytes": 4096,
+    "mailboxCount": 100,
+    "pointReads": 1000,
+    "pages": 100,
+    "pageSize": 50,
+    "expiredRows": 1000
+  },
+  "conditions": [
+    "Synthetic random ciphertext; no real user data",
+    "Level runs on macOS; MongoDB runs in Docker over loopback with 768 MiB limit",
+    "Level sync writes and MongoDB w:1,j:true; neither test proves power-loss durability or replicated acknowledgement",
+    "Expiry is an explicit indexed delete, not the MongoDB TTL monitor",
+    "Single run, no warmup; does not establish production p95 or a cross-engine winner"
+  ],
+  "level": {
+    "writes": {
+      "samples": 100,
+      "p50Ms": 1.4859589999999798,
+      "p95Ms": 3.008041999999932,
+      "totalMs": 169.02304299999957
+    },
+    "reads": {
+      "samples": 1000,
+      "p50Ms": 0.010207999999920503,
+      "p95Ms": 0.017915999999786436,
+      "totalMs": 13.087938999999096
+    },
+    "pages": {
+      "samples": 100,
+      "p50Ms": 0.3867079999999987,
+      "p95Ms": 0.7188330000001315,
+      "totalMs": 42.98775500000011
+    },
+    "expiry": {
+      "samples": 1,
+      "p50Ms": 2.236458000000084,
+      "p95Ms": 2.236458000000084,
+      "totalMs": 2.236458000000084
+    },
+    "diskBytesBeforeExpiry": 58399888
+  },
+  "mongodb": {
+    "writes": {
+      "samples": 100,
+      "p50Ms": 4.030999999999949,
+      "p95Ms": 6.649042000000009,
+      "totalMs": 439.43000299999994
+    },
+    "reads": {
+      "samples": 1000,
+      "p50Ms": 0.2973749999998745,
+      "p95Ms": 0.48204099999998107,
+      "totalMs": 325.43437899999435
+    },
+    "pages": {
+      "samples": 100,
+      "p50Ms": 1.7195829999998296,
+      "p95Ms": 3.084957999999915,
+      "totalMs": 191.54691100000127
+    },
+    "expiry": {
+      "samples": 1,
+      "p50Ms": 10.366249999999809,
+      "p95Ms": 10.366249999999809,
+      "totalMs": 10.366249999999809
+    },
+    "storageBytesBeforeExpiry": 53739520,
+    "indexBytesBeforeExpiry": 307200
+  },
+  "assertions": "PASS"
+}

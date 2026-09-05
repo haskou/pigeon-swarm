@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Private delivery v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "mailboxId",
+    "deliveryId",
+    "expiresAt",
+    "bucketBytes",
+    "ciphertext"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "mailboxId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "deliveryId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "expiresAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "bucketBytes": {
+      "enum": [
+        4096,
+        16384,
+        65536,
+        262144
+      ]
+    },
+    "ciphertext": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+      "minLength": 5464,
+      "maxLength": 349528
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "bucketBytes": {
+            "const": 4096
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ciphertext": {
+            "minLength": 5464,
+            "maxLength": 5464,
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "bucketBytes": {
+            "const": 16384
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ciphertext": {
+            "minLength": 21848,
+            "maxLength": 21848,
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "bucketBytes": {
+            "const": 65536
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ciphertext": {
+            "minLength": 87384,
+            "maxLength": 87384,
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "bucketBytes": {
+            "const": 262144
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ciphertext": {
+            "minLength": 349528,
+            "maxLength": 349528,
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

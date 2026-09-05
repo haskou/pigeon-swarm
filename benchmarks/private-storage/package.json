@@ -1,0 +1,12 @@
+{
+  "name": "pigeon-private-storage-benchmark",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "benchmark": "node benchmark.mjs"
+  },
+  "dependencies": {
+    "level": "10.0.0",
+    "mongodb": "6.20.0"
+  }
+}

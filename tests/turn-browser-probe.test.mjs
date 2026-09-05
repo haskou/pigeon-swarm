@@ -15,7 +15,11 @@ test('external probe does not print malformed credential response bodies', async
   try {
     const result = await new Promise(resolve => {
       execFile(process.execPath, ['tests/turn-browser-probe.mjs'], {
-        env: { ...process.env, PIGEON_API_URL: `http://127.0.0.1:${server.address().port}/api/` },
+        env: {
+          ...process.env,
+          PIGEON_API_URL: `http://127.0.0.1:${server.address().port}/api/`,
+          PIGEON_MEDIA_TRANSPORT: 'udp',
+        },
         timeout: 10000,
       }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
     });

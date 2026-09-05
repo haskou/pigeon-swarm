@@ -182,6 +182,10 @@ Public discovery remains separate and requires an explicit publication action.
 
 ### Partitions, membership and revocation
 
+Creation uses the [explicit genesis contract](CONTRACTS.md): epoch/revision zero,
+a null parent and one locally generated or independently pinned owner. The first
+membership transition references that verified genesis head.
+
 Each private scope has one signed, monotonically increasing authorization head
 and a designated sequencer chosen in its membership policy. The sequencer orders
 commits but cannot invent the required administrator signatures. Version 1 uses

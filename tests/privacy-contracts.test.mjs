@@ -20,6 +20,7 @@ const acknowledgement = await load("acknowledgement-v1");
 const operation = await load("private-operation-v1");
 const batchAck = await load("acknowledgement-batch-v1");
 const frame = await load("protected-frame-v1");
+const genesis = await load("genesis-head-v1");
 const valid = {
   version: 1,
   mailboxId: Buffer.alloc(32, 1).toString("base64url"),
@@ -332,5 +333,58 @@ test("control authorization rejects noncanonical aliases of the same signer key"
         false,
       );
     }
+  }
+});
+
+test("genesis is a pinned single-owner epoch-zero head rather than a control transition", () => {
+  const owner = valid.mailboxId;
+  const value = {
+    version: 1,
+    scopeId: valid.mailboxId,
+    revision: 0,
+    parentHeadHash: null,
+    mlsEpoch: 0,
+    mlsContextHash: valid.mailboxId,
+    policyHash: valid.mailboxId,
+    headHash: valid.mailboxId,
+    policy: {
+      authorityKeys: [owner],
+      threshold: 1,
+      sequencerKey: owner,
+      freshnessAuthorityKey: owner,
+    },
+    signatures: { [owner]: Buffer.alloc(64).toString("base64url") },
+  };
+  assert.equal(genesis(value), true, JSON.stringify(genesis.errors));
+  for (const patch of [
+    { revision: 1 },
+    { mlsEpoch: 1 },
+    { parentHeadHash: valid.mailboxId },
+    { signatures: {} },
+  ]) {
+    assert.equal(genesis({ ...value, ...patch }), false);
+  }
+  assert.equal(
+    genesis({ ...value, policy: { ...value.policy, threshold: 2 } }),
+    false,
+  );
+  const authorization = { ...value, mlsMessageHash: valid.mailboxId };
+  delete authorization.version;
+  delete authorization.policy;
+  for (const kind of ["mls-commit", "mls-welcome"]) {
+    const control = { version: 1, kind, mlsMessage: "AQIDBA==", authorization };
+    assert.equal(frame(control), false);
+    assert.equal(
+      frame({
+        ...control,
+        authorization: {
+          ...authorization,
+          revision: 1,
+          mlsEpoch: 1,
+          parentHeadHash: value.headHash,
+        },
+      }),
+      true,
+    );
   }
 });

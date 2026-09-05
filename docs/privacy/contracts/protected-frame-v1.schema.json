@@ -68,7 +68,7 @@
             },
             "revision": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": 1,
               "maximum": 9007199254740991
             },
             "parentHeadHash": {
@@ -77,7 +77,7 @@
             },
             "mlsEpoch": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": 1,
               "maximum": 9007199254740991
             },
             "mlsMessageHash": {
@@ -155,7 +155,7 @@
             },
             "revision": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": 1,
               "maximum": 9007199254740991
             },
             "parentHeadHash": {
@@ -164,7 +164,7 @@
             },
             "mlsEpoch": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": 1,
               "maximum": 9007199254740991
             },
             "mlsMessageHash": {

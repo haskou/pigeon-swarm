@@ -71,6 +71,34 @@ serialized size before encryption; larger MLS outputs must fail before committin
 a local transition, not produce an undeliverable operation. The crypto integration
 must demonstrate that supported 128-device transitions fit this budget before release.
 
+A new scope starts with a separate [genesis head](contracts/genesis-head-v1.schema.json),
+not an MLS Commit or Welcome. The creator generates a fresh random `scopeId`,
+creates its single-device MLS group at epoch zero and records revision zero with
+`parentHeadHash: null`. The initial policy has exactly the creator's pinned
+Ed25519 device key as authority, sequencer and freshness authority, with threshold
+one. Equality of those policy keys and the sole signature key is a required domain
+check. Additional administrators/devices and delegated authorities require later
+signed transitions; they cannot be inserted into a genesis policy.
+
+Compute `policyHash` as SHA-256 of the JCS initial policy. Compute `headHash` from
+the same canonical head tuple used below (scope, revision, null parent, epoch,
+MLS context hash and policy hash). Sign JCS of the complete genesis record excluding
+`signatures`, prefixed by UTF-8 `pigeon.private-genesis.v1` and a zero separator. Verify
+hashes, signature, epoch/revision and key equality before persisting it. The creator
+trusts its own locally generated key; another device accepts genesis only against
+the owner key already pinned by the verified invitation/contact channel. A
+self-signed record fetched from infrastructure is not a trust anchor.
+
+Persist genesis atomically with the initial local MLS state before any outbound
+operation. Invitations deliver this signed record and the authenticated policy
+chain through the protected bootstrap channel. The first membership Commit/Welcome
+uses revision one, epoch one and the genesis `headHash` as parent; verify it under
+the genesis owner's policy. Later heads require the verified previous head/policy.
+Control frames require positive revision/epoch and a non-null parent. Refuse a
+second different genesis for an already pinned scope; resetting requires a new
+random scope and explicit invitation. Schema tests cover initial versus transition
+shape; cryptographic pinning, hash/signature and atomic-state tests are release gates.
+
 After recipient HPKE processing, decode the
 [protected frame](contracts/protected-frame-v1.schema.json). The frame distinguishes
 `mls-application`, `mls-commit` and `mls-welcome`; its kind and MLS framing never
@@ -93,8 +121,10 @@ appear outside recipient encryption.
   operation either.
 
 Control `authorization` is a signed binding, not the authorization head itself.
-The canonical head hash covers scope, revision, parent-head hash, resulting MLS
-epoch, MLS GroupContext hash and membership-policy hash. The binding adds the
+The canonical head hash is SHA-256 of the JCS object with exactly `scopeId`,
+`revision`, `parentHeadHash`, `mlsEpoch`, `mlsContextHash` and `policyHash`, using
+the values in the verified head. Encode all hash fields as canonical unpadded
+base64url of their 32 bytes. The binding adds the
 hash of the exact control message bytes, so different Welcome and Commit bytes
 can refer to the same head without creating different heads. Verify its
 Ed25519 signatures using the previous policy (or pinned invite authority), with

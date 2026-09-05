@@ -1,5 +1,6 @@
 services:
   app-a:
+    stop_grace_period: 10s
     extends:
       file: ../docker-compose.yml
       service: app
@@ -15,6 +16,7 @@ services:
       - local_a:/data/local_storage
       - runtime_a:/run/pigeon
   app-b:
+    stop_grace_period: 10s
     extends:
       file: ../docker-compose.yml
       service: app

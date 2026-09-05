@@ -147,7 +147,14 @@ test(
             match = (logs.stdout + logs.stderr).match(
               /Started private network "Private call integration" with Peer ID: ([A-Za-z0-9]+)/,
             );
-            port = (logs.stdout + logs.stderr).match(
+            const privateRelayLine = (logs.stdout + logs.stderr)
+              .split("\n")
+              .find((line) =>
+                line.includes(
+                  `Private IPFS relay server enabled: networkId=${network.id} `,
+                ),
+              );
+            port = privateRelayLine?.match(
               /listenAddresses="\/ip4\/0\.0\.0\.0\/tcp\/(\d+)"/,
             );
             if (match && port) break;
@@ -188,6 +195,8 @@ test(
         "--wait",
         "--wait-timeout",
         "90",
+        "app-a",
+        "app-b",
         "turn-a",
         "turn-b",
       );

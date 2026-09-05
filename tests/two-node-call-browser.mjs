@@ -320,6 +320,9 @@ try {
   );
   process.exitCode = 1;
 } finally {
-  await browser.close();
-  await stopGateways();
+  try {
+    await browser.close();
+  } finally {
+    await stopGateways();
+  }
 }

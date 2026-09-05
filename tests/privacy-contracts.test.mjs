@@ -297,3 +297,40 @@ test("maximum protected frames fit the delivery bucket including recipient wrapp
     }
   }
 });
+
+test("control authorization rejects noncanonical aliases of the same signer key", () => {
+  const key = Buffer.alloc(32).toString("base64url");
+  const signature = Buffer.alloc(64).toString("base64url");
+  const authorization = {
+    scopeId: valid.mailboxId,
+    revision: 1,
+    parentHeadHash: valid.mailboxId,
+    mlsEpoch: 1,
+    mlsMessageHash: valid.mailboxId,
+    policyHash: valid.mailboxId,
+    headHash: valid.mailboxId,
+    mlsContextHash: valid.mailboxId,
+    signatures: { [key]: signature },
+  };
+  for (const kind of ["mls-commit", "mls-welcome"]) {
+    const value = { version: 1, kind, mlsMessage: "AQIDBA==", authorization };
+    assert.equal(frame(value), true);
+    for (const last of ["B", "C", "D"]) {
+      const alias = key.slice(0, -1) + last;
+      assert.deepEqual(
+        Buffer.from(alias, "base64url"),
+        Buffer.from(key, "base64url"),
+      );
+      assert.equal(
+        frame({
+          ...value,
+          authorization: {
+            ...authorization,
+            signatures: { [key]: signature, [alias]: signature },
+          },
+        }),
+        false,
+      );
+    }
+  }
+});

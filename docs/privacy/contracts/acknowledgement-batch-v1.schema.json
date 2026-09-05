@@ -14,7 +14,7 @@
     },
     "mailboxId": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9_-]{43}$"
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
     },
     "deliveryIds": {
       "type": "array",
@@ -23,7 +23,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "pattern": "^[A-Za-z0-9_-]{22}$"
+        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$"
       }
     }
   }

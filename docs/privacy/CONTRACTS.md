@@ -104,7 +104,9 @@ must match `mlsContextHash` before committing state. `signatures` is a map from
 admitted administrator public key to signature, not an array of countable entries.
 Policies admit at most 128 authority keys and require a threshold between one
 and the number of admitted keys; reject an unsatisfiable policy before adoption.
-Count distinct authorized keys from the previous policy only; reject unknown
+Require canonical unpadded base64url: decode and re-encode byte-for-byte, rejecting
+nonzero unused bits. Count distinct decoded public-key bytes from the previous
+policy only, never textual property names; reject unknown
 signers and invalid signatures. Reject duplicate JSON property names before
 parsing/canonicalization, so duplicate signer keys cannot be hidden by a parser.
 The shape tests reject repeated-entry arrays; runtime quorum/duplicate-key parsing

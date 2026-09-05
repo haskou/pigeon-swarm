@@ -64,7 +64,7 @@
           "properties": {
             "scopeId": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "revision": {
               "type": "integer",
@@ -73,7 +73,7 @@
             },
             "parentHeadHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "mlsEpoch": {
               "type": "integer",
@@ -82,31 +82,31 @@
             },
             "mlsMessageHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "policyHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "signatures": {
               "type": "object",
               "minProperties": 1,
               "maxProperties": 128,
               "propertyNames": {
-                "pattern": "^[A-Za-z0-9_-]{43}$"
+                "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
               },
               "additionalProperties": {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{86}$"
+                "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
               }
             },
             "headHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "mlsContextHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             }
           }
         }
@@ -151,7 +151,7 @@
           "properties": {
             "scopeId": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "revision": {
               "type": "integer",
@@ -160,7 +160,7 @@
             },
             "parentHeadHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "mlsEpoch": {
               "type": "integer",
@@ -169,31 +169,31 @@
             },
             "mlsMessageHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "policyHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "signatures": {
               "type": "object",
               "minProperties": 1,
               "maxProperties": 128,
               "propertyNames": {
-                "pattern": "^[A-Za-z0-9_-]{43}$"
+                "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
               },
               "additionalProperties": {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{86}$"
+                "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
               }
             },
             "headHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             },
             "mlsContextHash": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{43}$"
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
             }
           }
         }

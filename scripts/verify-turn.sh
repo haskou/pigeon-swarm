@@ -1,109 +1,41 @@
 #!/bin/sh
 set -eu
 
-readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'
-readonly default_warning='WARNING: TURN is using the built-in shared secret.'
-
-secret_source="$(
-  docker compose exec -T \
-    -e TURN_TEST_DEFAULT_SHARED_SECRET="$default_shared_secret" \
-    turn sh -lc '
-      if [ "$CALLS_TURN_SHARED_SECRET" = "$TURN_TEST_DEFAULT_SHARED_SECRET" ]; then
-        printf default
-      else
-        printf custom
-      fi
-    '
-)"
-warning_count="$(
-  docker compose logs --no-color turn 2>&1 |
-    grep -Fc "$default_warning" || true
-)"
-
-if [ "$secret_source" = 'default' ] && [ "$warning_count" -ne 1 ]; then
-  echo 'TURN did not warn exactly once that it is using the built-in shared secret.' >&2
-  exit 1
-fi
-
-if [ "$secret_source" = 'custom' ] && [ "$warning_count" -ne 0 ]; then
-  echo 'TURN emitted the built-in shared-secret warning with a custom secret.' >&2
-  exit 1
-fi
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 for _attempt in $(seq 1 15); do
   if docker compose exec -T turn sh -lc \
-    'pidof turnserver >/dev/null 2>&1'; then
+    'pidof turnserver >/dev/null 2>&1 && /opt/pigeon/check-turn-runtime.sh'; then
     break
   fi
-
   sleep 2
 done
 
 docker compose exec -T turn sh -lc '
-  if [ "$(stat -c "%a" /run/pigeon-turn/turnserver.conf)" != "600" ]; then
-    echo "TURN secret configuration does not have mode 600." >&2
+  set -eu
+  test "$(stat -c "%a" /run/pigeon-turn/turnserver.conf)" = 600 || {
+    echo "TURN secret configuration must have mode 600." >&2
     exit 1
-  fi
-
-  turn_pid=""
-
+  }
   for comm in /proc/[0-9]*/comm; do
-    if [ "$(cat "$comm" 2>/dev/null || true)" = "turnserver" ]; then
-      turn_pid="${comm#/proc/}"
-      turn_pid="${turn_pid%/comm}"
-      break
+    if [ "$(cat "$comm" 2>/dev/null || true)" = turnserver ]; then
+      pid="${comm#/proc/}"
+      pid="${pid%/comm}"
+      command_line="$(tr "\0" "\n" < "/proc/$pid/cmdline")"
+      environment="$(tr "\0" "\n" < "/proc/$pid/environ")"
+      case "$command_line$environment" in
+        *"$CALLS_TURN_SHARED_SECRET"*)
+          echo "TURN secret is exposed in the turnserver process." >&2
+          exit 1
+          ;;
+      esac
+      exit 0
     fi
   done
-
-  if [ -z "$turn_pid" ]; then
-    echo "The turnserver process is not running." >&2
-    exit 1
-  fi
-
-  command_line="$(tr "\0" "\n" < "/proc/$turn_pid/cmdline")"
-  environment="$(tr "\0" "\n" < "/proc/$turn_pid/environ")"
-
-  case "$command_line$environment" in
-    *"$CALLS_TURN_SHARED_SECRET"*)
-      echo "TURN secret is exposed in the turnserver process." >&2
-      exit 1
-      ;;
-  esac
+  echo "The turnserver process is not running." >&2
+  exit 1
 '
 
-if ! output="$({
-  docker compose exec -T turn sh -lc \
-    'port="$(awk -F= '\''$1 == "listening_port" { print $2; exit }'\'' /run/pigeon/calls-turn-runtime.conf)"; turnutils_uclient -v -Y alloc -n 1 -u smoke-test -W "$CALLS_TURN_SHARED_SECRET" -p "$port" 127.0.0.1'
-} 2>&1)"; then
-  printf '%s\n' "$output"
-  echo 'Authenticated TURN allocation failed.' >&2
-  exit 1
-fi
-
-printf '%s\n' "$output"
-
-if ! printf '%s\n' "$output" | grep -q 'Received relay addr:'; then
-  echo 'Authenticated TURN allocation failed.' >&2
-  exit 1
-fi
-
-invalid_result=0
-invalid_output="$({
-  docker compose exec -T -e TURN_TEST_SHARED_SECRET=invalid-test-secret \
-    turn sh -lc \
-    'port="$(awk -F= '\''$1 == "listening_port" { print $2; exit }'\'' /run/pigeon/calls-turn-runtime.conf)"; turnutils_uclient -v -Y alloc -n 1 -u smoke-test -W "$TURN_TEST_SHARED_SECRET" -p "$port" 127.0.0.1'
-} 2>&1)" || invalid_result=$?
-
-if [ "$invalid_result" -eq 0 ] || printf '%s\n' "$invalid_output" | grep -q 'Received relay addr:'; then
-  printf '%s\n' "$invalid_output"
-  echo 'TURN accepted credentials signed with the wrong secret.' >&2
-  exit 1
-fi
-
-if ! printf '%s\n' "$invalid_output" | grep -q 'Cannot complete Allocation'; then
-  printf '%s\n' "$invalid_output"
-  echo 'TURN failed without proving that invalid credentials were rejected.' >&2
-  exit 1
-fi
-
-echo 'TURN rejected credentials signed with the wrong secret.'
+# The app shares coturn's network namespace and already holds the issuer secret.
+# Send source through stdin; never pass secrets or credentials as CLI arguments.
+docker compose exec -T app node --input-type=module < "$script_dir/turn-allocation-probe.mjs"

@@ -20,8 +20,8 @@ jobs:
       - name: Check out image project
         uses: actions/checkout@v7
 
-      - name: Validate Docker Compose example
-        run: docker compose --env-file /dev/null config
+      - name: Validate TURN secret and Compose contract
+        run: node --test tests/turn-secret.test.mjs
 
       - name: Guard simple runtime contract
         run: |
@@ -34,21 +34,6 @@ jobs:
 
           if grep -E "^(HOST_PORT|API_PORT|ROUTE_PREFIX|MONGO_URL|MONGO_DATABASE|TRANSPORT_DSN)=" .env.example; then
             echo ".env.example should expose PORT only; keep image internals out of user config."
-            exit 1
-          fi
-
-          if ! grep -F 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-}' docker-compose.yml; then
-            echo "The backend must receive the optional TURN secret override."
-            exit 1
-          fi
-
-          if ! grep -F 'CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3}' docker-compose.yml; then
-            echo "Coturn must use the backend built-in shared secret by default."
-            exit 1
-          fi
-
-          if ! grep -F "readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'" scripts/run-turn-from-runtime-config.sh; then
-            echo "The coturn runtime fallback must match the Compose fallback."
             exit 1
           fi
 
@@ -79,15 +64,5 @@ jobs:
           }
           NODE
 
-      - name: Verify authenticated TURN allocation
-        run: |
-          docker compose --env-file /dev/null up -d --wait app turn
-          docker compose --env-file /dev/null exec -T app \
-            chown 1000:1000 /run/pigeon
-          docker compose --env-file /dev/null exec -T -u 1000:1000 app sh -lc \
-            'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4105\n" > /run/pigeon/calls-turn-runtime.conf'
-          ./scripts/verify-turn.sh
-
-      - name: Stop TURN test service
-        if: always()
-        run: docker compose --env-file /dev/null down
+      - name: Verify TURN authentication and restart against real coturn
+        run: node --test tests/turn-runtime.integration.mjs

@@ -1,0 +1,12 @@
+# Isolated authentication test: no application databases or host ports.
+services:
+  app:
+    image: node:24.15-alpine
+    entrypoint: ["node", "-e", "setInterval(() => {}, 60000)"]
+    ports: !reset []
+    volumes: !override
+      - turn_runtime:/run/pigeon
+  turn:
+    volumes:
+      # Local fixture address; this test does not exercise public IP detection.
+      - ./tests/detect-local-turn-ip.sh:/usr/local/bin/detect-external-ip:ro

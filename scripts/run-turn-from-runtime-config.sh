@@ -3,7 +3,7 @@ set -eu
 
 readonly runtime_config_path='/run/pigeon/calls-turn-runtime.conf'
 readonly turn_config_path='/run/pigeon-turn/turnserver.conf'
-readonly default_shared_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'
+readonly public_bootstrap_secret='Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3'
 
 turn_pid=''
 last_signature=''
@@ -84,14 +84,24 @@ reload_runtime_configuration() {
   start_turn "$listening_port" "$relay_port_start" "$relay_port_end" "$@"
 }
 
-shared_secret="${CALLS_TURN_SHARED_SECRET:-$default_shared_secret}"
+shared_secret="${CALLS_TURN_SHARED_SECRET:-}"
+valid_secret=true
+case "$shared_secret" in
+  '' | *[!a-zA-Z0-9_/+=-]*) valid_secret=false ;;
+esac
 
-if [ "$shared_secret" = "$default_shared_secret" ]; then
-  echo 'WARNING: TURN is using the built-in shared secret. Set CALLS_TURN_SHARED_SECRET to the same custom value on every backend and coturn service in the relay pool.' >&2
+if [ "$valid_secret" != true ] ||
+  [ "${#shared_secret}" -lt 32 ] ||
+  [ "${#shared_secret}" -gt 256 ] ||
+  [ "$shared_secret" = "$public_bootstrap_secret" ]; then
+  echo 'CALLS_TURN_SHARED_SECRET must be a private deployment secret of 32-256 base64/hex-compatible characters. The public fallback is rejected. Configure the same value on its backend credential issuer and coturn.' >&2
+  exit 1
 fi
 
 umask 077
-printf 'static-auth-secret=%s\n' "$shared_secret" > "$turn_config_path"
+secret_config="$(mktemp "${turn_config_path}.XXXXXX")"
+printf 'static-auth-secret=%s\n' "$shared_secret" > "$secret_config"
+mv "$secret_config" "$turn_config_path"
 unset shared_secret CALLS_TURN_SHARED_SECRET
 
 trap 'stop_turn; exit 0' INT TERM

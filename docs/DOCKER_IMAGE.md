@@ -17,20 +17,16 @@ Published tags are multi-architecture images for `linux/amd64` and `linux/arm64`
 
 ## Quick Start
 
-Start the example stack:
+First create `.env` with a private TURN secret using the
+[configuration steps below](#configuration). Then start the example stack:
 
 ```bash
-cp .env.example .env
-# Optional but strongly recommended for production:
-openssl rand -hex 32
-# Put the generated value in CALLS_TURN_SHARED_SECRET inside .env.
 docker compose up
 ```
 
-When the variable is empty, the backend and coturn use the same public built-in
-bootstrap value and log a warning. This keeps TURN functional without initial
-secret configuration. Production relay pools should replace it with one custom
-secret because anyone can use the public fallback to mint valid credentials.
+An empty secret is a startup error. Existing installations using the former
+public fallback must follow the [rotation steps](#turn-for-webrtc-calls)
+before upgrading.
 
 The TURN entrypoint writes the secret to a mode-`0600` configuration file on
 tmpfs and removes it from the long-running `turnserver` environment. It is not
@@ -46,12 +42,21 @@ The included [`docker-compose.yml`](../docker-compose.yml) is intentionally smal
 
 ## Configuration
 
-The application image and Compose stack share a built-in TURN secret fallback.
-Copy [`.env.example`](../.env.example) to `.env`; set
-`CALLS_TURN_SHARED_SECRET` to replace the public fallback in production:
+Create `.env` once from [`.env.example`](../.env.example), generating a private
+TURN secret directly into the file. This requires OpenSSL and refuses to
+overwrite an existing `.env`. The secret is not printed or passed in arguments:
 
 ```bash
-cp .env.example .env
+(
+  set -eu
+  umask 077
+  set -C
+  {
+    sed '/^CALLS_TURN_SHARED_SECRET=/d' .env.example
+    printf 'CALLS_TURN_SHARED_SECRET='
+    openssl rand -hex 32
+  } > .env
+)
 ```
 
 Common settings:
@@ -63,7 +68,7 @@ Common settings:
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
-| `CALLS_TURN_SHARED_SECRET` | built-in public fallback | Shared coturn REST secret. Generate a custom value once and configure it on every backend and coturn instance in a production relay pool. |
+| `CALLS_TURN_SHARED_SECRET` | required; no default | Private coturn REST secret, 32–256 base64/hex-compatible characters. Generate 32 random bytes as hex; length validation alone cannot establish entropy. Backend and coturn receive the same value. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
 | `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
@@ -74,6 +79,45 @@ Node-to-node transport is also configured by default. The image uses `libp2p-gos
 The frontend is built into the image and already talks to the backend through `/api`. You do not need to configure frontend URLs or route prefixes.
 
 ## TURN For WebRTC Calls
+
+Compose refuses to start without `CALLS_TURN_SHARED_SECRET`. The TURN launcher
+also rejects the former public fallback, short values, oversized values and
+characters that could inject coturn configuration. It writes the secret to a
+mode-600 file in tmpfs and removes it from the turnserver child's environment.
+The Docker administrator can still inspect container configuration; this is
+not a substitute for controlling access to Docker and protecting `.env`.
+
+For an existing installation using the public fallback, rotate it once before
+upgrading. The following preserves other settings, saves a private backup and
+writes the new secret without printing it. Run it only for an intentional
+rotation, not on every restart:
+
+```sh
+(
+  set -eu
+  umask 077
+  test -f .env
+  backup="$(mktemp .env.backup.XXXXXX)"
+  cp .env "$backup"
+  chmod 600 "$backup"
+  replacement="$(mktemp .env.rotation.XXXXXX)"
+  trap 'rm -f "$replacement"' EXIT
+  sed '/^CALLS_TURN_SHARED_SECRET=/d' .env > "$replacement"
+  printf '\nCALLS_TURN_SHARED_SECRET=' >> "$replacement"
+  openssl rand -hex 32 >> "$replacement"
+  mv "$replacement" .env
+)
+docker compose up -d --force-recreate app turn
+```
+
+Keep `.env` across restarts. Rotating the secret invalidates existing temporary
+credentials and can interrupt calls. Coordinate rotation with every backend
+that issues credentials for this TURN server. Two independent TURN servers do
+not need the same secret to exchange relayed traffic. The current backend's
+distributed credential issuance and relay-record pool validation do require
+matching secrets for participating issuers and the servers they advertise;
+independent per-server issuance is tracked in
+[pigeon-swarm-node#286](https://github.com/haskou/pigeon-swarm-node/issues/286).
 
 The Compose stack runs coturn separately while sharing the application's
 network namespace. The backend writes a local runtime contract whenever the
@@ -120,9 +164,28 @@ docker compose ps turn
 ./scripts/verify-turn.sh
 ```
 
+The check uses the backend container's issuer secret, verifies authenticated
+allocation over UDP and TCP, and requires wrong-secret and expired credentials
+to receive an authentication rejection. It verifies response integrity and
+releases successful allocations. A failed valid allocation explicitly points
+to a possible backend/coturn secret mismatch. Neither the shared secret nor
+temporary credentials are passed as command-line arguments or printed.
+
+The automated equivalent, `node --test tests/turn-runtime.integration.mjs`,
+uses the real pinned coturn image with an isolated Node fixture in the shared
+network namespace. It also checks a coturn restart and a deliberately mismatched
+issuer secret. It does not run the complete backend or browser application.
+
 Run an equivalent allocation test from a machine outside the server's LAN to
 verify the public firewall and NAT path. A TCP port probe alone does not verify
 that coturn can allocate and exchange media through its UDP relay range.
+
+These local checks do not prove public reachability, TLS fallback or browser
+audio. TLS support and an external network acceptance test remain tracked in
+[#29](https://github.com/haskou/pigeon-swarm/issues/29). Behind CGNAT without
+forwardable ports, detecting an external IP does not make this host a public
+relay; use a reachable relay host. For ordinary NAT, publish and forward the
+listener and full media range with unchanged port numbers.
 
 Once the node relay configuration is saved, authenticated calls to
 `GET /api/calls/ice-servers` return the local TURN URLs plus a temporary

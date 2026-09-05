@@ -70,5 +70,8 @@ jobs:
       - name: Install browser test tooling
         run: npm ci --ignore-scripts
 
+      - name: Verify browser diagnostic redaction
+        run: node --test tests/turn-browser-probe.test.mjs
+
       - name: Verify backend-issued credentials and bidirectional browser audio
         run: npm run test:media

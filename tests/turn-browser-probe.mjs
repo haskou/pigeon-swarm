@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { chromium } from 'playwright';
 
+let stage = 'configuration';
+async function main() {
 const api = new URL(process.env.PIGEON_API_URL || 'http://127.0.0.1:8080/api/');
 if (!api.pathname.endsWith('/')) api.pathname += '/';
 const mode = process.env.PIGEON_MEDIA_TRANSPORT || 'udp';
@@ -39,11 +41,15 @@ const args = ['--autoplay-policy=no-user-gesture-required'];
 // External runs leave these unset and use Chromium's normal trust/DNS policy.
 if (process.env.PIGEON_TEST_TLS_SPKI) args.push(`--ignore-certificate-errors-spki-list=${process.env.PIGEON_TEST_TLS_SPKI}`);
 if (process.env.PIGEON_TEST_RELAY_IP) args.push(`--host-resolver-rules=MAP relay.test ${process.env.PIGEON_TEST_RELAY_IP}`);
+stage = 'backend credential issuance';
+const configurations = await Promise.all([configuration(), configuration()]);
+stage = 'browser startup';
 const browser = await chromium.launch({ headless: true, args });
 try {
+  stage = 'browser audio setup';
   const pages = await Promise.all([browser.newPage(), browser.newPage()]);
-  for (const page of pages) {
-    const config = await configuration();
+  for (const [index, page] of pages.entries()) {
+    const config = configurations[index];
     await page.evaluate(async config => {
       const audio = new AudioContext();
       const tone = audio.createOscillator();
@@ -68,6 +74,7 @@ try {
     });
     return peer.localDescription.toJSON();
   }, type);
+  stage = 'TURN candidate gathering and negotiation';
   const offer = await localDescription(pages[0], 'offer');
   await pages[1].evaluate(description => window.mediaProbe.peer.setRemoteDescription(description), offer);
   const answer = await localDescription(pages[1], 'answer');
@@ -85,6 +92,7 @@ try {
       packets: inbound?.packetsReceived || 0,
     };
   });
+  stage = 'relay connectivity and bidirectional audio';
   for (const page of pages) await page.waitForFunction(() => window.mediaProbe.peer.connectionState === 'connected', null, { timeout: 20000 });
   const first = await Promise.all(pages.map(sample));
   await new Promise(resolve => setTimeout(resolve, 1500));
@@ -99,3 +107,10 @@ try {
 } finally {
   await browser.close();
 }
+}
+
+await main().catch(() => {
+  // HTTP parsing and browser errors can contain response bodies, URLs or SDP.
+  console.error(`FAIL browser media probe: ${stage}. Check the deployment configuration and network path.`);
+  process.exitCode = 1;
+});

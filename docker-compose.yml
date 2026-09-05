@@ -57,9 +57,13 @@ services:
     environment:
       CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Configure a private TURN secret in .env before starting the stack}
       CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
+      CALLS_TURN_USER_QUOTA: ${CALLS_TURN_USER_QUOTA:-16}
+      CALLS_TURN_TOTAL_QUOTA: ${CALLS_TURN_TOTAL_QUOTA:-128}
+      CALLS_TURN_ALLOWED_PEER_IPS: ${CALLS_TURN_ALLOWED_PEER_IPS:-}
     volumes:
       - ./scripts/check-turn-runtime.sh:/opt/pigeon/check-turn-runtime.sh:ro
       - ./scripts/run-turn-from-runtime-config.sh:/opt/pigeon/run-turn-from-runtime-config.sh:ro
+      - ./scripts/turn-peer-policy.conf:/opt/pigeon/turn-peer-policy.conf:ro
       - turn_runtime:/run/pigeon:ro
     tmpfs:
       - /run/pigeon-turn:mode=0700,uid=65534,gid=65533

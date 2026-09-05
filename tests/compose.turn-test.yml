@@ -6,7 +6,12 @@ services:
     ports: !reset []
     volumes: !override
       - turn_runtime:/run/pigeon
+      - ./scripts:/opt/pigeon/scripts:ro
+      - ./tests:/opt/pigeon/tests:ro
   turn:
     volumes:
       # Local fixture address; this test does not exercise public IP detection.
       - ./tests/detect-local-turn-ip.sh:/usr/local/bin/detect-external-ip:ro
+networks:
+  default:
+    enable_ipv6: true

@@ -135,6 +135,38 @@ if [ "$valid_secret" != true ] ||
   exit 1
 fi
 
+user_quota="${CALLS_TURN_USER_QUOTA:-16}"
+total_quota="${CALLS_TURN_TOTAL_QUOTA:-128}"
+if ! printf '%s\n%s\n' "$user_quota" "$total_quota" | awk '
+  $0 !~ /^[1-9][0-9]*$/ || length($0) > 5 || $0+0 > 65535 { invalid=1 }
+  NR == 1 { user=$0+0 }
+  NR == 2 { total=$0+0 }
+  END { exit invalid || NR != 2 || user > total }'; then
+  echo 'TURN allocation quotas must be integers from 1 to 65535, with user quota no greater than total quota.' >&2
+  exit 1
+fi
+
+allowed_peers="${CALLS_TURN_ALLOWED_PEER_IPS:-}"
+if [ -n "$allowed_peers" ] && ! printf '%s\n' "$allowed_peers" | awk '
+  NR != 1 { invalid=1 }
+  {
+    count=split($0, peers, ",")
+    if (count > 32) invalid=1
+    for (i=1; i<=count; i++) {
+      if (split(peers[i], octets, ".") != 4) invalid=1
+      for (j=1; j<=4; j++) {
+        if (octets[j] !~ /^[0-9]+$/ || length(octets[j]) > 3 || octets[j]+0 > 255 ||
+            (length(octets[j]) > 1 && substr(octets[j],1,1) == "0")) invalid=1
+      }
+      if (!(octets[1] == 10 || (octets[1] == 172 && octets[2] >= 16 && octets[2] <= 31) ||
+          (octets[1] == 192 && octets[2] == 168))) invalid=1
+    }
+  }
+  END { exit invalid || NR != 1 }'; then
+  echo 'CALLS_TURN_ALLOWED_PEER_IPS must contain only comma-separated individual RFC1918 IPv4 addresses (maximum 32), without spaces or ranges.' >&2
+  exit 1
+fi
+
 if [ -n "${CALLS_TURN_EXTERNAL_IP:-}" ] && ! is_ipv4_mapping "$CALLS_TURN_EXTERNAL_IP"; then
   echo 'CALLS_TURN_EXTERNAL_IP must be an IPv4 address or public/private IPv4 mapping.' >&2
   exit 1
@@ -162,6 +194,13 @@ esac
 umask 077
 secret_config="$(mktemp "${turn_config_path}.XXXXXX")"
 printf 'static-auth-secret=%s\n' "$shared_secret" > "$secret_config"
+printf 'user-quota=%s\ntotal-quota=%s\n' "$user_quota" "$total_quota" >> "$secret_config"
+cat /opt/pigeon/turn-peer-policy.conf >> "$secret_config"
+if [ -n "$allowed_peers" ]; then
+  printf '%s\n' "$allowed_peers" | tr ',' '\n' | while IFS= read -r peer; do
+    printf 'allowed-peer-ip=%s\n' "$peer"
+  done >> "$secret_config"
+fi
 mv "$secret_config" "$turn_config_path"
 unset shared_secret CALLS_TURN_SHARED_SECRET
 

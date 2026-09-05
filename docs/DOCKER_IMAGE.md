@@ -70,6 +70,9 @@ Common settings:
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
 | `CALLS_TURN_SHARED_SECRET` | required; no default | Private coturn REST secret, 32–256 base64/hex-compatible characters. Generate 32 random bytes as hex; length validation alone cannot establish entropy. Backend and coturn receive the same value. |
 | `CALLS_TURN_EXTERNAL_IP` | auto-detected IPv4 | Explicit IPv4 address or `public/private` IPv4 mapping. No hostnames; this override currently supports IPv4 only. |
+| `CALLS_TURN_USER_QUOTA` | `16` | Maximum concurrent allocations for one authenticated TURN user, including renewed credentials for that user. Positive integer, at most the total quota. |
+| `CALLS_TURN_TOTAL_QUOTA` | `128` | Maximum concurrent allocations across coturn. Positive integer up to 65535. Available relay ports can impose a lower limit. |
+| `CALLS_TURN_ALLOWED_PEER_IPS` | empty | Up to 32 comma-separated individual RFC1918 IPv4 addresses of trusted private media relays. No spaces, CIDRs, ranges, loopback or link-local addresses. Each exception allows every UDP destination port on that host. |
 | `CALLS_TURN_TLS_PORT` | `5349` | Dedicated TLS listener/published TCP port when using the TLS overlay. Must not overlap the plain listener or relay range. |
 | `CALLS_TURN_TLS_SERVER_NAME` | required for TLS | DNS hostname covered by the server certificate, used for local TLS verification. |
 | `CALLS_TURN_TLS_CERTS_DIR` | required for TLS | Existing directory with `fullchain.pem` and `privkey.pem`, mounted read-only by the TLS overlay. |
@@ -262,13 +265,114 @@ even when that healthcheck is green.
 The integration suite generates an isolated test certificate, verifies TLS
 allocation before and after restart, and rejects an untrusted certificate and
 an incorrect hostname. It verifies an explicit advertised IPv4 mapping, but it
-does not emulate a router or test a real external network. Quotas, destination
-restrictions and browser media acceptance remain open in #29.
+does not emulate a router or test a real external network. Browser media
+acceptance remains tracked in #29.
 
 Once the node relay configuration is saved, authenticated calls to
 `GET /api/calls/ice-servers` return the local TURN URLs plus a temporary
 `username` and `credential`. Leaf nodes use records from their currently
 connected relay, provided they share the same TURN secret.
+
+### Allocation limits and peer access
+
+The default limits are 16 concurrent allocations per authenticated user and
+128 across the server. Browser peers, transport candidates and overlapping
+ICE restarts can each require allocations; size the port range and quotas for
+the expected call size. Exceeding a quota returns TURN error 486. Releasing an
+allocation returns capacity after coturn processes its expiry. Renewing a
+credential does not reset its user's quota. These limits bound allocations,
+not bandwidth, request rate or account creation.
+
+The peer policy blocks IPv4 private, loopback, link-local, shared CGNAT,
+benchmark and multicast/reserved ranges. It also blocks IPv6 loopback,
+unspecified, IPv4-mapped, IPv4-compatible, IPv4-translated, NAT64, discard,
+unique-local, link-local, deprecated site-local and multicast ranges. TURN TCP
+relay allocations and the coturn CLI are disabled. Browsers may still connect
+to TURN over UDP, TCP or TLS and relay UDP media to public peers.
+
+For a private deployment with dedicated media relays, add only their individual
+RFC1918 IPv4 addresses to `CALLS_TURN_ALLOWED_PEER_IPS`, then recreate coturn:
+`docker compose up -d --force-recreate turn`. Coturn gives explicit allowed
+addresses precedence over denied ranges. An exception therefore exposes all
+UDP ports on that host to authenticated TURN users; restrict those ports with
+the host/network firewall and do not allow general application or database
+hosts. Direct private peer candidates remain blocked unless explicitly allowed;
+use the reachable public relay candidates for ordinary Internet calls.
+With a `public/private` external-IP mapping, coturn also automatically allows
+the mapping's private relay address. Treat that host as a trusted relay and
+apply the same UDP firewall restrictions; the mapping is not a way to isolate
+other services on the relay host.
+
+This is an IP destination policy, not anonymity or application authorization.
+It does not hide traffic relationships from relay operators, restrict services
+on otherwise allowed public addresses, or solve IPFS metadata exposure.
+The standard [SIIT translated prefix](https://www.rfc-editor.org/rfc/rfc2765)
+is blocked separately from IPv4-mapped addresses. Deployments with custom
+translation prefixes must enforce their private-destination boundary in the
+network firewall; a fixed IP list cannot identify arbitrary translation rules.
+
+The real-coturn suite verifies per-user quotas across renewed credentials,
+global quotas, capacity reclamation, denied CreatePermission and ChannelBind
+requests, an allowed public permission, and UDP payload delivery to an
+explicitly permitted private host. The exception is confined to the disposable
+test network. Coturn's policy semantics are documented in its
+[server reference](https://github.com/coturn/coturn/wiki/turnserver).
+IPv6 allocations also verify rejection of private and deprecated site-local
+peer permissions/channels, while a public IPv6 permission still succeeds.
+
+### Reproducible browser media checks
+
+Run the local deployment test with Docker running:
+
+```bash
+npm ci --ignore-scripts
+npm run test:media
+```
+
+It starts the actual combined application image, coturn and Chromium in an
+isolated network with disposable databases. The real backend writes the TURN
+runtime configuration and issues credentials to two freshly generated signing
+keys. Two browser peers exchange oscillator audio with relay-only ICE. The
+test requires relay candidates at both ends and increasing inbound audio
+packets/bytes in both browsers, over UDP, TCP and TLS, before and after a coturn
+restart. It prints transport and packet deltas, never credentials or SDP.
+Set `PIGEON_TEST_IMAGE` to an image digest to reproduce an exact application
+build. The default is the latest published image.
+
+The local fixture pins only its disposable TLS certificate's public key in
+Chromium; certificate rejection is tested separately by the TLS allocation
+suite. It does not disable trust checking for external runs. The harness
+exchanges SDP itself, so this verifies the deployment's credential and media
+path, not the application's call invitation/signalling or recovery UI.
+
+On a machine **outside the relay's LAN**, with access to the application API:
+
+```bash
+npm ci --ignore-scripts
+npx playwright install chromium
+PIGEON_API_URL=https://app.example.com/api/ PIGEON_MEDIA_TRANSPORT=udp node tests/turn-browser-probe.mjs
+PIGEON_API_URL=https://app.example.com/api/ PIGEON_MEDIA_TRANSPORT=tcp node tests/turn-browser-probe.mjs
+PIGEON_API_URL=https://app.example.com/api/ PIGEON_MEDIA_TRANSPORT=tls node tests/turn-browser-probe.mjs
+```
+
+Replace the API URL with your deployment. The backend must advertise a URL
+for each tested transport, including the correct TLS hostname and port. This
+uses short-lived credentials from signed API requests; do not copy the shared
+secret to the testing machine. Leave `PIGEON_TEST_TLS_SPKI` and
+`PIGEON_TEST_RELAY_IP` unset so normal DNS and certificate verification apply.
+For Linux, install Chromium's system dependencies with Playwright's documented
+installation procedure if needed.
+
+A PASS proves media reached that deployment from the machine running the
+probe. Its two browsers share one network. To finish NAT acceptance, also make
+a real application call between two devices on different networks (for example
+home Internet and mobile data), repeat with the client's outbound UDP blocked,
+and repeat after reconnecting/restarting the relay. Verify audible speech in
+both directions and recovery without reloading. TCP/TLS fallback needs the
+server's UDP relay range open even when client-to-server UDP is blocked.
+Record the image digest, transport, network topology, packet-delta results and
+whether both users heard audio; omit credentials, SDP and private addresses.
+The maintainer's external results are the remaining acceptance evidence for #29.
 
 ## Storage
 

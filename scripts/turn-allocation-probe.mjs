@@ -6,10 +6,13 @@ import { createConnection } from 'node:net';
 import { connect as connectTls } from 'node:tls';
 import { readFileSync } from 'node:fs';
 import { once } from 'node:events';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const cookie = 0x2112a442;
 
-function attribute(type, value) {
+export function attribute(type, value) {
   const bytes = Buffer.from(value);
   const result = Buffer.alloc(4 + Math.ceil(bytes.length / 4) * 4);
   result.writeUInt16BE(type);
@@ -18,13 +21,13 @@ function attribute(type, value) {
   return result;
 }
 
-function message(type, attributes, key) {
+export function message(type, attributes, key, transaction = randomBytes(12)) {
   const body = Buffer.concat(attributes);
   const header = Buffer.alloc(20);
   header.writeUInt16BE(type);
   header.writeUInt16BE(body.length + (key ? 24 : 0), 2);
   header.writeUInt32BE(cookie, 4);
-  randomBytes(12).copy(header, 8);
+  transaction.copy(header, 8);
   const prefix = Buffer.concat([header, body]);
   return key
     ? Buffer.concat([prefix, attribute(0x0008, createHmac('sha1', key).update(prefix).digest())])
@@ -59,12 +62,12 @@ function parse(bytes, request, key) {
   return { type: bytes.readUInt16BE(0), attributes, integrityValid };
 }
 
-function errorCode(response) {
+export function errorCode(response) {
   const value = response.attributes.get(0x0009);
   return value?.length >= 4 ? (value[2] & 7) * 100 + value[3] : undefined;
 }
 
-async function openTransport(transport, port) {
+export async function openTransport(transport, port) {
   const socket = transport === 'udp' ? createSocket('udp4') : transport === 'tls'
     ? connectTls({ host: '127.0.0.1', port, servername: process.env.CALLS_TURN_TLS_SERVER_NAME, rejectUnauthorized: true, minVersion: 'TLSv1.2' })
     : createConnection({ host: '127.0.0.1', port });
@@ -80,6 +83,7 @@ async function openTransport(transport, port) {
   }
   return {
     close: () => transport === 'udp' ? socket.close() : socket.destroy(),
+    send: (request) => transport === 'udp' ? socket.send(request) : socket.write(request),
     exchange: (request, key) => new Promise((resolve, reject) => {
       if (socketError) return reject(new Error('TURN socket unavailable.'));
       let pending = Buffer.alloc(0);
@@ -110,6 +114,7 @@ async function openTransport(transport, port) {
 
 async function check(transport, port, secret, expiresIn, expectedAllocation) {
   const connection = await openTransport(transport, port);
+  let release;
   try {
     const requestedTransport = attribute(0x0019, Buffer.from([17, 0, 0, 0]));
     const challenge = await connection.exchange(message(0x0003, [requestedTransport]));
@@ -130,6 +135,12 @@ async function check(transport, port, secret, expiresIn, expectedAllocation) {
     if (result.type !== 0x0103 || !result.integrityValid || !result.attributes.has(0x0016)) {
       throw new Error('Authenticated allocation failed; check that backend and coturn use the same secret.');
     }
+    release = async () => {
+      const released = await connection.exchange(message(0x0004, [attribute(0x000d, Buffer.alloc(4)), ...auth], key), key);
+      if (released.type !== 0x0104 || !released.integrityValid) throw new Error('TURN allocation cleanup failed.');
+      // Coturn expires a zero-lifetime allocation on its next timer tick.
+      await delay(1100);
+    };
     const expectedIp = process.env.CALLS_TURN_EXTERNAL_IP?.split('/')[0];
     const relayAddress = result.attributes.get(0x0016);
     if (expectedIp) {
@@ -141,13 +152,12 @@ async function check(transport, port, secret, expiresIn, expectedAllocation) {
         throw new Error('TURN allocated an unexpected advertised IPv4 address.');
       }
     }
-    const released = await connection.exchange(message(0x0004, [attribute(0x000d, Buffer.alloc(4)), ...auth], key), key);
-    if (released.type !== 0x0104 || !released.integrityValid) throw new Error('TURN allocation cleanup failed.');
   } finally {
-    connection.close();
+    try { await release?.(); } finally { connection.close(); }
   }
 }
 
+async function main() {
 try {
   const secret = process.env.CALLS_TURN_SHARED_SECRET;
   delete process.env.CALLS_TURN_SHARED_SECRET;
@@ -178,4 +188,10 @@ try {
   const code = typeof error.code === 'string' && /^[A-Z_]+$/.test(error.code) ? ` (${error.code})` : '';
   console.error(`FAIL: ${error.code ? `Cannot access TURN runtime configuration or transport${code}.` : error.message}`);
   process.exitCode = 1;
+}
+}
+
+// Also usable by protocol regressions; stdin execution remains self-contained.
+if (!process.argv[1] || resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
 }

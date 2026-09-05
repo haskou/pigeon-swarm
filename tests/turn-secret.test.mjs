@@ -6,6 +6,34 @@ import test from 'node:test';
 const publicFallback = 'Kestrel7-Quartz9-Pigeon4-Nebula8-Harbor2-Cipher6-Orbit5-Velvet3';
 const secretError = 'CALLS_TURN_SHARED_SECRET must be a private deployment secret';
 
+for (const overrides of [
+  { CALLS_TURN_USER_QUOTA: '0' },
+  { CALLS_TURN_TOTAL_QUOTA: '-1' },
+  { CALLS_TURN_USER_QUOTA: '999999999999999999999' },
+  { CALLS_TURN_TOTAL_QUOTA: '4\nno-auth' },
+  { CALLS_TURN_USER_QUOTA: '5', CALLS_TURN_TOTAL_QUOTA: '4' },
+]) {
+  test('TURN rejects invalid allocation quotas before startup', () => {
+    const result = spawnSync('sh', ['scripts/run-turn-from-runtime-config.sh'], {
+      encoding: 'utf8', timeout: 2000,
+      env: { ...process.env, CALLS_TURN_SHARED_SECRET: randomBytes(32).toString('hex'), ...overrides },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /TURN allocation quotas must be integers/);
+  });
+}
+
+for (const address of ['127.0.0.1', '169.254.169.254', '10.0.0.0/8', '10.0.0.1\nno-auth', '10.0.0.1,', '10.0.0.999', '10.0.0.1-10.0.0.255']) {
+  test('TURN refuses broad or unsafe private peer exceptions', () => {
+    const result = spawnSync('sh', ['scripts/run-turn-from-runtime-config.sh'], {
+      encoding: 'utf8', timeout: 2000,
+      env: { ...process.env, CALLS_TURN_SHARED_SECRET: randomBytes(32).toString('hex'), CALLS_TURN_ALLOWED_PEER_IPS: address },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CALLS_TURN_ALLOWED_PEER_IPS must contain only/);
+  });
+}
+
 for (const [name, secret] of [
   ['missing', undefined],
   ['empty', ''],

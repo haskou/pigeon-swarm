@@ -1,0 +1,12 @@
+{
+  "name": "pigeon-swarm-deployment-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:turn": "node --test tests/turn-secret.test.mjs tests/turn-runtime.integration.mjs",
+    "test:media": "node --test tests/turn-media.integration.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.60.0"
+  }
+}

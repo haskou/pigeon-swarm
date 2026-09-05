@@ -33,6 +33,9 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
     CALLS_TURN_TLS_PORT: '5349',
     CALLS_TURN_URLS: 'turns:relay.test:5349?transport=tcp',
     CALLS_TURN_EXTERNAL_IP: tls ? '192.0.2.42/127.0.0.1' : '',
+    CALLS_TURN_USER_QUOTA: '3',
+    CALLS_TURN_TOTAL_QUOTA: '5',
+    CALLS_TURN_ALLOWED_PEER_IPS: '',
   };
   const run = (command, args, options = {}) => spawnSync(command, args, {
     env, encoding: 'utf8', timeout: 120000, ...options,
@@ -46,7 +49,7 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
   const probe = readFileSync('scripts/turn-allocation-probe.mjs', 'utf8');
   try {
     compose('up', '-d', '--wait', '--wait-timeout', '45', 'app', 'turn');
-    compose('exec', '-T', 'app', 'sh', '-c', 'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4105\n" > /run/pigeon/calls-turn-runtime.conf');
+    compose('exec', '-T', 'app', 'sh', '-c', 'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4121\n" > /run/pigeon/calls-turn-runtime.conf');
     for (let cycle = 0; cycle < 2; cycle += 1) {
       if (cycle) compose('restart', 'turn');
       const verified = run('sh', ['scripts/verify-turn.sh']);
@@ -79,6 +82,18 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
     }
     const logs = compose('logs', '--no-color', 'turn');
     assert.ok(!logs.includes(secret), 'TURN logs must not contain the shared secret');
+    const policies = run('docker', ['compose', 'exec', '-T', 'app', 'node', '/opt/pigeon/tests/turn-policy-probe.mjs']);
+    assert.equal(policies.status, 0, policies.stdout + policies.stderr);
+    assert.match(policies.stdout, /PASS quotas:/);
+    assert.match(policies.stdout, /PASS destinations:/);
+    const privateIp = compose('exec', '-T', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim();
+    env.CALLS_TURN_ALLOWED_PEER_IPS = privateIp;
+    compose('up', '-d', '--no-deps', '--force-recreate', 'turn');
+    const ready = run('sh', ['scripts/verify-turn.sh']);
+    assert.equal(ready.status, 0, ready.stdout + ready.stderr);
+    const exception = run('docker', ['compose', 'exec', '-T', '-e', `TEST_ALLOWED_PEER_IP=${privateIp}`, 'app', 'node', '/opt/pigeon/tests/turn-policy-probe.mjs']);
+    assert.equal(exception.status, 0, exception.stdout + exception.stderr);
+    assert.match(exception.stdout, /PASS trusted private peer:/);
   } finally {
     // Only this test's randomly named Compose project and its ephemeral volume.
     compose('down', '--volumes', '--remove-orphans');

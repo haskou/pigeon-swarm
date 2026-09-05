@@ -188,7 +188,31 @@ test(
         );
         assert.equal(result.status, 0, result.stderr);
       }
-      await compose("restart", "app-a", "app-b");
+      for (const name of ["a", "b"]) {
+        await compose("restart", `app-${name}`);
+        await compose(
+          "up",
+          "-d",
+          "--wait",
+          "--wait-timeout",
+          "90",
+          `app-${name}`,
+        );
+      }
+      for (const name of ["a", "b"]) {
+        const address = await compose(
+          "exec",
+          "-T",
+          `app-${name}`,
+          "node",
+          "-e",
+          "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)",
+        );
+        assert.ok(
+          address === env[`TEST_IP_${name.toUpperCase()}`],
+          "Fixture node address must survive restart",
+        );
+      }
       await compose(
         "up",
         "-d",
@@ -199,6 +223,49 @@ test(
         "app-b",
         "turn-a",
         "turn-b",
+      );
+      await Promise.all(
+        ["a", "b"].map(async (name, index) => {
+          const logs = await run(["logs", "--no-color", `app-${name}`]);
+          const startedPeers = [
+            ...(logs.stdout + logs.stderr).matchAll(
+              /Started private network "Private call integration" with Peer ID: ([A-Za-z0-9]+)/g,
+            ),
+          ];
+          assert.ok(
+            startedPeers.at(-1)?.[1] === peers[index].id,
+            "Private network peer identity must survive restart",
+          );
+          const readiness = await run(
+            ["exec", "-T", `app-${name}`, "node", "--input-type=module"],
+            {
+              timeout: 70000,
+              input: `
+          const deadline = Date.now() + 60000;
+          let summary;
+          while (Date.now() < deadline) {
+            const response = await fetch('http://127.0.0.1:8080/api/peers/', {signal:AbortSignal.timeout(5000)});
+            const peers = await response.json();
+            const network = peers.networkSynchronization?.networks?.find(network => network.id === ${JSON.stringify(network.id)});
+            summary = {state:network?.state,connected:network?.connectedPeerIds?.length,replicating:network?.replicationPeerIds?.length,stores:network?.totalStoreCount,converged:network?.convergedStoreCount};
+            if (network?.connectedPeerIds?.includes(${JSON.stringify(peers[1 - index].id)}) && network.totalStoreCount > 0 && network.state === 'converged') {
+              console.log('Private network ready: ' + JSON.stringify(summary));
+              process.exit(0);
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          console.error('Private network readiness failed: ' + JSON.stringify(summary));
+          process.exitCode = 1;
+        `,
+            },
+          );
+          assert.equal(
+            readiness.status,
+            0,
+            readiness.stdout + readiness.stderr,
+          );
+          console.log(`Node ${name}: ${readiness.stdout.trim()}`);
+        }),
       );
       const result = await run(
         [

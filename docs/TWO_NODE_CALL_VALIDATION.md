@@ -23,8 +23,12 @@ HTTP and WebSocket traffic to the corresponding application node. Only those tes
 certificates are accepted by the browser contexts.
 
 The applications join a generated private libp2p network using explicit bootstrap
-addresses, avoiding dependence on Docker multicast discovery. Each user registers
-through the interface with a password and a generated recovery key. The test
+addresses, avoiding dependence on Docker multicast discovery. It restarts the apps
+one at a time and verifies their addresses and peer identities: restarting both
+together can exchange Docker-assigned IPs and invalidate those bootstrap addresses.
+Registration starts only after both nodes report the expected peer and converged
+OrbitDB stores. Users register through the interface with a password and a
+generated recovery key. The test
 creates a direct conversation and a discoverable public community inside that
 private network, then exercises direct and community voice calls through the
 normal application controls. No test code copies SDP or ICE candidates between

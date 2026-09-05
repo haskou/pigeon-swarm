@@ -45,36 +45,27 @@
       "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
     },
     "policy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "authorityKeys",
-        "threshold",
-        "sequencerKey",
-        "freshnessAuthorityKey"
-      ],
-      "properties": {
-        "authorityKeys": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 1,
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+      "allOf": [
+        {
+          "$ref": "authorization-policy-v1.schema.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "devices": {
+              "type": "array",
+              "maxItems": 1
+            },
+            "authorityKeys": {
+              "type": "array",
+              "maxItems": 1
+            },
+            "threshold": {
+              "const": 1
+            }
           }
-        },
-        "threshold": {
-          "const": 1
-        },
-        "sequencerKey": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
-        },
-        "freshnessAuthorityKey": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
         }
-      }
+      ]
     },
     "signatures": {
       "type": "object",

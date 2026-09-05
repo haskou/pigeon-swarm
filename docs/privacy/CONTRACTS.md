@@ -64,8 +64,8 @@ The binary recipient wrapper is the 32-byte X25519 encapsulated key followed by
 HPKE ciphertext and its 16-byte GCM tag. The encrypted plaintext contains a
 4-byte unsigned big-endian frame length, the canonical UTF-8 JSON frame and zero
 padding to the selected bucket. Reject inconsistent lengths or nonzero padding.
-Each protected frame limits `mlsMessage` to 240,000 base64 characters. Even a
-control frame with 128 signatures and maximum integer fields fits the 256 KiB
+Each protected frame limits `mlsMessage` to 210,000 base64 characters. Even a
+control frame with 128 devices, authority keys, signatures and maximum integer fields fits the 256 KiB
 bucket including the 52 bytes of wrapping/length overhead. Check the actual
 serialized size before encryption; larger MLS outputs must fail before committing
 a local transition, not produce an undeliverable operation. The crypto integration
@@ -74,7 +74,8 @@ must demonstrate that supported 128-device transitions fit this budget before re
 A new scope starts with a separate [genesis head](contracts/genesis-head-v1.schema.json),
 not an MLS Commit or Welcome. The creator generates a fresh random `scopeId`,
 creates its single-device MLS group at epoch zero and records revision zero with
-`parentHeadHash: null`. The initial policy has exactly the creator's pinned
+`parentHeadHash: null`. The initial policy lists only the creator device and its SHA-256 MLS credential
+hash in `devices`, and has exactly the creator's pinned
 Ed25519 device key as authority, sequencer and freshness authority, with threshold
 one. Equality of those policy keys and the sole signature key is a required domain
 check. Additional administrators/devices and delegated authorities require later
@@ -121,6 +122,27 @@ appear outside recipient encryption.
   operation either.
 
 Control `authorization` is a signed binding, not the authorization head itself.
+Every Commit and Welcome carries its complete candidate
+[authorization policy](contracts/authorization-policy-v1.schema.json) in
+`authorization.policy`; the signature covers this object along with `policyHash`.
+Recompute SHA-256 of its JCS encoding and reject a hash mismatch before processing
+MLS. Do not substitute an unsigned policy fetched from another endpoint.
+
+The policy lists each admitted device signing key and SHA-256 of its exact MLS
+credential bytes, its administrator keys and quorum, sequencer and freshness
+signer. Device keys and credential hashes must each be distinct; administrator
+keys must be admitted device keys, the sequencer must be an administrator and
+the threshold cannot exceed the number of administrators. A freshness signer may
+be an explicitly delegated external key, with the trust limits in the ADR.
+Reject invalid policies before signing or applying a transition. Verify signatures
+under the **previous** verified policy, never the candidate administrators. After
+MLS processing, compare the complete resulting leaf credential/device set with
+`policy.devices`, then atomically persist the candidate policy, head and MLS state.
+The next transition uses that persisted policy. Application-level role/operation
+permissions remain subject to the scope's authenticated domain state and the
+operation checks in the implementation issues; this policy grants no blanket
+administrator access to private content outside the scope.
+
 The canonical head hash is SHA-256 of the JCS object with exactly `scopeId`,
 `revision`, `parentHeadHash`, `mlsEpoch`, `mlsContextHash` and `policyHash`, using
 the values in the verified head. Encode all hash fields as canonical unpadded

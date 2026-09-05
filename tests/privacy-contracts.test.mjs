@@ -15,6 +15,7 @@ const load = async (name) =>
       ),
     ),
   );
+await load("authorization-policy-v1");
 const delivery = await load("delivery-v1");
 const acknowledgement = await load("acknowledgement-v1");
 const operation = await load("private-operation-v1");
@@ -28,6 +29,15 @@ const valid = {
   expiresAt: 2_000_000_000,
   bucketBytes: 4096,
   ciphertext: Buffer.alloc(4096, 3).toString("base64"),
+};
+
+const policy = {
+  version: 1,
+  devices: [{ deviceKey: valid.mailboxId, mlsCredentialHash: valid.mailboxId }],
+  authorityKeys: [valid.mailboxId],
+  threshold: 1,
+  sequencerKey: valid.mailboxId,
+  freshnessAuthorityKey: valid.mailboxId,
 };
 
 test("delivery allows each documented padding bucket", () => {
@@ -161,6 +171,7 @@ test("MLS application and control frames have distinct protected contracts", () 
     mlsEpoch: 2,
     mlsMessageHash: valid.mailboxId,
     policyHash: valid.mailboxId,
+    policy,
     headHash: valid.mailboxId,
     mlsContextHash: valid.mailboxId,
     signatures: { [valid.mailboxId]: Buffer.alloc(64).toString("base64url") },
@@ -190,6 +201,7 @@ test("control authorization uses distinct signer keys instead of countable dupli
     mlsEpoch: 2,
     mlsMessageHash: valid.mailboxId,
     policyHash: valid.mailboxId,
+    policy,
     headHash: valid.mailboxId,
     mlsContextHash: valid.mailboxId,
     signatures: { [valid.mailboxId]: signature },
@@ -272,14 +284,23 @@ test("maximum protected frames fit the delivery bucket including recipient wrapp
     headHash: valid.mailboxId,
     mlsContextHash: valid.mailboxId,
     signatures,
+    policy: {
+      ...policy,
+      devices: Object.keys(signatures).map((deviceKey) => ({
+        deviceKey,
+        mlsCredentialHash: deviceKey,
+      })),
+      authorityKeys: Object.keys(signatures),
+      threshold: 128,
+    },
   };
   for (const kind of ["mls-application", "mls-commit", "mls-welcome"]) {
-    const value = { version: 1, kind, mlsMessage: "A".repeat(240000) };
+    const value = { version: 1, kind, mlsMessage: "A".repeat(210000) };
     if (kind !== "mls-application") value.authorization = authorization;
     assert.equal(frame(value), true, JSON.stringify(frame.errors));
     const encodedBytes = Buffer.byteLength(JSON.stringify(value));
     assert.ok(encodedBytes + 32 + 16 + 4 <= 262144);
-    assert.equal(frame({ ...value, mlsMessage: "A".repeat(240004) }), false);
+    assert.equal(frame({ ...value, mlsMessage: "A".repeat(210004) }), false);
     if (kind !== "mls-application") {
       assert.equal(
         frame({
@@ -309,6 +330,7 @@ test("control authorization rejects noncanonical aliases of the same signer key"
     mlsEpoch: 1,
     mlsMessageHash: valid.mailboxId,
     policyHash: valid.mailboxId,
+    policy,
     headHash: valid.mailboxId,
     mlsContextHash: valid.mailboxId,
     signatures: { [key]: signature },
@@ -346,13 +368,8 @@ test("genesis is a pinned single-owner epoch-zero head rather than a control tra
     mlsEpoch: 0,
     mlsContextHash: valid.mailboxId,
     policyHash: valid.mailboxId,
+    policy,
     headHash: valid.mailboxId,
-    policy: {
-      authorityKeys: [owner],
-      threshold: 1,
-      sequencerKey: owner,
-      freshnessAuthorityKey: owner,
-    },
     signatures: { [owner]: Buffer.alloc(64).toString("base64url") },
   };
   assert.equal(genesis(value), true, JSON.stringify(genesis.errors));
@@ -370,7 +387,6 @@ test("genesis is a pinned single-owner epoch-zero head rather than a control tra
   );
   const authorization = { ...value, mlsMessageHash: valid.mailboxId };
   delete authorization.version;
-  delete authorization.policy;
   for (const kind of ["mls-commit", "mls-welcome"]) {
     const control = { version: 1, kind, mlsMessage: "AQIDBA==", authorization };
     assert.equal(frame(control), false);
@@ -386,5 +402,41 @@ test("genesis is a pinned single-owner epoch-zero head rather than a control tra
       }),
       true,
     );
+  }
+});
+
+test("every control transition carries its complete bounded candidate policy", () => {
+  const authorization = {
+    scopeId: valid.mailboxId,
+    revision: 1,
+    parentHeadHash: valid.mailboxId,
+    mlsEpoch: 1,
+    mlsMessageHash: valid.mailboxId,
+    policyHash: valid.mailboxId,
+    headHash: valid.mailboxId,
+    mlsContextHash: valid.mailboxId,
+    policy,
+    signatures: { [valid.mailboxId]: Buffer.alloc(64).toString("base64url") },
+  };
+  for (const kind of ["mls-commit", "mls-welcome"]) {
+    const control = { version: 1, kind, mlsMessage: "AQIDBA==", authorization };
+    assert.equal(frame(control), true);
+    const withoutPolicy = { ...authorization };
+    delete withoutPolicy.policy;
+    assert.equal(frame({ ...control, authorization: withoutPolicy }), false);
+    for (const patch of [
+      { devices: [] },
+      { authorityKeys: [] },
+      { threshold: 129 },
+      { authorityKeys: [valid.mailboxId, valid.mailboxId] },
+    ]) {
+      assert.equal(
+        frame({
+          ...control,
+          authorization: { ...authorization, policy: { ...policy, ...patch } },
+        }),
+        false,
+      );
+    }
   }
 });

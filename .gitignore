@@ -2,6 +2,7 @@ node_modules/
 ipfs_storage/
 local_storage/
 .env
+turn-certs/
 .env.*
 !.env.example
 *.zip

@@ -1,0 +1,20 @@
+# Opt in with: docker compose -f docker-compose.yml -f docker-compose.turn-tls.yml up -d
+services:
+  app:
+    environment:
+      CALLS_TURN_URLS: ${CALLS_TURN_URLS:?Set advertised URLs including turns with the certificate hostname and TLS port}
+      CALLS_TURN_TLS_PORT: ${CALLS_TURN_TLS_PORT:-5349}
+      CALLS_TURN_TLS_SERVER_NAME: ${CALLS_TURN_TLS_SERVER_NAME:?Set the hostname covered by the TLS certificate}
+    ports:
+      - "${CALLS_TURN_TLS_PORT:-5349}:${CALLS_TURN_TLS_PORT:-5349}/tcp"
+  turn:
+    environment:
+      CALLS_TURN_TLS_ENABLED: 'true'
+      CALLS_TURN_TLS_PORT: ${CALLS_TURN_TLS_PORT:-5349}
+    volumes:
+      - type: bind
+        source: ${CALLS_TURN_TLS_CERTS_DIR:?Set the directory containing fullchain.pem and privkey.pem}
+        target: /run/pigeon-turn-tls
+        read_only: true
+        bind:
+          create_host_path: false

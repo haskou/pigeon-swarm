@@ -1,18 +1,38 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, chmodSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 
-test('real coturn validates issuer credentials and keeps the shared secret out of process arguments and logs', { timeout: 240000 }, () => {
+for (const tls of [false, true]) {
+test(`real coturn validates issuer credentials, restart and secret handling (TLS ${tls ? 'enabled' : 'disabled'})`, { timeout: 240000 }, () => {
   const secret = randomBytes(32).toString('hex');
+  const temporary = mkdtempSync(resolve(tmpdir(), 'pigeon-turn-tls-'));
+  const certificates = resolve(temporary, 'certificates');
+  if (tls) {
+    mkdirSync(certificates, { mode: 0o755 });
+    const generated = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+      '-subj', '/CN=relay.test', '-addext', 'subjectAltName=DNS:relay.test',
+      '-keyout', resolve(certificates, 'privkey.pem'), '-out', resolve(certificates, 'fullchain.pem')], { encoding: 'utf8' });
+    assert.equal(generated.status, 0, 'Temporary test certificate generation failed');
+    // Disposable key, within a mode-700 parent on the host, readable by coturn's
+    // unprivileged container user. Never use this permission for a deployment key.
+    chmodSync(resolve(certificates, 'privkey.pem'), 0o644);
+  }
+  const files = ['docker-compose.yml', ...(tls ? ['docker-compose.turn-tls.yml'] : []), 'tests/compose.turn-test.yml', ...(tls ? ['tests/compose.turn-tls-test.yml'] : [])];
   const env = {
     ...process.env,
     CALLS_TURN_SHARED_SECRET: secret,
     COMPOSE_PROJECT_NAME: `pigeon-turn-test-${randomBytes(5).toString('hex')}`,
-    COMPOSE_FILE: `${resolve('docker-compose.yml')}:${resolve('tests/compose.turn-test.yml')}`,
+    COMPOSE_FILE: files.map((file) => resolve(file)).join(':'),
     COMPOSE_ENV_FILES: '/dev/null',
+    CALLS_TURN_TLS_CERTS_DIR: certificates,
+    CALLS_TURN_TLS_SERVER_NAME: 'relay.test',
+    CALLS_TURN_TLS_PORT: '5349',
+    CALLS_TURN_URLS: 'turns:relay.test:5349?transport=tcp',
+    CALLS_TURN_EXTERNAL_IP: tls ? '192.0.2.42/127.0.0.1' : '',
   };
   const run = (command, args, options = {}) => spawnSync(command, args, {
     env, encoding: 'utf8', timeout: 120000, ...options,
@@ -33,6 +53,7 @@ test('real coturn validates issuer credentials and keeps the shared secret out o
       assert.equal(verified.status, 0, verified.stdout + verified.stderr);
       assert.match(verified.stdout, /PASS udp:/);
       assert.match(verified.stdout, /PASS tcp:/);
+      if (tls) assert.match(verified.stdout, /PASS tls:/);
       assert.ok(!`${verified.stdout}${verified.stderr}`.includes(secret));
     }
     const mismatch = run('docker', ['compose', 'exec', '-T', '-e', 'CALLS_TURN_SHARED_SECRET', 'app', 'node', '--input-type=module'], {
@@ -41,10 +62,27 @@ test('real coturn validates issuer credentials and keeps the shared secret out o
     });
     assert.equal(mismatch.status, 1);
     assert.match(mismatch.stderr, /backend and coturn use the same secret/);
+    if (tls) {
+      for (const override of ['CALLS_TURN_TLS_SERVER_NAME=wrong.test', 'NODE_EXTRA_CA_CERTS=']) {
+        const rejected = run('docker', ['compose', 'exec', '-T', '-e', override, 'app', 'node', '--input-type=module'], { input: probe });
+        assert.equal(rejected.status, 1);
+        assert.match(rejected.stderr, /TLS connection or certificate validation failed/);
+      }
+      const wrongMapping = run('docker', ['compose', 'exec', '-T', '-e', 'CALLS_TURN_EXTERNAL_IP=192.0.2.99', 'app', 'node', '--input-type=module'], { input: probe });
+      assert.equal(wrongMapping.status, 1);
+      assert.match(wrongMapping.stderr, /unexpected advertised IPv4 address/);
+      for (const port of ['4101', '4103', '70000']) {
+        const invalidPort = run('docker', ['compose', 'run', '--rm', '-T', '--no-deps', '-e', `CALLS_TURN_TLS_PORT=${port}`, 'turn']);
+        assert.equal(invalidPort.status, 1);
+        assert.ok(invalidPort.stderr.includes('TURN TLS port must be valid and outside the plain listener and relay range.'), 'TLS port conflicts must fail before coturn starts');
+      }
+    }
     const logs = compose('logs', '--no-color', 'turn');
     assert.ok(!logs.includes(secret), 'TURN logs must not contain the shared secret');
   } finally {
     // Only this test's randomly named Compose project and its ephemeral volume.
     compose('down', '--volumes', '--remove-orphans');
+    rmSync(temporary, { recursive: true, force: true });
   }
 });
+}

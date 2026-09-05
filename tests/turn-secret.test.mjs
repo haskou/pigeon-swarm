@@ -48,3 +48,23 @@ test('Compose accepts an explicitly supplied deployment secret', () => {
   assert.ok(config.services.app.environment.CALLS_TURN_SHARED_SECRET === secret, 'Backend must receive the deployment secret');
   assert.ok(config.services.turn.environment.CALLS_TURN_SHARED_SECRET === secret, 'Coturn must receive the same deployment secret');
 });
+
+for (const externalIp of ['relay.example.com', '192.0.2.999', '192.0.2.1/10.0.0.1/10.0.0.2', '192.0.2.1\nno-auth']) {
+  test('TURN rejects invalid explicit IPv4 mapping', () => {
+    const result = spawnSync('sh', ['scripts/run-turn-from-runtime-config.sh'], {
+      encoding: 'utf8', timeout: 2000,
+      env: { ...process.env, CALLS_TURN_SHARED_SECRET: randomBytes(32).toString('hex'), CALLS_TURN_EXTERNAL_IP: externalIp },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CALLS_TURN_EXTERNAL_IP must be an IPv4 address or public\/private IPv4 mapping/);
+  });
+}
+
+test('explicit TLS refuses missing certificate files', () => {
+  const result = spawnSync('sh', ['scripts/run-turn-from-runtime-config.sh'], {
+    encoding: 'utf8', timeout: 2000,
+    env: { ...process.env, CALLS_TURN_SHARED_SECRET: randomBytes(32).toString('hex'), CALLS_TURN_TLS_ENABLED: 'true' },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /TURN TLS requires readable fullchain.pem and privkey.pem/);
+});

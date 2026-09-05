@@ -89,7 +89,13 @@ can refer to the same head without creating different heads. Verify its
 Ed25519 signatures using the previous policy (or pinned invite authority), with
 JCS encoding excluding `signatures` and domain separator
 `pigeon.private-control.v1` followed by a zero byte. The candidate MLS context
-must match `mlsContextHash` before committing state.
+must match `mlsContextHash` before committing state. `signatures` is a map from
+admitted administrator public key to signature, not an array of countable entries.
+Count distinct authorized keys from the previous policy only; reject unknown
+signers and invalid signatures. Reject duplicate JSON property names before
+parsing/canonicalization, so duplicate signer keys cannot be hidden by a parser.
+The shape tests reject repeated-entry arrays; runtime quorum/duplicate-key parsing
+and signature validation remain required application/crypto tests.
 
 The `membership.commit` application operation records the accepted administrative
 transition for history; it references its signed head/commit hash and does not
@@ -126,6 +132,7 @@ repository; do not implement a second ad hoc serializer in each client.
 | `message.edit` / `message.delete` | Target operation ID; original author or explicit moderator authority |
 | `reaction.set` | Target operation ID and bounded reaction/removal value |
 | `receipt.advance` | Causal read frontier for this admitted device; no claim on behalf of another member |
+| `presence.update` | Opt-in status for the authenticated author device only; monotonic per-device sequence, integer sent/expiry times with <= 90-second lifetime, bounded custom message; reject expired or older sequences and never include a node ID |
 | `call.signal` | Call/attempt ID, sender/recipient binding, signal type, payload and <= 60-second validity; do not revive an ended call |
 | `membership.propose` | Requested policy change against exact signed parent revision; no immediate authority change |
 | `membership.commit` | Accepted transition revision and signed head/commit hash; key-state changes use the separate control frame |

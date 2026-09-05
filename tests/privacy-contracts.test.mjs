@@ -162,12 +162,7 @@ test('MLS application and control frames have distinct protected contracts', () 
     policyHash: valid.mailboxId,
     headHash: valid.mailboxId,
     mlsContextHash: valid.mailboxId,
-    signatures: [
-      {
-        authorDeviceKey: valid.mailboxId,
-        signature: Buffer.alloc(64).toString('base64url'),
-      },
-    ],
+    signatures: { [valid.mailboxId]: Buffer.alloc(64).toString('base64url') },
   };
   assert.equal(frame(application), true);
   assert.equal(operation(application), false);
@@ -182,4 +177,79 @@ test('MLS application and control frames have distinct protected contracts', () 
   }
   assert.equal(frame({ ...application, authorization }), false);
   assert.equal(frame({ ...application, kind: 'unknown' }), false);
+});
+
+test('control authorization uses distinct signer keys instead of countable duplicate entries', () => {
+  const signature = Buffer.alloc(64).toString('base64url');
+  const signer = { authorDeviceKey: valid.mailboxId, signature };
+  const authorization = {
+    scopeId: valid.mailboxId,
+    revision: 2,
+    parentHeadHash: valid.mailboxId,
+    mlsEpoch: 2,
+    mlsMessageHash: valid.mailboxId,
+    policyHash: valid.mailboxId,
+    headHash: valid.mailboxId,
+    mlsContextHash: valid.mailboxId,
+    signatures: { [valid.mailboxId]: signature },
+  };
+  for (const kind of ['mls-commit', 'mls-welcome']) {
+    const control = { version: 1, kind, mlsMessage: 'AQIDBA==', authorization };
+    assert.equal(frame(control), true);
+    assert.equal(
+      frame({
+        ...control,
+        authorization: { ...authorization, signatures: [signer, signer] },
+      }),
+      false,
+    );
+    assert.equal(
+      frame({
+        ...control,
+        authorization: { ...authorization, signatures: {} },
+      }),
+      false,
+    );
+  }
+});
+
+test('presence has a bounded private operation without an identity-to-node announcement', () => {
+  const presence = {
+    version: 1,
+    operationId: valid.deliveryId,
+    scopeId: valid.mailboxId,
+    authorizationRevision: 1,
+    authorDeviceKey: valid.mailboxId,
+    kind: 'presence.update',
+    previousOperationIds: [],
+    payload: {
+      status: 'online',
+      sequence: 1,
+      sentAt: 2000000000,
+      expiresAt: 2000000090,
+    },
+    signature: Buffer.alloc(64).toString('base64url'),
+  };
+  assert.equal(operation(presence), true, JSON.stringify(operation.errors));
+  assert.equal(
+    operation({
+      ...presence,
+      payload: { ...presence.payload, ownerNodeId: 'node-1' },
+    }),
+    false,
+  );
+  assert.equal(
+    operation({
+      ...presence,
+      payload: { ...presence.payload, customMessage: 'x'.repeat(141) },
+    }),
+    false,
+  );
+  assert.equal(
+    operation({
+      ...presence,
+      payload: { ...presence.payload, status: 'unknown' },
+    }),
+    false,
+  );
 });

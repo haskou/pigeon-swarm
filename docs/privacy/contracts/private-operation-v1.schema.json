@@ -45,7 +45,8 @@
         "call.signal",
         "membership.propose",
         "membership.commit",
-        "device.revoke"
+        "device.revoke",
+        "presence.update"
       ]
     },
     "previousOperationIds": {
@@ -64,5 +65,59 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{86}$"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "presence.update"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "sequence",
+              "sentAt",
+              "expiresAt"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "online",
+                  "away",
+                  "busy",
+                  "offline"
+                ]
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "sentAt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "expiresAt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "customMessage": {
+                "type": "string",
+                "maxLength": 140
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

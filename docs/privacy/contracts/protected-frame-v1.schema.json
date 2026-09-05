@@ -89,26 +89,15 @@
               "pattern": "^[A-Za-z0-9_-]{43}$"
             },
             "signatures": {
-              "type": "array",
-              "minItems": 1,
-              "maxItems": 16,
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "authorDeviceKey",
-                  "signature"
-                ],
-                "properties": {
-                  "authorDeviceKey": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{43}$"
-                  },
-                  "signature": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{86}$"
-                  }
-                }
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 16,
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_-]{43}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{86}$"
               }
             },
             "headHash": {
@@ -187,26 +176,15 @@
               "pattern": "^[A-Za-z0-9_-]{43}$"
             },
             "signatures": {
-              "type": "array",
-              "minItems": 1,
-              "maxItems": 16,
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "authorDeviceKey",
-                  "signature"
-                ],
-                "properties": {
-                  "authorDeviceKey": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{43}$"
-                  },
-                  "signature": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{86}$"
-                  }
-                }
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 16,
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_-]{43}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{86}$"
               }
             },
             "headHash": {

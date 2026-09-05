@@ -21,13 +21,13 @@ export function attribute(type, value) {
   return result;
 }
 
-export function message(type, attributes, key) {
+export function message(type, attributes, key, transaction = randomBytes(12)) {
   const body = Buffer.concat(attributes);
   const header = Buffer.alloc(20);
   header.writeUInt16BE(type);
   header.writeUInt16BE(body.length + (key ? 24 : 0), 2);
   header.writeUInt32BE(cookie, 4);
-  randomBytes(12).copy(header, 8);
+  transaction.copy(header, 8);
   const prefix = Buffer.concat([header, body]);
   return key
     ? Buffer.concat([prefix, attribute(0x0008, createHmac('sha1', key).update(prefix).digest())])

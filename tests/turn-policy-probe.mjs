@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { createSocket } from 'node:dgram';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -19,11 +19,23 @@ function peerAddress(ip, port) {
   return attribute(0x0012, value);
 }
 
-async function allocate(identity, expectedCode, expiryOffset = 0) {
+function ipv6PeerAddress(groups, transaction) {
+  const value = Buffer.alloc(20);
+  value[1] = 2;
+  value.writeUInt16BE(40000 ^ 0x2112, 2);
+  const mask = Buffer.concat([Buffer.from([0x21, 0x12, 0xa4, 0x42]), transaction]);
+  const address = Buffer.alloc(16);
+  groups.forEach((group, index) => address.writeUInt16BE(group, index * 2));
+  for (let index = 0; index < 16; index += 1) value[index + 4] = address[index] ^ mask[index];
+  return attribute(0x0012, value);
+}
+
+async function allocate(identity, expectedCode, expiryOffset = 0, family = 1) {
   const connection = await openTransport('tcp', 4101);
   const session = { connection, allocated: false };
   sessions.push(session);
-  const challenge = await connection.exchange(message(0x0003, [requestedTransport]));
+  const allocationAttributes = [requestedTransport, ...(family === 2 ? [attribute(0x0017, [2, 0, 0, 0])] : [])];
+  const challenge = await connection.exchange(message(0x0003, allocationAttributes));
   assert.equal(errorCode(challenge), 401);
   const realm = challenge.attributes.get(0x0014);
   const nonce = challenge.attributes.get(0x0015);
@@ -32,13 +44,22 @@ async function allocate(identity, expectedCode, expiryOffset = 0) {
   const key = createHash('md5').update(`${username}:${realm.toString()}:${password}`).digest();
   const auth = [attribute(0x0006, username), attribute(0x0014, realm), attribute(0x0015, nonce)];
   session.request = (type, attrs) => connection.exchange(message(type, [...attrs, ...auth], key), key);
-  const result = await session.request(0x0003, [requestedTransport]);
+  session.requestIpv6Peer = (groups, type = 0x0008) => {
+    const transaction = randomBytes(12);
+    const attrs = [ipv6PeerAddress(groups, transaction), ...auth];
+    if (type === 0x0009) attrs.unshift(attribute(0x000c, [0x40, 0, 0, 0]));
+    return connection.exchange(message(type, attrs, key, transaction), key);
+  };
+  const result = await session.request(0x0003, allocationAttributes);
   assert.equal(result.integrityValid, true, 'Allocation result must be authenticated');
   if (expectedCode) {
     assert.equal(errorCode(result), expectedCode, 'Allocation quota must reject excess requests');
   } else {
     assert.equal(result.type, 0x0103, 'Allocation within quota must succeed');
     assert.equal(result.integrityValid, true);
+    // The fixture's global external IPv4 override can rewrite the advertised
+    // address. A successful IPv6 CreatePermission below verifies the socket family.
+    if (family === 1) assert.equal(result.attributes.get(0x0016)[1], family);
     session.allocated = true;
   }
   session.release = async () => {
@@ -93,6 +114,25 @@ try {
       console.log('PASS trusted private peer: explicit host exception relays UDP payload.');
     } finally { receiver.close(); }
   }
+  for (const session of sessions) await session.release?.();
+  const ipv6 = await allocate('ipv6-policy', undefined, 0, 2);
+  for (const groups of [
+    [0xfec0, 0, 0, 0, 0, 0, 0, 1],
+    [0xfeff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff],
+    [0xfc00, 0, 0, 0, 0, 0, 0, 1],
+    [0xfe80, 0, 0, 0, 0, 0, 0, 1],
+    [0, 0, 0, 0, 0, 0, 0, 0x100],
+    [0, 0, 0, 0, 0, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0x100, 0],
+  ]) {
+    for (const method of [0x0008, 0x0009]) {
+      const result = await ipv6.requestIpv6Peer(groups, method);
+      assert.equal(result.integrityValid, true);
+      assert.equal(errorCode(result), 403, 'IPv6 private peers must be denied');
+    }
+  }
+  assert.equal((await ipv6.requestIpv6Peer([0x2001, 0xdb8, 0, 0, 0, 0, 0, 1])).type, 0x0108, 'Public IPv6 permission must remain available');
+  console.log('PASS IPv6: real IPv6 allocation rejects private peer permissions and channels; public permission accepted.');
 } finally {
   for (const session of sessions) {
     try { await session.release?.(); } finally { session.connection.close(); }

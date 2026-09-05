@@ -285,8 +285,8 @@ not bandwidth, request rate or account creation.
 
 The peer policy blocks IPv4 private, loopback, link-local, shared CGNAT,
 benchmark and multicast/reserved ranges. It also blocks IPv6 loopback,
-unspecified, mapped/compatible IPv4, NAT64, discard, unique-local, link-local
-and multicast ranges. TURN TCP relay allocations and the coturn CLI are
+unspecified, mapped/compatible IPv4, NAT64, discard, unique-local, link-local,
+deprecated site-local and multicast ranges. TURN TCP relay allocations and the coturn CLI are
 disabled. Browsers may still connect to TURN over UDP, TCP or TLS and relay
 UDP media to public peers.
 
@@ -313,6 +313,8 @@ requests, an allowed public permission, and UDP payload delivery to an
 explicitly permitted private host. The exception is confined to the disposable
 test network. Coturn's policy semantics are documented in its
 [server reference](https://github.com/coturn/coturn/wiki/turnserver).
+IPv6 allocations also verify rejection of private and deprecated site-local
+peer permissions/channels, while a public IPv6 permission still succeeds.
 
 ### Reproducible browser media checks
 

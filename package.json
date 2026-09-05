@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test:turn": "node --test tests/turn-secret.test.mjs tests/turn-runtime.integration.mjs",
-    "test:media": "node --test tests/turn-media.integration.mjs"
+    "test:media": "node --test tests/turn-media.integration.mjs",
+    "test:calls": "node --test tests/two-node-call.integration.mjs"
   },
   "devDependencies": {
     "playwright": "1.60.0"

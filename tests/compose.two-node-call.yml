@@ -1,0 +1,80 @@
+services:
+  app-a:
+    extends:
+      file: ../docker-compose.yml
+      service: app
+    image: ${PIGEON_TEST_IMAGE:-ghcr.io/haskou/pigeon-swarm:latest}
+    pull_policy: missing
+    ports: !reset []
+    environment:
+      LOG_LEVEL: info
+      CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_A:?}
+      PIGEON_PUBLIC_BOOTSTRAP_ENABLED: "false"
+    volumes: !override
+      - ipfs_a:/data/ipfs
+      - local_a:/data/local_storage
+      - runtime_a:/run/pigeon
+  app-b:
+    extends:
+      file: ../docker-compose.yml
+      service: app
+    image: ${PIGEON_TEST_IMAGE:-ghcr.io/haskou/pigeon-swarm:latest}
+    pull_policy: missing
+    ports: !reset []
+    environment:
+      LOG_LEVEL: info
+      CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_B:?}
+      PIGEON_PUBLIC_BOOTSTRAP_ENABLED: "false"
+    volumes: !override
+      - ipfs_b:/data/ipfs
+      - local_b:/data/local_storage
+      - runtime_b:/run/pigeon
+  turn-a:
+    extends:
+      file: ../docker-compose.yml
+      service: turn
+    depends_on: !override
+      app-a: { condition: service_started }
+    network_mode: service:app-a
+    environment:
+      CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_A:?}
+      CALLS_TURN_EXTERNAL_IP: ${TEST_IP_A:-}
+      CALLS_TURN_ALLOWED_PEER_IPS: ${TEST_IP_B:-}
+    volumes: !override
+      - ../scripts/check-turn-runtime.sh:/opt/pigeon/check-turn-runtime.sh:ro
+      - ../scripts/run-turn-from-runtime-config.sh:/opt/pigeon/run-turn-from-runtime-config.sh:ro
+      - ../scripts/turn-peer-policy.conf:/opt/pigeon/turn-peer-policy.conf:ro
+      - runtime_a:/run/pigeon:ro
+  turn-b:
+    extends:
+      file: ../docker-compose.yml
+      service: turn
+    depends_on: !override
+      app-b: { condition: service_started }
+    network_mode: service:app-b
+    environment:
+      CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_B:?}
+      CALLS_TURN_EXTERNAL_IP: ${TEST_IP_B:-}
+      CALLS_TURN_ALLOWED_PEER_IPS: ${TEST_IP_A:-}
+    volumes: !override
+      - ../scripts/check-turn-runtime.sh:/opt/pigeon/check-turn-runtime.sh:ro
+      - ../scripts/run-turn-from-runtime-config.sh:/opt/pigeon/run-turn-from-runtime-config.sh:ro
+      - ../scripts/turn-peer-policy.conf:/opt/pigeon/turn-peer-policy.conf:ro
+      - runtime_b:/run/pigeon:ro
+  browser:
+    image: mcr.microsoft.com/playwright:v1.60.0-noble
+    entrypoint: [node, -e, "setInterval(() => {}, 60000)"]
+    shm_size: 256mb
+    volumes:
+      - .:/opt/pigeon/tests:ro
+      - ../node_modules:/opt/pigeon/node_modules:ro
+volumes:
+  ipfs_a:
+  ipfs_b:
+  local_a:
+  local_b:
+  runtime_a:
+  runtime_b:
+networks:
+  default:
+    internal: true

@@ -75,3 +75,9 @@ jobs:
 
       - name: Verify backend-issued credentials and bidirectional browser audio
         run: npm run test:media
+
+      - name: Verify calls between independent application and TURN nodes
+        run: |
+          docker pull ghcr.io/haskou/pigeon-swarm:latest
+          export PIGEON_TEST_IMAGE="$(docker image inspect ghcr.io/haskou/pigeon-swarm:latest --format '{{index .RepoDigests 0}}')"
+          npm run test:calls

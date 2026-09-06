@@ -46,7 +46,7 @@ connection times or a relay's ability to correlate its own traffic.
 | Removed member | Previously received content and historical membership | New epoch keys, new delivery capabilities or permission to apply new operations |
 | Compromised device | Its unlocked history, keys and conversations until revoked | Other conversations to which it was never admitted; retrospective erasure is not promised |
 
-A random mailbox is scoped to **one relationship, direction and destination
+A random mailbox is scoped to **one relationship, direction, sending device and destination
 device**, and rotates every 24 hours and on revocation. It is never an identity
 hash, conversation hash, CID or reusable account-wide identifier. This permits
 short-lived queue linkage; it does not make traffic unlinkable. A fresh random
@@ -126,7 +126,7 @@ relationships. The scope policy delegates lease-retirement rights to its
 revocation authority through the signed, recipient-encrypted grant and durable
 receipt defined in [CONTRACTS.md](CONTRACTS.md). The pinned authority holds
 retire-only capabilities before descriptors are advertised; it sees the scoped
-device-to-lease mapping and can deny service, but receives no history decryption
+sender/destination-to-lease mapping and can deny service, but receives no history decryption
 keys. It revokes every unused future write lease in that
 relationship before issuing replacement descriptors to remaining members.
 Server revocation cannot erase old ciphertext, and MLS still independently

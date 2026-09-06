@@ -283,8 +283,9 @@ rights to a new authority during an ordinary membership transition.
 
 Before advertising any current/future descriptor, its destination device sends a
 [retirement grant](contracts/lease-retirement-grant-v1.schema.json) to this authority
-over the independent relay, encrypted to the pinned revocation HPKE key. The issuer
-must be the admitted destination device; verify its Ed25519 signature over JCS
+over the independent relay, encrypted to the pinned revocation HPKE key. The grant binds both `senderDeviceKey` and `recipientDeviceKey`; each mailbox is
+for one sending device and one destination device in the scope. Both keys must
+be admitted under the cited head. The issuer must be the destination device; verify its Ed25519 signature over JCS
 excluding `signature`, prefixed by `pigeon.private-lease-grant.v1` and a zero byte,
 and bind the exact current scope/head/revision and lease. The grant carries only
 the selected gateway origin, random mailbox, expiry and independent retire-only
@@ -302,12 +303,13 @@ pending, including advance offline schedules. It must already possess receipts
 for every advertised lease; destination availability is not needed for retirement.
 
 On a verified removal, the authority uses the stored capabilities to retire every
-unexpired lease for that destination/relationship, including future write windows,
+unexpired lease where either sender or destination is removed, including future
+write windows,
 and waits for the selected replica pair to confirm before replacement descriptors
 become active. Missing receipts or unreachable replicas block activation rather
 than claiming retirement. Failed attempts remain in a durable retry outbox until
 confirmed or lease expiry; MLS revocation still rejects unauthorized operations.
-This trusted authority sees the scope/device-to-lease mapping and may deny service;
+This trusted authority sees both sides of the scoped device-to-device lease mapping and may deny service;
 it cannot decrypt history. Retain grant metadata only through lease expiry plus the
 24-hour tombstone window. Its compromise and metadata correlation are explicit
 limits, not an anonymous revocation service.

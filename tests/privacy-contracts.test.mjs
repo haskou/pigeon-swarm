@@ -574,6 +574,7 @@ test("lease retirement grants carry a separate retire-only right and a bounded r
     revision: 1,
     headHash: valid.mailboxId,
     recipientDeviceKey: valid.mailboxId,
+    senderDeviceKey: valid.mailboxId,
     mailboxId: valid.mailboxId,
     gatewayOrigin: "https://mailbox.example",
     leaseExpiresAt: valid.expiresAt,
@@ -582,6 +583,7 @@ test("lease retirement grants carry a separate retire-only right and a bounded r
     signature: Buffer.alloc(64).toString("base64url"),
   };
   assert.equal(grant(value), true);
+  assert.equal(grant({ ...value, senderDeviceKey: undefined }), false);
   assert.equal(grant({ ...value, readCapability: valid.mailboxId }), false);
   assert.equal(
     grant({ ...value, gatewayOrigin: "http://mailbox.example" }),

@@ -73,6 +73,9 @@ jobs:
       - name: Validate private delivery contracts
         run: npm run test:privacy
 
+      - name: Validate storage benchmark budgets
+        run: node --test benchmarks/private-storage/budgets.test.mjs
+
       - name: Verify browser diagnostic redaction
         run: node --test tests/turn-browser-probe.test.mjs
 

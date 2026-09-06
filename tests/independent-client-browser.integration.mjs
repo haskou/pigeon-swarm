@@ -106,6 +106,50 @@ test('independent built client browser contract with explicitly fake backend fix
     assert.equal(await page.evaluate(() => localStorage.getItem('pigeon-swarm-client-node-v1')), null);
   });
 
+  for (const savedSelection of [null, '{corrupt-json']) {
+    for (const unsubscribeSucceeds of [true, false]) {
+      await t.test(`missing or corrupt selection retires old notifications before connecting: ${savedSelection ?? 'absent'}, unsubscribe=${unsubscribeSucceeds}`, async (subtest) => {
+        const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+        const page = await pageFor(subtest);
+        await page.goto(origin);
+        if (savedSelection !== null) {
+          await page.evaluate((value) => localStorage.setItem('pigeon-swarm-client-node-v1', value), savedSelection);
+          await page.reload();
+        }
+        await page.getByLabel('Node address').waitFor();
+        await page.evaluate((succeeds) => {
+          sessionStorage.setItem('retirement-events', '[]');
+          const record = (event) => {
+            const events = JSON.parse(sessionStorage.getItem('retirement-events'));
+            events.push(event);
+            sessionStorage.setItem('retirement-events', JSON.stringify(events));
+          };
+          Object.defineProperty(navigator.serviceWorker, 'getRegistration', {
+            configurable: true,
+            value: async () => ({
+              pushManager: {
+                getSubscription: async () => ({
+                  unsubscribe: async () => { record('unsubscribe'); return succeeds; },
+                }),
+              },
+              getNotifications: async () => [{ close: () => record('close') }],
+            }),
+          });
+        }, unsubscribeSucceeds);
+        await choose(page, `${node.origin}/api`);
+        if (unsubscribeSucceeds) {
+          await page.getByRole('link', { name: 'Change node' }).waitFor();
+          assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('retirement-events'))), ['unsubscribe', 'close']);
+        } else {
+          await page.getByRole('alert').filter({ hasText: 'Could not disconnect notifications' }).waitFor();
+          assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('retirement-events'))), ['unsubscribe']);
+          assert.equal(await page.evaluate(() => localStorage.getItem('pigeon-swarm-client-node-v1')), savedSelection);
+          assert.deepEqual(node.requests, ['/api/client-contract']);
+        }
+      });
+    }
+  }
+
   await t.test('valid loopback contract boots real UI and ignores backend scriptURL; node switch reloads and scopes credential reads', async (subtest) => {
     const contract = { protocol: 'pigeon-swarm', apiVersion: 1 };
     const first = await fakeNode(subtest, contract);

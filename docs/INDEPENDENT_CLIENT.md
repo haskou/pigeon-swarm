@@ -86,11 +86,13 @@ The selected address is a separate node API base, normally an HTTPS URL ending i
 
 The static origin denies remote scripts, JavaScript `eval`, plugins, framing, base-URL changes, and form submissions. Its CSP allows same-origin scripts and workers, blob workers, and WebAssembly compilation needed by RNNoise. Existing UI styles require inline styles. HTTPS/WSS connections are permitted for selectable remote nodes; HTTP/WS exceptions are limited to exact loopback hosts. The CSP is a defense around the trusted client, not a replacement for endpoint validation or response sanitization.
 
-Independent mode rejects external profile-picture and banner URLs. Uploaded CID images remain available through protected fetches and local blob URLs. The static origin's image CSP permits only same-origin, data, and blob images, so cached external profile URLs cannot initiate image or CSS-background requests to a remote host.
+Independent mode rejects external profile-picture and banner URLs. Link previews retain text and hyperlinks without loading remote images or favicons; push notifications use bundled icons and badges. Uploaded CID images remain available through protected fetches and local blob URLs. The static origin's image CSP permits only same-origin, data, and blob images, so cached external profile URLs cannot initiate image or CSS-background requests to a remote host.
 
 Camera, microphone, and screen capture remain limited to the client origin by Permissions Policy and still require browser permission. Remote clients need a secure HTTPS context for these features. Preserve `Permissions-Policy`, `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer` at the reverse proxy. Validate media in a real browser against the intended node and TURN configuration; serving the page successfully does not establish media connectivity.
 
 ## Validation
+
+The independent-client CI job skips fork pull requests and Dependabot runs because they cannot use the private UI repository credential. It runs for trusted repository contexts; maintainers must configure `SOURCE_REPOSITORIES_TOKEN` with read access to the UI repository. The wrapper-only static-server checks still run for untrusted pull requests.
 
 Run `node --test tests/client-server.test.mjs` for real HTTP path, MIME, caching and header checks. Build the UI in independent mode, set `PIGEON_CLIENT_DIST` to its absolute `dist` path, install the wrapper’s test dependencies and Playwright Chromium, then run:
 

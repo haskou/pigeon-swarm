@@ -70,3 +70,7 @@ Pigeon Swarm is not affiliated with, endorsed by, or sponsored by Discord Inc, N
 client storage, delivery boundaries and migration plan, with a source inventory,
 measured storage comparison and versioned contracts. These protections require
 the linked implementation work; they are not enabled by this deployment yet.
+
+## Independent client
+
+Users can run the browser client from a different origin than their node, select a compatible node, and keep executable code under a separate distributor’s control. See [Independent browser client](docs/INDEPENDENT_CLIENT.md) for verified image releases, installation, trust boundaries, updates, and rollback.

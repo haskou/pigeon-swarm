@@ -23,6 +23,9 @@ jobs:
       - name: Validate TURN secret and Compose contract
         run: node --test tests/turn-secret.test.mjs
 
+      - name: Validate independent static client origin
+        run: node --test tests/client-server.test.mjs
+
       - name: Guard simple runtime contract
         run: |
           forbidden_transport="in-""memory"
@@ -86,4 +89,52 @@ jobs:
         run: |
           docker pull ghcr.io/haskou/pigeon-swarm:latest
           export PIGEON_TEST_IMAGE="$(docker image inspect ghcr.io/haskou/pigeon-swarm:latest --format '{{index .RepoDigests 0}}')"
+          npm run test:calls
+
+  independent-client:
+    name: Validate independent client
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out image project
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check out supported client source
+        uses: actions/checkout@v7
+        with:
+          repository: haskou/pigeon-swarm-ui
+          ref: 2a54094444814121296913f6048fc38645405d64
+          path: client-source
+          token: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build independent client
+        working-directory: client-source
+        run: |
+          yarn install --frozen-lockfile
+          VITE_INDEPENDENT_CLIENT=true yarn build
+
+      - name: Install browser test tooling
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+
+      - name: Verify browser trust boundary and update rollback
+        run: |
+          export PIGEON_CLIENT_DIST="$GITHUB_WORKSPACE/client-source/dist"
+          node --test tests/independent-client-browser.integration.mjs
+
+      - name: Verify independent client calls against real nodes
+        run: |
+          docker pull ghcr.io/haskou/pigeon-swarm:latest
+          export PIGEON_TEST_IMAGE="$(docker image inspect ghcr.io/haskou/pigeon-swarm:latest --format '{{index .RepoDigests 0}}')"
+          export PIGEON_CLIENT_DIST="$GITHUB_WORKSPACE/client-source/dist"
+          export PIGEON_INDEPENDENT_CLIENT=true
           npm run test:calls

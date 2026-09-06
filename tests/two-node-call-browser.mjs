@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { createClientServer } from "../client/server.mjs";
 import { chromium } from "playwright";
 import { startCallTestGateways } from "./call-test-https-proxy.mjs";
 
@@ -6,7 +8,15 @@ let stage = "browser startup";
 const urls = ["https://localhost:8443", "https://localhost:8444"];
 const relayAddresses = [process.env.TEST_IP_A, process.env.TEST_IP_B];
 const { stop: stopGateways, spki } = await startCallTestGateways();
+const independentClient = process.env.PIGEON_INDEPENDENT_CLIENT === "true";
+const clientServer = independentClient ? await createClientServer({root: "/opt/pigeon/client-dist"}) : undefined;
+if (clientServer) {
+  clientServer.listen(8445, '127.0.0.1');
+  await once(clientServer, 'listening');
+}
+const stopClient = async () => { if (clientServer) await new Promise(resolve => clientServer.close(resolve)); };
 const pages = [];
+const deliveryDiagnostics = [];
 const browser = await chromium
   .launch({
     args: [
@@ -17,6 +27,7 @@ const browser = await chromium
     ],
   })
   .catch(async () => {
+    await stopClient();
     await stopGateways();
     throw new Error("Test browser startup failed");
   });
@@ -60,7 +71,37 @@ try {
       };
     }, relayAddresses[index]);
     const page = await context.newPage();
+    const diagnostics = {
+      connectionAcks: 0,
+      conversationEvents: 0,
+      listResponses: [],
+    };
+    deliveryDiagnostics.push(diagnostics);
+    page.on("websocket", (socket) => {
+      socket.on("framereceived", ({ payload }) => {
+        try {
+          const message = JSON.parse(String(payload));
+          if (message.type === "connection_ack") diagnostics.connectionAcks++;
+          if (
+            message.type === "domain_event" &&
+            message.event?.type === "conversations.v1.conversation.was_created"
+          )
+            diagnostics.conversationEvents++;
+        } catch {}
+      });
+    });
     page.on("response", async (response) => {
+      if (
+        new URL(response.url()).pathname === "/api/conversations/" &&
+        response.request().method() === "GET"
+      ) {
+        const body = await response.json().catch(() => undefined);
+        diagnostics.listResponses.push({
+          status: response.status(),
+          count: Array.isArray(body?.conversations) ? body.conversations.length : null,
+        });
+        if (diagnostics.listResponses.length > 8) diagnostics.listResponses.shift();
+      }
       if (
         response.status() >= 400 &&
         new URL(response.url()).pathname === "/api/identities/"
@@ -79,7 +120,12 @@ try {
     pages.push(page);
     stage = `register user ${index + 1}`;
     console.log(stage);
-    await page.goto(url);
+    await page.goto(independentClient ? 'http://127.0.0.1:8445' : url);
+    if (independentClient) {
+      await page.getByLabel('Node address').fill(url + '/api');
+      await page.getByRole('button', { name: 'Connect', exact: true }).click();
+      await page.getByRole('link', { name: 'Change node', exact: true }).waitFor();
+    }
     assert.ok(
       await page.evaluate(
         () => isSecureContext && Boolean(globalThis.crypto?.subtle),
@@ -121,15 +167,15 @@ try {
     let identityId;
     while (Date.now() < deadline) {
       identityId = await page.evaluate(
-        async (handle) => {
-          const response = await fetch(`/api/identities/${handle}`, {
+        async ({handle, nodeUrl}) => {
+          const response = await fetch(`${nodeUrl}/api/identities/${handle}`, {
             signal: AbortSignal.timeout(5000),
           });
           if (response.status !== 200) return null;
           const identity = await response.json();
           return typeof identity?.id === "string" ? identity.id : null;
         },
-        `caller-${2 - index}`,
+        {handle: `caller-${2 - index}`, nodeUrl: urls[index]},
       );
       if (identityId) break;
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -158,6 +204,21 @@ try {
   stage = "replicate direct conversation";
   await pages[1].getByTestId("conversation-list-item").first().click();
   await pages[1].getByTestId("message-composer-input").waitFor();
+  if (independentClient) {
+    stage = "accept encrypted conversation invitation";
+    await pages[1].getByTestId("notifications-open-button").first().click();
+    await pages[1].getByTestId("notification-accept-button").click();
+    await pages[1].waitForFunction(
+      () => !document.querySelector('[data-testid="message-composer-input"]').disabled,
+    );
+    await pages[0].bringToFront();
+    await pages[0].getByTestId("message-composer-input").fill("Independent client message");
+    await pages[0].getByTestId("message-composer-input").press("Enter");
+    await pages[0].getByText("Independent client message", { exact: true }).first().waitFor();
+    await pages[1].bringToFront();
+    await pages[1].getByText("Independent client message", { exact: true }).first().waitFor();
+    console.log("PASS independent client message decryption");
+  }
   stage = "application call signalling";
   console.log(stage);
   await pages[0]
@@ -294,6 +355,10 @@ try {
   );
 } catch (error) {
   console.log(
+    "Conversation delivery diagnostics:",
+    JSON.stringify(deliveryDiagnostics),
+  );
+  console.log(
     "Failure location:",
     error?.name,
     error?.stack
@@ -323,6 +388,7 @@ try {
   try {
     await browser.close();
   } finally {
+    await stopClient();
     await stopGateways();
   }
 }

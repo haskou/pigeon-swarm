@@ -1,0 +1,353 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { createServer as createTlsServer } from 'node:https';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { test } from 'node:test';
+import { pathToFileURL } from 'node:url';
+import { createClientServer } from '../client/server.mjs';
+
+async function listen(server, t) {
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise((done) => {
+    server.closeAllConnections();
+    server.close(done);
+  }));
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+async function fakeNode(t, contract, tls) {
+  const requests = [];
+  const handle = (req, res) => {
+    requests.push(req.url);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization');
+    res.setHeader('Content-Type', 'application/json');
+    if (req.method === 'OPTIONS') return res.writeHead(204).end();
+    if (req.url === '/malicious.js') {
+      res.setHeader('Content-Type', 'text/javascript');
+      return res.end('globalThis.backendCodeExecuted = true;');
+    }
+    const body = req.url === '/api/client-contract' ? contract
+      : req.url === '/api/node/networks/' ? { networks: [] }
+        : req.url === '/api/node/' ? { id: 'fake-node', name: 'Negative-test fixture', owner: null }
+          : req.url === '/api/peers/' ? { peers: [], ipfsPeers: [], networkSynchronization: null }
+            : {};
+    res.end(JSON.stringify(body));
+  };
+  const origin = await listen(tls ? createTlsServer(tls, handle) : createServer(handle), t);
+  return { requests, origin: tls ? origin.replace('http:', 'https:') : origin };
+}
+
+test('independent built client browser contract with explicitly fake backend fixtures', {
+  skip: !process.env.PIGEON_CLIENT_DIST && 'Set PIGEON_CLIENT_DIST to an independently built UI dist',
+  timeout: 90000,
+}, async (t) => {
+  const modulePath = process.env.PIGEON_PLAYWRIGHT_MODULE;
+  const { chromium } = await import(modulePath ? pathToFileURL(resolve(modulePath)).href : 'playwright');
+  const directory = await mkdtemp(join(tmpdir(), 'pigeon-browser-contract-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const root = join(directory, 'public');
+  await cp(resolve(process.env.PIGEON_CLIENT_DIST), root, { recursive: true });
+  await writeFile(join(root, 'probe-worker.js'), 'postMessage({ready: true, scope: new URL(location.href).hash});');
+  await writeFile(join(root, 'probe.webmanifest'), JSON.stringify({ name: 'Client CSP probe', start_url: '/', display: 'standalone' }));
+  const clientRequests = [];
+  const clientServer = await createClientServer({ root });
+  clientServer.on('request', (request) => clientRequests.push(request.url));
+  const origin = await listen(clientServer, t);
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.PIGEON_CHROMIUM_EXECUTABLE });
+  t.after(() => browser.close());
+
+  async function pageFor(subtest) {
+    const context = await browser.newContext({ locale: 'en-US' });
+    context.setDefaultTimeout(12000);
+    subtest.after(() => context.close());
+    await context.addInitScript(() => {
+      globalThis.documentId = crypto.randomUUID();
+      globalThis.storageReads = [];
+      const getItem = Storage.prototype.getItem;
+      Storage.prototype.getItem = function (key) {
+        globalThis.storageReads.push(key);
+        return getItem.call(this, key);
+      };
+    });
+    return context.newPage();
+  }
+
+  async function choose(page, address) {
+    await page.getByLabel('Node address').fill(address);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  }
+
+  await t.test('fresh gate sends no backend traffic before choice and rejects a wrong contract', async (subtest) => {
+    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 999 });
+    const page = await pageFor(subtest);
+    const offOrigin = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).origin !== origin) offOrigin.push(request.url());
+    });
+    await page.goto(origin);
+    await page.getByRole('heading', { name: 'Connect to a node' }).waitFor();
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    });
+    assert.deepEqual(offOrigin, []);
+    assert.deepEqual(node.requests, []);
+    await choose(page, `${node.origin}/api`);
+    await page.getByRole('alert').filter({ hasText: 'not compatible' }).waitFor();
+    assert.deepEqual(node.requests, ['/api/client-contract']);
+    assert.equal(await page.getByRole('link', { name: 'Change node' }).count(), 0);
+    assert.equal(await page.evaluate(() => localStorage.getItem('pigeon-swarm-client-node-v1')), null);
+  });
+
+  for (const savedSelection of [null, '{corrupt-json']) {
+    for (const unsubscribeSucceeds of [true, false]) {
+      await t.test(`missing or corrupt selection retires old notifications before connecting: ${savedSelection ?? 'absent'}, unsubscribe=${unsubscribeSucceeds}`, async (subtest) => {
+        const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+        const page = await pageFor(subtest);
+        await page.goto(origin);
+        if (savedSelection !== null) {
+          await page.evaluate((value) => localStorage.setItem('pigeon-swarm-client-node-v1', value), savedSelection);
+          await page.reload();
+        }
+        await page.getByLabel('Node address').waitFor();
+        await page.evaluate((succeeds) => {
+          sessionStorage.setItem('retirement-events', '[]');
+          const record = (event) => {
+            const events = JSON.parse(sessionStorage.getItem('retirement-events'));
+            events.push(event);
+            sessionStorage.setItem('retirement-events', JSON.stringify(events));
+          };
+          Object.defineProperty(navigator.serviceWorker, 'getRegistration', {
+            configurable: true,
+            value: async () => ({
+              pushManager: {
+                getSubscription: async () => ({
+                  unsubscribe: async () => { record('unsubscribe'); return succeeds; },
+                }),
+              },
+              getNotifications: async () => [{ close: () => record('close') }],
+            }),
+          });
+        }, unsubscribeSucceeds);
+        await choose(page, `${node.origin}/api`);
+        if (unsubscribeSucceeds) {
+          await page.getByRole('link', { name: 'Change node' }).waitFor();
+          assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('retirement-events'))), ['unsubscribe', 'close']);
+        } else {
+          await page.getByRole('alert').filter({ hasText: 'Could not disconnect notifications' }).waitFor();
+          assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('retirement-events'))), ['unsubscribe']);
+          assert.equal(await page.evaluate(() => localStorage.getItem('pigeon-swarm-client-node-v1')), savedSelection);
+          assert.deepEqual(node.requests, ['/api/client-contract']);
+        }
+      });
+    }
+  }
+
+  await t.test('initial community invite path and key fragment survive choosing a compatible node', async (subtest) => {
+    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+    const page = await pageFor(subtest);
+    const inviteUrl = `${origin}/invite/community/disposable-token#k=disposable-secret`;
+    await page.goto(inviteUrl);
+    await page.getByLabel('Node address').waitFor();
+    await choose(page, `${node.origin}/api`);
+    await page.getByRole('link', { name: 'Change node' }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.app-screen'));
+    assert.equal(page.url(), inviteUrl);
+    await page.getByRole('link', { name: 'Change node' }).click();
+    await page.getByLabel('Node address').waitFor();
+    await choose(page, `${node.origin}/api`);
+    await page.getByRole('link', { name: 'Change node' }).waitFor();
+    assert.equal(page.url(), inviteUrl);
+  });
+
+  for (const previouslySelected of [false, true]) {
+    await t.test(`cross-tab node selection preserves pending invite and requires confirmation: existing=${previouslySelected}`, async (subtest) => {
+      const first = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+      const second = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+      const page = await pageFor(subtest);
+      await page.goto(origin);
+      if (previouslySelected) {
+        await choose(page, `${first.origin}/api`);
+        await page.getByRole('link', { name: 'Change node' }).waitFor();
+      }
+      const invite = await page.context().newPage();
+      const inviteUrl = `${origin}/invite/community/disposable-token?source=shared#k=disposable-secret`;
+      await invite.goto(inviteUrl);
+      if (previouslySelected) await invite.getByRole('link', { name: 'Change node' }).waitFor();
+      else await invite.getByLabel('Node address').waitFor();
+      const initialDocument = await invite.evaluate(() => globalThis.documentId);
+      await page.goto(origin + '/connect');
+      await choose(page, `${second.origin}/api`);
+      await page.getByRole('link', { name: 'Change node' }).waitFor();
+      await invite.getByRole('heading', { name: 'Connect to a node' }).waitFor();
+      assert.equal(new URL(invite.url()).pathname, '/invite/community/disposable-token');
+      assert.equal(new URL(invite.url()).hash, '#k=disposable-secret');
+      assert.notEqual(await invite.evaluate(() => globalThis.documentId), initialDocument);
+      assert.equal(await invite.getByRole('link', { name: 'Change node' }).count(), 0);
+      await choose(invite, `${second.origin}/api`);
+      await invite.getByRole('link', { name: 'Change node' }).waitFor();
+      await invite.waitForFunction(() => document.querySelector('.app-screen'));
+      assert.equal(invite.url(), inviteUrl);
+      assert.equal(clientRequests.some((url) => url.includes('disposable-secret')), false);
+    });
+  }
+
+  await t.test('valid loopback contract boots real UI and ignores backend scriptURL; node switch reloads and scopes credential reads', async (subtest) => {
+    const contract = { protocol: 'pigeon-swarm', apiVersion: 1 };
+    const first = await fakeNode(subtest, contract);
+    contract.scriptURL = `${first.origin}/malicious.js`;
+    const second = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+    const page = await pageFor(subtest);
+    await page.goto(origin);
+    const gateDocument = await page.evaluate(() => globalThis.documentId);
+    const firstBootstrap = page.waitForResponse(`${first.origin}/api/node/networks/`);
+    await choose(page, `${first.origin}/api`);
+    await firstBootstrap;
+    await page.getByRole('link', { name: 'Change node' }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.app-screen'));
+    assert.notEqual(await page.evaluate(() => globalThis.documentId), gateDocument);
+    assert.ok(first.requests.includes('/api/node/networks/'));
+    assert.equal(first.requests.includes('/malicious.js'), false);
+    assert.equal(await page.evaluate(() => globalThis.backendCodeExecuted), undefined);
+    const firstScope = createHash('sha256').update(`${first.origin}/api`).digest('hex');
+    const secondScope = createHash('sha256').update(`${second.origin}/api`).digest('hex');
+    await page.evaluate((scope) => localStorage.setItem(`pigeon-swarm-credentials:${scope}`, JSON.stringify({ identityId: 'synthetic-node-A-identity' })), firstScope);
+    const otherTab = await page.context().newPage();
+    await otherTab.goto(origin);
+    await otherTab.getByRole('link', { name: 'Change node' }).waitFor();
+    const otherDocument = await otherTab.evaluate(() => globalThis.documentId);
+    await page.getByRole('link', { name: 'Change node' }).click();
+    await page.getByLabel('Node address').waitFor();
+    const choosingDocument = await page.evaluate(() => globalThis.documentId);
+    const secondBootstrap = page.waitForResponse(`${second.origin}/api/node/networks/`);
+    await choose(page, `${second.origin}/api`);
+    await secondBootstrap;
+    await page.getByRole('link', { name: 'Change node' }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.app-screen'));
+    assert.notEqual(await page.evaluate(() => globalThis.documentId), choosingDocument);
+    await otherTab.waitForURL(origin + '/connect');
+    await otherTab.getByRole('heading', { name: 'Connect to a node' }).waitFor();
+    assert.notEqual(await otherTab.evaluate(() => globalThis.documentId), otherDocument);
+    assert.equal(await otherTab.getByRole('link', { name: 'Change node' }).count(), 0);
+    const reads = await page.evaluate(() => globalThis.storageReads);
+    assert.ok(reads.includes(`pigeon-swarm-credentials:${secondScope}`));
+    assert.equal(reads.includes(`pigeon-swarm-credentials:${firstScope}`), false);
+    assert.equal(reads.includes('pigeon-swarm-credentials'), false);
+    assert.ok(second.requests.includes('/api/node/networks/'));
+    assert.equal(new URL(page.url()).origin, origin);
+  });
+
+  await t.test('browser enforces remote-script CSP while same-origin worker and manifest succeed', async (subtest) => {
+    const remote = await fakeNode(subtest, {});
+    const page = await pageFor(subtest);
+    await page.goto(origin);
+    await page.getByLabel('Node address').waitFor();
+    const violation = await page.evaluate((url) => new Promise((done) => {
+      document.addEventListener('securitypolicyviolation', (event) => {
+        if (event.blockedURI === url) done(event.effectiveDirective);
+      });
+      const script = document.createElement('script');
+      script.src = url;
+      document.head.append(script);
+    }), `${remote.origin}/malicious.js`);
+    assert.equal(violation, 'script-src-elem');
+    assert.deepEqual(remote.requests, []);
+    assert.equal(await page.evaluate(() => globalThis.backendCodeExecuted), undefined);
+    assert.deepEqual(await page.evaluate(() => new Promise((done, reject) => {
+      const worker = new Worker('/probe-worker.js#pigeonNodeScope=opaque-partition', {type: 'module'});
+      worker.onmessage = (event) => { worker.terminate(); done(event.data); };
+      worker.onerror = (event) => { worker.terminate(); reject(new Error(event.message)); };
+    })), {ready: true, scope: '#pigeonNodeScope=opaque-partition'});
+    assert.ok(clientRequests.includes('/probe-worker.js'));
+    assert.equal(clientRequests.some((url) => url.includes('opaque-partition')), false);
+    await page.evaluate(() => {
+      document.querySelectorAll('link[rel="manifest"]').forEach((link) => link.remove());
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = '/probe.webmanifest';
+      document.head.append(link);
+    });
+    const session = await page.context().newCDPSession(page);
+    const manifest = await session.send('Page.getAppManifest');
+    assert.equal(JSON.parse(manifest.data).name, 'Client CSP probe');
+    assert.deepEqual(manifest.errors, []);
+  });
+
+  await t.test('browser blocks external image and CSS background requests while local blob images render', async (subtest) => {
+    const remote = await fakeNode(subtest, {});
+    const page = await pageFor(subtest);
+    await page.goto(origin);
+    await page.getByLabel('Node address').waitFor();
+    await page.evaluate(async (remoteOrigin) => {
+      globalThis.imageCspViolations = [];
+      document.addEventListener('securitypolicyviolation', (event) => {
+        if (event.effectiveDirective === 'img-src') globalThis.imageCspViolations.push(event.blockedURI);
+      });
+      const image = new Image();
+      const loaded = new Promise((done) => { image.onload = done; image.onerror = done; });
+      image.src = `${remoteOrigin}/avatar.png`;
+      document.body.append(image);
+      const banner = document.createElement('div');
+      banner.style.cssText = `width: 100px; height: 100px; background-image: url("${remoteOrigin}/banner.png")`;
+      document.body.append(banner);
+      banner.getBoundingClientRect();
+      await loaded;
+    }, remote.origin);
+    await page.waitForFunction(() => globalThis.imageCspViolations.length === 2, undefined, { timeout: 2000 });
+    assert.deepEqual((await page.evaluate(() => globalThis.imageCspViolations)).sort(), [`${remote.origin}/avatar.png`, `${remote.origin}/banner.png`]);
+    assert.deepEqual(remote.requests, []);
+    const dimensions = await page.evaluate(async () => {
+      const response = await fetch('/logo.png');
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const image = new Image();
+      image.src = blobUrl;
+      document.body.append(image);
+      await image.decode();
+      const dimensions = { width: image.naturalWidth, height: image.naturalHeight };
+      URL.revokeObjectURL(blobUrl);
+      return dimensions;
+    });
+    assert.ok(dimensions.width > 0 && dimensions.height > 0);
+  });
+
+  await t.test('invalid self-signed TLS remains blocked without certificate overrides', async (subtest) => {
+    const key = join(directory, 'fixture.key');
+    const cert = join(directory, 'fixture.crt');
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=localhost'], { stdio: 'ignore' });
+    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 }, { key: await readFile(key), cert: await readFile(cert) });
+    const page = await pageFor(subtest);
+    const failures = [];
+    page.on('requestfailed', (request) => failures.push(request.failure()?.errorText));
+    await page.goto(origin);
+    await choose(page, `${node.origin}/api`);
+    await page.getByRole('alert').filter({ hasText: 'Could not connect securely' }).waitFor();
+    assert.ok(failures.some((error) => error?.includes('ERR_CERT_AUTHORITY_INVALID')));
+    assert.deepEqual(node.requests, []);
+    assert.equal(await page.evaluate(() => localStorage.getItem('pigeon-swarm-client-node-v1')), null);
+  });
+
+  await t.test('same-origin update and rollback fixtures remain fresh under actual independent service worker', async (subtest) => {
+    const page = await pageFor(subtest);
+    await page.goto(origin);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    assert.equal(await page.evaluate(() => navigator.serviceWorker.controller !== null), true);
+    const originalIndex = await readFile(join(root, 'index.html'));
+    subtest.after(() => writeFile(join(root, 'index.html'), originalIndex));
+    for (const [version, hash] of [['A', 'aaaaaaaa'], ['B', 'bbbbbbbb'], ['A', 'aaaaaaaa']]) {
+      await writeFile(join(root, `assets/release-${hash}.js`), `document.querySelector('#version').textContent = '${version}';`);
+      await writeFile(join(root, 'index.html'), `<!doctype html><title>Release fixture</title><p id="version"></p><script src="/assets/release-${hash}.js"></script>`);
+      const response = await page.reload();
+      assert.equal(response.headers()['cache-control'], 'no-store');
+      await page.waitForFunction((expected) => document.querySelector('#version')?.textContent === expected, version);
+      assert.equal(await page.evaluate(() => navigator.serviceWorker.controller !== null), true);
+    }
+  });
+});

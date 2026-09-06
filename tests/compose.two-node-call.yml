@@ -67,9 +67,13 @@ services:
     image: mcr.microsoft.com/playwright:v1.60.0-noble
     entrypoint: [node, -e, "setInterval(() => {}, 60000)"]
     shm_size: 256mb
+    environment:
+      PIGEON_INDEPENDENT_CLIENT: ${PIGEON_INDEPENDENT_CLIENT:-false}
     volumes:
       - .:/opt/pigeon/tests:ro
       - ../node_modules:/opt/pigeon/node_modules:ro
+      - ../client:/opt/pigeon/client:ro
+      - ${PIGEON_CLIENT_DIST:-../client}:/opt/pigeon/client-dist:ro
 volumes:
   ipfs_a:
   ipfs_b:

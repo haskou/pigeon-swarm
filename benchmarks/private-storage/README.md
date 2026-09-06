@@ -29,7 +29,10 @@ error exits nonzero. Before emitting `assertions: "PASS"`, it checks both engine
 against the documented local budgets: write batch p95 <= 250 ms, point and page
 read p95 <= 100 ms, and total expiry batch <= 1,000 ms. Invalid or over-budget
 timings exit nonzero without reporting PASS. Run `npm test` to verify these gates,
-including a synthetic over-budget process, without Docker or a database.
+including over-budget and cleanup-failure cases, without Docker or a database.
+Cleanup attempts every resource independently, preserves the original failure
+alongside cleanup errors, and removes temporary files even if database cleanup
+fails. PASS is printed only after successful cleanup.
 
 Do not interpret one local run as a production percentile,
 a storage-engine ranking or a secure-deletion test.

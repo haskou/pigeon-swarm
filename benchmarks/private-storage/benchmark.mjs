@@ -7,6 +7,7 @@ import { performance } from 'node:perf_hooks';
 import { Level } from 'level';
 import { MongoClient } from 'mongodb';
 import { assertWithinBudgets } from './budgets.mjs';
+import { finishBenchmark } from './cleanup.mjs';
 
 const count = 10_000;
 const batchSize = 100;
@@ -58,6 +59,8 @@ async function diskBytes(directory) {
   return bytes;
 }
 let level;
+let report;
+const failures = [];
 try {
   await mongo.connect();
   const database = mongo.db(databaseName);
@@ -170,63 +173,59 @@ try {
       expiry: mongoExpiry,
     },
   });
-  console.log(
-    JSON.stringify(
-      {
-        measuredAt: new Date().toISOString(),
-        environment: {
-          node: process.version,
-          platform: platform(),
-          arch: arch(),
-          cpu: cpus()[0].model,
-          mongoVersion: (await database.admin().serverInfo()).version,
-          levelVersion: '10.0.0',
-          mongoDriverVersion: '6.20.0',
-        },
-        workload: {
-          count,
-          batchSize,
-          payloadBytes,
-          mailboxCount,
-          pointReads: 1000,
-          pages: 100,
-          pageSize: 50,
-          expiredRows: 1000,
-        },
-        conditions: [
-          'Synthetic random ciphertext; no real user data',
-          `Level runs on ${platform()}; MongoDB runs in Docker over loopback with 768 MiB limit`,
-          'Level sync writes and MongoDB w:1,j:true; neither test proves power-loss durability or replicated acknowledgement',
-          'Expiry is an explicit indexed delete, not the MongoDB TTL monitor',
-          'Single run, no warmup; does not establish production p95 or a cross-engine winner',
-        ],
-        level: {
-          writes: levelWrite,
-          reads: levelRead,
-          pages: levelPage,
-          expiry: levelExpiry,
-          diskBytesBeforeExpiry: levelDisk,
-        },
-        mongodb: {
-          writes: mongoWrite,
-          reads: mongoRead,
-          pages: mongoPage,
-          expiry: mongoExpiry,
-          storageBytesBeforeExpiry: mongoStats.storageSize,
-          indexBytesBeforeExpiry: mongoStats.totalIndexSize,
-        },
-        assertions: 'PASS',
-      },
-      null,
-      2,
-    ),
-  );
+  report = {
+    measuredAt: new Date().toISOString(),
+    environment: {
+      node: process.version,
+      platform: platform(),
+      arch: arch(),
+      cpu: cpus()[0].model,
+      mongoVersion: (await database.admin().serverInfo()).version,
+      levelVersion: '10.0.0',
+      mongoDriverVersion: '6.20.0',
+    },
+    workload: {
+      count,
+      batchSize,
+      payloadBytes,
+      mailboxCount,
+      pointReads: 1000,
+      pages: 100,
+      pageSize: 50,
+      expiredRows: 1000,
+    },
+    conditions: [
+      'Synthetic random ciphertext; no real user data',
+      `Level runs on ${platform()}; MongoDB runs in Docker over loopback with 768 MiB limit`,
+      'Level sync writes and MongoDB w:1,j:true; neither test proves power-loss durability or replicated acknowledgement',
+      'Expiry is an explicit indexed delete, not the MongoDB TTL monitor',
+      'Single run, no warmup; does not establish production p95 or a cross-engine winner',
+    ],
+    level: {
+      writes: levelWrite,
+      reads: levelRead,
+      pages: levelPage,
+      expiry: levelExpiry,
+      diskBytesBeforeExpiry: levelDisk,
+    },
+    mongodb: {
+      writes: mongoWrite,
+      reads: mongoRead,
+      pages: mongoPage,
+      expiry: mongoExpiry,
+      storageBytesBeforeExpiry: mongoStats.storageSize,
+      indexBytesBeforeExpiry: mongoStats.totalIndexSize,
+    },
+    assertions: 'PASS',
+  };
+} catch (error) {
+  failures.push(error);
 } finally {
-  await level?.close();
-  try {
-    await mongo.db(databaseName).dropDatabase();
-  } finally {
-    await mongo.close();
-  }
-  await rm(root, { recursive: true, force: true });
+  await finishBenchmark([
+    () => level?.close(),
+    () => mongo.db(databaseName).dropDatabase(),
+    () => mongo.close(),
+    () => rm(root, { recursive: true, force: true }),
+  ], failures);
 }
+console.log(JSON.stringify(report, null, 2));

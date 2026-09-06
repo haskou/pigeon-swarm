@@ -6,6 +6,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Level } from 'level';
 import { MongoClient } from 'mongodb';
+import { assertWithinBudgets } from './budgets.mjs';
 
 const count = 10_000;
 const batchSize = 100;
@@ -155,6 +156,20 @@ try {
     count - 1000,
   );
   assert.equal(await collection.countDocuments(), count - 1000);
+  assertWithinBudgets({
+    level: {
+      writes: levelWrite,
+      reads: levelRead,
+      pages: levelPage,
+      expiry: levelExpiry,
+    },
+    mongodb: {
+      writes: mongoWrite,
+      reads: mongoRead,
+      pages: mongoPage,
+      expiry: mongoExpiry,
+    },
+  });
   console.log(
     JSON.stringify(
       {
@@ -180,7 +195,7 @@ try {
         },
         conditions: [
           'Synthetic random ciphertext; no real user data',
-          'Level runs on macOS; MongoDB runs in Docker over loopback with 768 MiB limit',
+          `Level runs on ${platform()}; MongoDB runs in Docker over loopback with 768 MiB limit`,
           'Level sync writes and MongoDB w:1,j:true; neither test proves power-loss durability or replicated acknowledgement',
           'Expiry is an explicit indexed delete, not the MongoDB TTL monitor',
           'Single run, no warmup; does not establish production p95 or a cross-engine winner',

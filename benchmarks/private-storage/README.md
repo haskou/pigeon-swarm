@@ -25,5 +25,11 @@ interoperability fixture. JSON output includes versions, workload, exact
 conditions, latency samples summarized by percentile and assertion status.
 
 The recorded result is a single successful run. A failed assertion or connection
-error exits nonzero. Do not interpret one local run as a production percentile,
+error exits nonzero. Before emitting `assertions: "PASS"`, it checks both engines
+against the documented local budgets: write batch p95 <= 250 ms, point and page
+read p95 <= 100 ms, and total expiry batch <= 1,000 ms. Invalid or over-budget
+timings exit nonzero without reporting PASS. Run `npm test` to verify these gates,
+including a synthetic over-budget process, without Docker or a database.
+
+Do not interpret one local run as a production percentile,
 a storage-engine ranking or a secure-deletion test.

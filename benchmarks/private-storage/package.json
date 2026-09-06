@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "benchmark": "node benchmark.mjs"
+    "benchmark": "node benchmark.mjs",
+    "test": "node --test budgets.test.mjs"
   },
   "dependencies": {
     "level": "10.0.0",

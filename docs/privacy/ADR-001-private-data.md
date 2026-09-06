@@ -223,7 +223,9 @@ below a locally observed revision. Sensitive operations need their own response.
 A cached signed head alone is insufficient against replay to a new device.
 
 The owner may delegate this limited role to a trusted continuously available
-device in the signed policy; it cannot grant itself administrative rights.
+admitted device in the signed policy with authenticated control descriptors; it
+cannot grant itself administrative rights. External key-only delegates are not
+supported in version 1.
 The freshness authority must not equivocate or attest stale heads. A malicious
 authorized owner/authority can violate that trust assumption; signed checkpoints
 make detected conflicts actionable but do not make that authority trustless.

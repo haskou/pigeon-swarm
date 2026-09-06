@@ -132,8 +132,13 @@ The policy lists each admitted device signing key and SHA-256 of its exact MLS
 credential bytes, its administrator keys and quorum, sequencer and freshness
 signer. Device keys and credential hashes must each be distinct; administrator
 keys must be admitted device keys, the sequencer must be an administrator and
-the threshold cannot exceed the number of administrators. A freshness signer may
-be an explicitly delegated external key, with the trust limits in the ADR.
+the threshold cannot exceed the number of administrators. The freshness signer must also be an admitted device. Version 1 does not support
+an external authority identified only by a signing key. Its authenticated current
+mailbox/control descriptors and recipient HPKE keys must be distributed in the
+bootstrap and policy-transition bundle before activating that head. Missing or
+expired descriptors leave adoption/sending pending; they cannot be replaced with
+an unauthenticated locator. Freshness requests use that already-provisioned control
+channel and do not themselves require a prior freshness proof, avoiding recursion.
 Reject invalid policies before signing or applying a transition. Verify signatures
 under the **previous** verified policy, never the candidate administrators. After
 MLS processing, compare the complete resulting leaf credential/device set with
@@ -330,10 +335,24 @@ for one sending device and one destination device in the scope. Both keys must
 be admitted under the cited head. The issuer must be the destination device; verify its Ed25519 signature over JCS
 excluding `signature`, prefixed by `pigeon.private-lease-grant.v1` and a zero byte,
 and bind the exact current scope/head/revision and lease. The grant carries only
-the selected gateway origin, random mailbox, expiry and independent retire-only
+the configured `gatewayId`, random mailbox, expiry and independent retire-only
 management capability. It grants no read, ack, write or content decryption right.
 The gateway's management endpoint can retire an existing lease but cannot mint
 new read/write capabilities. Never copy this capability into a delivery envelope.
+
+A grant cannot supply a URL. Resolve `gatewayId` only through an operator-approved
+local gateway registry and require it to match the original selected lease gateway.
+Reject unknown IDs before storing or dispatching the grant. Registry entries have
+a canonical HTTPS origin without userinfo, path, query or fragment and fixed
+retirement paths. Disable redirects. Before each connection, resolve DNS and
+validate every selected address against the configured egress policy, then connect
+to that validated address with the configured TLS hostname; do not resolve again
+between validation and connect. Block loopback, private, link-local, multicast,
+reserved and metadata-service destinations, including IPv4-mapped IPv6 aliases.
+Private-network test gateways need an explicit operator-controlled allowlist that
+participants cannot extend. Never derive endpoints from grant fields or redirects.
+Unknown gateway, DNS rebinding, credential-bearing URL and redirect-to-internal
+cases are mandatory backend tests before activating retirement.
 
 The authority durably stores the grant encrypted at rest, then returns a
 [signed receipt](contracts/lease-retirement-receipt-v1.schema.json). `grantHash` is

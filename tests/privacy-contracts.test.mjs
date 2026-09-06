@@ -576,7 +576,7 @@ test("lease retirement grants carry a separate retire-only right and a bounded r
     recipientDeviceKey: valid.mailboxId,
     senderDeviceKey: valid.mailboxId,
     mailboxId: valid.mailboxId,
-    gatewayOrigin: "https://mailbox.example",
+    gatewayId: valid.mailboxId,
     leaseExpiresAt: valid.expiresAt,
     retireCapability: valid.mailboxId,
     issuerDeviceKey: valid.mailboxId,
@@ -585,8 +585,9 @@ test("lease retirement grants carry a separate retire-only right and a bounded r
   assert.equal(grant(value), true);
   assert.equal(grant({ ...value, senderDeviceKey: undefined }), false);
   assert.equal(grant({ ...value, readCapability: valid.mailboxId }), false);
+  assert.equal(grant({ ...value, gatewayOrigin: "https://localhost:8443" }), false);
   assert.equal(
-    grant({ ...value, gatewayOrigin: "http://mailbox.example" }),
+    grant({ ...value, gatewayId: "https://localhost:8443" }),
     false,
   );
   assert.equal(

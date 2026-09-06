@@ -10,7 +10,7 @@
     "headHash",
     "recipientDeviceKey",
     "mailboxId",
-    "gatewayOrigin",
+    "gatewayId",
     "leaseExpiresAt",
     "retireCapability",
     "issuerDeviceKey",
@@ -42,11 +42,6 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
     },
-    "gatewayOrigin": {
-      "type": "string",
-      "pattern": "^https://[^/?#]+$",
-      "maxLength": 253
-    },
     "leaseExpiresAt": {
       "type": "integer",
       "minimum": 0,
@@ -65,6 +60,10 @@
       "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
     },
     "senderDeviceKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "gatewayId": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
     }

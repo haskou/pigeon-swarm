@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Private delivery acknowledgement v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "mailboxId",
+    "deliveryId"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "mailboxId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "deliveryId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$"
+    }
+  }
+}

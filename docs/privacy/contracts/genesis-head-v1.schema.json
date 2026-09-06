@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Private scope genesis head v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "scopeId",
+    "revision",
+    "parentHeadHash",
+    "mlsEpoch",
+    "mlsContextHash",
+    "policyHash",
+    "headHash",
+    "policy",
+    "signatures"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "scopeId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "revision": {
+      "const": 0
+    },
+    "parentHeadHash": {
+      "type": "null"
+    },
+    "mlsEpoch": {
+      "const": 0
+    },
+    "mlsContextHash": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "policyHash": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "headHash": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "policy": {
+      "allOf": [
+        {
+          "$ref": "authorization-policy-v1.schema.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "devices": {
+              "type": "array",
+              "maxItems": 1
+            },
+            "authorityKeys": {
+              "type": "array",
+              "maxItems": 1
+            },
+            "threshold": {
+              "const": 1
+            }
+          }
+        }
+      ]
+    },
+    "signatures": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
+      }
+    }
+  }
+}

@@ -70,6 +70,12 @@ jobs:
       - name: Install browser test tooling
         run: npm ci --ignore-scripts
 
+      - name: Validate private delivery contracts
+        run: npm run test:privacy
+
+      - name: Validate storage benchmark budgets and cleanup
+        run: node --test benchmarks/private-storage/*.test.mjs
+
       - name: Verify browser diagnostic redaction
         run: node --test tests/turn-browser-probe.test.mjs
 

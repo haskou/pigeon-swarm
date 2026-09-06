@@ -63,3 +63,10 @@ This project may include or reference third-party assets. See [ATTRIBUTIONS.md](
 ## Disclaimer
 
 Pigeon Swarm is not affiliated with, endorsed by, or sponsored by Discord Inc, NEXON, NEXON Games, Yostar, or the Blue Archive team.
+
+## Private data architecture
+
+[The private-data decision](docs/privacy/ADR-001-private-data.md) defines the target
+client storage, delivery boundaries and migration plan, with a source inventory,
+measured storage comparison and versioned contracts. These protections require
+the linked implementation work; they are not enabled by this deployment yet.

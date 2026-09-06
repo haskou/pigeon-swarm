@@ -1,0 +1,211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Recipient-protected MLS frame v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "mlsMessage",
+        "kind"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "mlsMessage": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "minLength": 4,
+          "maxLength": 210000
+        },
+        "kind": {
+          "const": "mls-application"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "mlsMessage",
+        "kind",
+        "authorization"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "mlsMessage": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "minLength": 4,
+          "maxLength": 210000
+        },
+        "kind": {
+          "const": "mls-commit"
+        },
+        "authorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scopeId",
+            "revision",
+            "parentHeadHash",
+            "mlsEpoch",
+            "mlsMessageHash",
+            "policyHash",
+            "signatures",
+            "headHash",
+            "mlsContextHash",
+            "policy"
+          ],
+          "properties": {
+            "scopeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "parentHeadHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "mlsEpoch": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "mlsMessageHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "policyHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "signatures": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 128,
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
+              }
+            },
+            "headHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "mlsContextHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "policy": {
+              "$ref": "authorization-policy-v1.schema.json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "mlsMessage",
+        "kind",
+        "authorization"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "mlsMessage": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "minLength": 4,
+          "maxLength": 210000
+        },
+        "kind": {
+          "const": "mls-welcome"
+        },
+        "authorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scopeId",
+            "revision",
+            "parentHeadHash",
+            "mlsEpoch",
+            "mlsMessageHash",
+            "policyHash",
+            "signatures",
+            "headHash",
+            "mlsContextHash",
+            "policy"
+          ],
+          "properties": {
+            "scopeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "parentHeadHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "mlsEpoch": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "mlsMessageHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "policyHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "signatures": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 128,
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
+              }
+            },
+            "headHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "mlsContextHash": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+            },
+            "policy": {
+              "$ref": "authorization-policy-v1.schema.json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

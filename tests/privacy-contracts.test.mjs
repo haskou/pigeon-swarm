@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import Ajv from "ajv";
@@ -38,6 +39,8 @@ const policy = {
   threshold: 1,
   sequencerKey: valid.mailboxId,
   freshnessAuthorityKey: valid.mailboxId,
+  leaseRevocationKey: valid.mailboxId,
+  leaseRevocationHpkeKey: valid.mailboxId,
 };
 
 test("delivery allows each documented padding bucket", () => {
@@ -439,4 +442,160 @@ test("every control transition carries its complete bounded candidate policy", (
       );
     }
   }
+});
+
+test("freshness vectors bind the exact batch, nonce and signature domain", async () => {
+  const vectors = JSON.parse(
+    await readFile(
+      new URL(
+        "../docs/privacy/contracts/verification-vectors-v1.json",
+        import.meta.url,
+      ),
+    ),
+  );
+  const request = await load("freshness-request-v1");
+  const proof = await load("freshness-proof-v1");
+  const batch = await load("outbound-batch-v1");
+  assert.equal(batch(vectors.batch.value), true);
+  assert.equal(request(vectors.freshness.request), true);
+  assert.equal(proof(vectors.freshness.proof), true);
+  assert.deepEqual(JSON.parse(vectors.batch.jcs), vectors.batch.value);
+  assert.equal(
+    createHash("sha256").update(vectors.batch.jcs).digest("base64url"),
+    vectors.batch.sha256,
+  );
+  const { signature, ...body } = vectors.freshness.proof;
+  assert.deepEqual(JSON.parse(vectors.freshness.jcs), body);
+  const signed = Buffer.concat([
+    Buffer.from("pigeon.private-freshness.v1\0"),
+    Buffer.from(vectors.freshness.jcs),
+  ]);
+  assert.equal(signed.toString("hex"), vectors.freshness.signedBytesHex);
+  const publicKey = createPublicKey({
+    key: Buffer.concat([
+      Buffer.from("302a300506032b6570032100", "hex"),
+      Buffer.from(body.signerKey, "base64url"),
+    ]),
+    format: "der",
+    type: "spki",
+  });
+  assert.equal(
+    verify(null, signed, publicKey, Buffer.from(signature, "base64url")),
+    true,
+  );
+  for (const text of [
+    vectors.freshness.jcs.replace(body.nonce, valid.mailboxId),
+    vectors.freshness.jcs.replace(body.batchCommitment, valid.mailboxId),
+  ]) {
+    assert.equal(
+      verify(
+        null,
+        Buffer.concat([
+          Buffer.from("pigeon.private-freshness.v1\0"),
+          Buffer.from(text),
+        ]),
+        publicKey,
+        Buffer.from(signature, "base64url"),
+      ),
+      false,
+    );
+  }
+  assert.equal(
+    verify(
+      null,
+      Buffer.concat([
+        Buffer.from("pigeon.private-control.v1\0"),
+        Buffer.from(vectors.freshness.jcs),
+      ]),
+      publicKey,
+      Buffer.from(signature, "base64url"),
+    ),
+    false,
+  );
+  assert.equal(
+    request({ ...vectors.freshness.request, nonce: undefined }),
+    false,
+  );
+  assert.equal(
+    batch({
+      ...vectors.batch.value,
+      operationHashes: [
+        ...vectors.batch.value.operationHashes,
+        ...vectors.batch.value.operationHashes,
+      ],
+    }),
+    false,
+  );
+});
+
+test("MLS context digest covers the complete TLS context vector", async () => {
+  const { groupContext: value } = JSON.parse(
+    await readFile(
+      new URL(
+        "../docs/privacy/contracts/verification-vectors-v1.json",
+        import.meta.url,
+      ),
+    ),
+  );
+  const epoch = Buffer.alloc(8);
+  epoch.writeBigUInt64BE(BigInt(value.epoch));
+  const encoded = Buffer.concat([
+    Buffer.from("00010001", "hex"),
+    Buffer.from([32]),
+    Buffer.from(value.groupIdHex, "hex"),
+    epoch,
+    Buffer.from([32]),
+    Buffer.from(value.treeHashHex, "hex"),
+    Buffer.from([32]),
+    Buffer.from(value.confirmedTranscriptHashHex, "hex"),
+    Buffer.from([0]),
+  ]);
+  assert.equal(encoded.toString("hex"), value.tlsHex);
+  assert.equal(
+    createHash("sha256").update(encoded).digest("base64url"),
+    value.sha256,
+  );
+  for (const offset of [0, 3, 5, 44, 46, 80, encoded.length - 1]) {
+    const changed = Buffer.from(encoded);
+    changed[offset] ^= 1;
+    assert.notEqual(
+      createHash("sha256").update(changed).digest("base64url"),
+      value.sha256,
+    );
+  }
+});
+
+test("lease retirement grants carry a separate retire-only right and a bounded receipt", async () => {
+  const grant = await load("lease-retirement-grant-v1");
+  const receipt = await load("lease-retirement-receipt-v1");
+  const value = {
+    version: 1,
+    scopeId: valid.mailboxId,
+    revision: 1,
+    headHash: valid.mailboxId,
+    recipientDeviceKey: valid.mailboxId,
+    mailboxId: valid.mailboxId,
+    gatewayOrigin: "https://mailbox.example",
+    leaseExpiresAt: valid.expiresAt,
+    retireCapability: valid.mailboxId,
+    issuerDeviceKey: valid.mailboxId,
+    signature: Buffer.alloc(64).toString("base64url"),
+  };
+  assert.equal(grant(value), true);
+  assert.equal(grant({ ...value, readCapability: valid.mailboxId }), false);
+  assert.equal(
+    grant({ ...value, gatewayOrigin: "http://mailbox.example" }),
+    false,
+  );
+  assert.equal(
+    receipt({
+      version: 1,
+      scopeId: value.scopeId,
+      headHash: value.headHash,
+      grantHash: valid.mailboxId,
+      signerKey: valid.mailboxId,
+      signature: value.signature,
+    }),
+    true,
+  );
 });

@@ -10,7 +10,9 @@
     "authorityKeys",
     "threshold",
     "sequencerKey",
-    "freshnessAuthorityKey"
+    "freshnessAuthorityKey",
+    "leaseRevocationKey",
+    "leaseRevocationHpkeKey"
   ],
   "properties": {
     "version": {
@@ -60,6 +62,14 @@
       "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
     },
     "freshnessAuthorityKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "leaseRevocationKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "leaseRevocationHpkeKey": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
     }

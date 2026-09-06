@@ -123,7 +123,11 @@ it is exhausted, sending stays local/pending until an authorized refresh.
 
 A membership change invalidates pre-provisioned descriptors for removed
 relationships. The scope policy delegates lease-retirement rights to its
-revocation authority; it revokes every unused future write lease in that
+revocation authority through the signed, recipient-encrypted grant and durable
+receipt defined in [CONTRACTS.md](CONTRACTS.md). The pinned authority holds
+retire-only capabilities before descriptors are advertised; it sees the scoped
+device-to-lease mapping and can deny service, but receives no history decryption
+keys. It revokes every unused future write lease in that
 relationship before issuing replacement descriptors to remaining members.
 Server revocation cannot erase old ciphertext, and MLS still independently
 rejects unauthorized operations. New-mode activation requires testing this

@@ -143,6 +143,18 @@ permissions remain subject to the scope's authenticated domain state and the
 operation checks in the implementation issues; this policy grants no blanket
 administrator access to private content outside the scope.
 
+`mlsContextHash` is SHA-256 of the **complete final GroupContext TLS encoding**
+defined by [RFC 9420 section 8.1](https://www.rfc-editor.org/rfc/rfc9420.html#section-8.1),
+including protocol version, cipher suite, length-prefixed group ID, uint64 epoch,
+length-prefixed tree and confirmed-transcript hashes, and the full ordered extension
+vector. Use the RFC's variable-length vector headers, with no JSON, extra wrapper,
+domain prefix or omitted extension. For Commit/Welcome use the resulting verified
+context after confirmed-transcript processing, never the provisional path-encryption
+context. Genesis uses its initial final context. `mlsCredentialHash` likewise means
+SHA-256 of the complete TLS-encoded Credential structure including its type.
+The shared vectors include exact synthetic GroupContext bytes and digest; these
+illustrate serialization and do not claim to be a valid MLS group transcript.
+
 The canonical head hash is SHA-256 of the JCS object with exactly `scopeId`,
 `revision`, `parentHeadHash`, `mlsEpoch`, `mlsContextHash` and `policyHash`, using
 the values in the verified head. Encode all hash fields as canonical unpadded
@@ -226,15 +238,79 @@ synthesize replacement descriptors from identities or conversation hashes.
 Share only the rights needed by that peer. No global service can enumerate these
 descriptors by user identity.
 
-Authorization-head challenges and responses use the same independent OHTTP path
-and participant-protected control channel as descriptor refresh. A request binds
-a fresh nonce and outbound batch commitment; the authority signs those values
-with the scope, revision and head hash. The client uses a ten-second local
-monotonic deadline, verifies the delegated authority from the signed policy and
-rejects nonce reuse/rollback. A service that merely serves old signed JSON is
-not an online freshness authority. If freshness cannot be proven, sending stays
-pending. This authority is trusted for freshness, even though storage gateways
-are not trusted for message authorship.
+Authorization freshness uses the [request](contracts/freshness-request-v1.schema.json)
+and [proof](contracts/freshness-proof-v1.schema.json) over the independent OHTTP
+path and participant-protected control channel. Construct the
+[outbound batch](contracts/outbound-batch-v1.schema.json) from one scope/head and
+one to fifty signed private operations. Each operation hash is SHA-256 of its JCS
+encoding including its signature. Sort the canonical base64url hashes by ASCII
+byte order, reject duplicates, then SHA-256 the batch object's JCS bytes to obtain
+`batchCommitment`. The batch lists logical operations, not recipient transport
+copies. Operations must all bind that scope and authorization revision.
+
+The request supplies a fresh random 32-byte nonce, expected revision/head and the
+commitment. The authority compares them with its current verified head; on a
+mismatch it returns a stale-head error and the authenticated replacement head/chain,
+not a proof for the old batch. The client rebuilds the operations/batch under the
+new head and makes a new request with a new nonce.
+
+For a matching head, sign the proof's JCS encoding excluding `signature`, prefixed
+by UTF-8 `pigeon.private-freshness.v1` and one zero byte, using Ed25519. Verify
+`signerKey` against that head's `freshnessAuthorityKey`, the signature, and exact
+scope/nonce/revision/head/commitment equality with the outstanding request and
+locally prepared batch. Reject unknown versions, canonical-encoding failures,
+rollback below any observed revision and any response received more than ten
+seconds after the local monotonic request start. There is no server timestamp
+that can extend this window. Atomically consume the nonce before starting that
+single logical batch. Retransmissions reuse idempotent operation/delivery IDs;
+after the deadline or any batch change, obtain a new proof before further sends.
+A proof cannot authorize any operation outside its committed batch.
+
+[Shared vectors](contracts/verification-vectors-v1.json) include batch JCS/digest,
+the exact proof signed bytes, public key and signature. Tests verify the signature
+and reject a changed commitment/nonce/domain. These are wire-format vectors;
+clock, replay persistence, authenticated authority transport and real browser/MLS
+integration remain required implementation tests. An authority can lie about
+freshness if compromised; this trust assumption is unchanged. If it is unreachable,
+sending remains local/pending.
+
+Lease retirement uses the policy's `leaseRevocationKey` (Ed25519 signing identity)
+and `leaseRevocationHpkeKey` (X25519 encryption key). Genesis uses the creator's
+signing key and a distinct creator-controlled HPKE key. This pair is immutable
+within a v1 scope; replacing it requires explicit scope migration after retiring
+all leases or waiting for their expiry. Do not silently hand historical management
+rights to a new authority during an ordinary membership transition.
+
+Before advertising any current/future descriptor, its destination device sends a
+[retirement grant](contracts/lease-retirement-grant-v1.schema.json) to this authority
+over the independent relay, encrypted to the pinned revocation HPKE key. The issuer
+must be the admitted destination device; verify its Ed25519 signature over JCS
+excluding `signature`, prefixed by `pigeon.private-lease-grant.v1` and a zero byte,
+and bind the exact current scope/head/revision and lease. The grant carries only
+the selected gateway origin, random mailbox, expiry and independent retire-only
+management capability. It grants no read, ack, write or content decryption right.
+The gateway's management endpoint can retire an existing lease but cannot mint
+new read/write capabilities. Never copy this capability into a delivery envelope.
+
+The authority durably stores the grant encrypted at rest, then returns a
+[signed receipt](contracts/lease-retirement-receipt-v1.schema.json). `grantHash` is
+SHA-256 of JCS of the complete signed grant; the receipt is signed by
+`leaseRevocationKey` over JCS excluding `signature` with domain
+`pigeon.private-lease-receipt.v1` plus a zero byte. The destination verifies the
+receipt before sharing the descriptor. An unavailable authority leaves provisioning
+pending, including advance offline schedules. It must already possess receipts
+for every advertised lease; destination availability is not needed for retirement.
+
+On a verified removal, the authority uses the stored capabilities to retire every
+unexpired lease for that destination/relationship, including future write windows,
+and waits for the selected replica pair to confirm before replacement descriptors
+become active. Missing receipts or unreachable replicas block activation rather
+than claiming retirement. Failed attempts remain in a durable retry outbox until
+confirmed or lease expiry; MLS revocation still rejects unauthorized operations.
+This trusted authority sees the scope/device-to-lease mapping and may deny service;
+it cannot decrypt history. Retain grant metadata only through lease expiry plus the
+24-hour tombstone window. Its compromise and metadata correlation are explicit
+limits, not an anonymous revocation service.
 
 Blob requests use separate authenticated endpoints through the independent
 relay, with a <= 2 MiB request bound for a 1 MiB encrypted chunk. A shared object

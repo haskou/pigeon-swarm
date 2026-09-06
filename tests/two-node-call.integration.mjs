@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 test(
-  "two application nodes exchange browser audio through independent TURN servers",
+  "two application nodes preserve messaging, voice and session workflows",
   { timeout: 600000 },
   async () => {
     assert.match(

@@ -17,6 +17,7 @@ if (clientServer) {
 const stopClient = async () => { if (clientServer) await new Promise(resolve => clientServer.close(resolve)); };
 const pages = [];
 const deliveryDiagnostics = [];
+const callDiagnostics = [];
 const browser = await chromium
   .launch({
     args: [
@@ -48,6 +49,7 @@ try {
         );
       const Original = window.RTCPeerConnection;
       window.callProbePeers = [];
+      window.callProbeErrors = [];
       window.RTCPeerConnection = class extends Original {
         constructor(configuration, ...rest) {
           const iceServers = (configuration?.iceServers || []).flatMap(
@@ -67,14 +69,36 @@ try {
             ...rest,
           );
           window.callProbePeers.push(this);
+          for (const method of ["setLocalDescription", "setRemoteDescription", "addIceCandidate", "createOffer", "createAnswer"]) {
+            const original = this[method].bind(this);
+            this[method] = async (...args) => {
+              try { return await original(...args); }
+              catch (error) {
+                window.callProbeErrors.push({ method, name: error.name, state: this.signalingState });
+                throw error;
+              }
+            };
+          }
         }
       };
     }, relayAddresses[index]);
     const page = await context.newPage();
+    const callEvents = [];
+    callDiagnostics.push(callEvents);
+    page.on("console", async message => {
+      const args = message.args();
+      if (args.length < 2 || await args[0].jsonValue().catch(() => null) !== "[pigeon:calls]") return;
+      const event = await args[1].jsonValue().catch(() => null);
+      if (typeof event !== "string" || !/^[a-z:-]+$/.test(event)) return;
+      const errorName = args[2] && await args[2].evaluate(context => context?.error?.name).catch(() => undefined);
+      callEvents.push({ stage, event, errorName: typeof errorName === "string" && /^[A-Za-z]+Error$/.test(errorName) ? errorName : undefined });
+      if (callEvents.length > 80) callEvents.shift();
+    });
     const diagnostics = {
       connectionAcks: 0,
       conversationEvents: 0,
       listResponses: [],
+      callErrors: [],
     };
     deliveryDiagnostics.push(diagnostics);
     page.on("websocket", (socket) => {
@@ -91,6 +115,12 @@ try {
       });
     });
     page.on("response", async (response) => {
+      if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
+        const body = await response.json().catch(() => ({}));
+        diagnostics.callErrors.push({ stage, status: response.status(), code: /^[A-Za-z]+Error$/.test(body.code || "") ? body.code : "unknown" });
+        console.log("Call HTTP error:", JSON.stringify(diagnostics.callErrors.at(-1)));
+        if (diagnostics.callErrors.length > 10) diagnostics.callErrors.shift();
+      }
       if (
         new URL(response.url()).pathname === "/api/conversations/" &&
         response.request().method() === "GET"
@@ -204,21 +234,25 @@ try {
   stage = "replicate direct conversation";
   await pages[1].getByTestId("conversation-list-item").first().click();
   await pages[1].getByTestId("message-composer-input").waitFor();
-  if (independentClient) {
-    stage = "accept encrypted conversation invitation";
-    await pages[1].getByTestId("notifications-open-button").first().click();
-    await pages[1].getByTestId("notification-accept-button").click();
-    await pages[1].waitForFunction(
-      () => !document.querySelector('[data-testid="message-composer-input"]').disabled,
-    );
-    await pages[0].bringToFront();
-    await pages[0].getByTestId("message-composer-input").fill("Independent client message");
-    await pages[0].getByTestId("message-composer-input").press("Enter");
-    await pages[0].getByText("Independent client message", { exact: true }).first().waitFor();
-    await pages[1].bringToFront();
-    await pages[1].getByText("Independent client message", { exact: true }).first().waitFor();
-    console.log("PASS independent client message decryption");
-  }
+  stage = "accept encrypted conversation invitation";
+  await pages[1].getByTestId("notifications-open-button").first().click();
+  await pages[1].getByTestId("notification-accept-button").click();
+  await pages[1].waitForFunction(
+    () => !document.querySelector('[data-testid="message-composer-input"]').disabled,
+  );
+  stage = "bidirectional message decryption";
+  const deliver = async (sender, text) => {
+    await sender.bringToFront();
+    await sender.getByTestId("message-composer-input").fill(text);
+    await sender.getByTestId("message-composer-input").press("Enter");
+    for (const page of pages)
+      await page.getByText(text, { exact: true }).first().waitFor();
+  };
+  await deliver(pages[0], "Encrypted message from caller one");
+  await deliver(pages[1], "Encrypted message from caller two");
+  console.log(
+    "PASS encrypted DM invitation acceptance and bidirectional message decryption",
+  );
   stage = "application call signalling";
   console.log(stage);
   await pages[0]
@@ -339,21 +373,127 @@ try {
   await pages[1]
     .getByRole("button", { name: "Join instantly", exact: true })
     .click();
-  stage = "community voice signalling";
+  stage = "community text delivery";
   for (const page of pages) {
+    await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
+    await page.getByRole("button", { name: "# general", exact: true }).click();
+  }
+  await deliver(pages[0], "Community message from caller one");
+  await deliver(pages[1], "Community message from caller two");
+  console.log("PASS community membership and bidirectional text delivery");
+  stage = "community voice signalling";
+  const joinVoice = (page) =>
+    page
+      .getByTitle(/Join (voice|voice channel)/i)
+      .filter({ hasText: "voice-test" })
+      .click();
+  const leaveVoice = async (page) => {
+    await page.getByTestId("compact-call-bar").click();
+    await page.getByRole("button", { name: "Leave call", exact: true }).click();
+  };
+  const expectVoiceParticipants = (page, count) =>
+    page.waitForFunction(
+      (expected) => document.querySelectorAll("[data-testid=voice-channel-participant]").length === expected,
+      count,
+    );
+  for (const page of pages) {
+    await page
+      .getByRole("button", { name: "Relay voice test", exact: true })
+      .click();
+    await joinVoice(page);
+  }
+  await assertAudio("community voice call");
+  for (const page of pages) await expectVoiceParticipants(page, 2);
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    stage = `community voice leave ${cycle}`;
+    for (const page of pages) await leaveVoice(page);
+    for (const page of pages)
+      await page.waitForFunction(() =>
+        window.callProbePeers.every((peer) => peer.connectionState === "closed"),
+      );
+    for (const page of pages) await expectVoiceParticipants(page, 0);
+    stage = `community voice rejoin ${cycle}`;
+    for (const page of pages) await joinVoice(page);
+    await assertAudio(`community voice rejoin ${cycle}`);
+  }
+  stage = "community voice presence removal";
+  for (const page of pages) await leaveVoice(page);
+  for (const page of pages)
+    await page.waitForFunction(() =>
+      window.callProbePeers.every((peer) => peer.connectionState === "closed"),
+    );
+  for (const page of pages) {
+    await page.reload();
+    await page.getByTestId("own-profile-menu-button").waitFor();
+    if (await page.getByTestId("push-notification-dismiss-button").isVisible())
+      await page.getByTestId("push-notification-dismiss-button").click();
     await page
       .getByRole("button", { name: "Relay voice test", exact: true })
       .click();
     await page
       .getByTitle(/Join (voice|voice channel)/i)
       .filter({ hasText: "voice-test" })
-      .click();
+      .waitFor();
+    await expectVoiceParticipants(page, 0);
+    assert.equal(
+      await page.getByTitle(/Join (voice|voice channel)/i).filter({ hasText: "voice-test" }).innerText(),
+      "voice-test",
+      "Fresh channel reads must not show disconnected participants",
+    );
   }
-  await assertAudio("community voice call");
+  stage = "password login and persisted message decryption";
+  for (const [index, page] of pages.entries()) {
+    await page.getByTestId("own-profile-menu-button").click();
+    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    await page.getByTestId("auth-identity-input").fill(`caller-${index + 1}`);
+    await page.getByTestId("auth-password-input").fill("Disposable-call-test-password1!");
+    await page.getByTestId("auth-submit-button").click();
+    await page.getByTestId("own-profile-menu-button").waitFor();
+    if (await page.getByTestId("push-notification-dismiss-button").isVisible())
+      await page.getByTestId("push-notification-dismiss-button").click();
+    await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
+    await page.getByTestId("conversation-list-item").first().click();
+    await page.getByText("Encrypted message from caller one", { exact: true }).first().waitFor();
+    await page.getByText("Encrypted message from caller two", { exact: true }).first().waitFor();
+    await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
+    await page.getByRole("button", { name: "# general", exact: true }).click();
+    await page.getByText("Community message from caller one", { exact: true }).first().waitFor();
+    await page.getByText("Community message from caller two", { exact: true }).first().waitFor();
+    await joinVoice(page);
+  }
+  await assertAudio("community voice after password login");
+  for (const page of pages) await expectVoiceParticipants(page, 2);
+  stage = "abrupt client departure";
+  const returningContext = pages[1].context();
+  await returningContext.setOffline(true);
+  await pages[1].close();
+  await expectVoiceParticipants(pages[0], 1);
+  await leaveVoice(pages[0]);
+  await expectVoiceParticipants(pages[0], 0);
+  await returningContext.setOffline(false);
+  pages[1] = await returningContext.newPage();
+  pages[1].setDefaultTimeout(45000);
+  await pages[1].goto(independentClient ? 'http://127.0.0.1:8445' : urls[1]);
+  await pages[1].getByTestId("own-profile-menu-button").waitFor();
+  await pages[1].getByRole("button", { name: "Relay voice test", exact: true }).click();
+  await expectVoiceParticipants(pages[1], 0);
+  console.log("PASS password login, retained community history, and presence expiry after abrupt client departure");
   console.log(
-    "PASS two-node call: direct and community voice calls through application signalling.",
+    "PASS two-node call: direct and community voice calls, voice rejoin, and presence removal through application signalling.",
   );
 } catch (error) {
+  console.log("WebRTC operation errors:", JSON.stringify(await Promise.all(pages.map(page => page.evaluate(() => window.callProbeErrors).catch(() => [])))));
+  console.log("Call lifecycle events:", JSON.stringify(callDiagnostics));
+  console.log("WebRTC lifecycle diagnostics:", JSON.stringify(await Promise.all(pages.map(page => page.evaluate(() =>
+    window.callProbePeers.map(peer => ({
+      connection: peer.connectionState,
+      ice: peer.iceConnectionState,
+      signalling: peer.signalingState,
+      localDescription: peer.localDescription?.type,
+      remoteDescription: peer.remoteDescription?.type,
+      tracks: peer.getSenders().map(sender => sender.track?.readyState),
+    })),
+  ).catch(() => [])))));
   console.log(
     "Conversation delivery diagnostics:",
     JSON.stringify(deliveryDiagnostics),

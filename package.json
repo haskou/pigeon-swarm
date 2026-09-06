@@ -5,6 +5,7 @@
   "scripts": {
     "test:turn": "node --test tests/turn-secret.test.mjs tests/turn-runtime.integration.mjs",
     "test:media": "node --test tests/turn-media.integration.mjs",
+    "test:e2e": "node --test tests/two-node-call.integration.mjs",
     "test:calls": "node --test tests/two-node-call.integration.mjs",
     "test:privacy": "node --test tests/privacy-contracts.test.mjs"
   },

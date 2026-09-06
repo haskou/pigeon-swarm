@@ -173,6 +173,21 @@ try {
   stage = "replicate direct conversation";
   await pages[1].getByTestId("conversation-list-item").first().click();
   await pages[1].getByTestId("message-composer-input").waitFor();
+  if (independentClient) {
+    stage = "accept encrypted conversation invitation";
+    await pages[1].getByTestId("notifications-open-button").first().click();
+    await pages[1].getByTestId("notification-accept-button").click();
+    await pages[1].waitForFunction(
+      () => !document.querySelector('[data-testid="message-composer-input"]').disabled,
+    );
+    await pages[0].bringToFront();
+    await pages[0].getByTestId("message-composer-input").fill("Independent client message");
+    await pages[0].getByTestId("message-composer-input").press("Enter");
+    await pages[0].getByText("Independent client message", { exact: true }).first().waitFor();
+    await pages[1].bringToFront();
+    await pages[1].getByText("Independent client message", { exact: true }).first().waitFor();
+    console.log("PASS independent client message decryption");
+  }
   stage = "application call signalling";
   console.log(stage);
   await pages[0]

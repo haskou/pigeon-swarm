@@ -51,7 +51,7 @@ After successful verification, compare `uiCommit` with the reviewed UI SHA and `
 
 ```sh
 CLIENT_IMAGE='ghcr.io/haskou/pigeon-swarm-client@sha256:<verified digest>'
-gh attestation verify "oci://$CLIENT_IMAGE" \
+gh attestation verify "oci://$CLIENT_IMAGE" --bundle-from-oci \
   --repo "$REPOSITORY" \
   --signer-workflow "$REPOSITORY/.github/workflows/publish-client.yml" \
   --source-digest "$WRAPPER_SHA" --deny-self-hosted-runners
@@ -82,7 +82,7 @@ To roll back, redeploy the previous verified digest on the same client origin an
 
 ## Node selection and browser contract
 
-The selected address is a separate node API base, normally an HTTPS URL ending in `/api`. The UI validates and normalizes it before use. Remote HTTP addresses, embedded credentials, query strings, fragments, and non-network schemes must not be used. Local development can use exact loopback hosts `localhost` or `127.0.0.1`; browser mixed-content and local-network policies can still restrict requests. The selected node must allow the client origin through its CORS policy and support the independent-client API contract. The public `/client-contract` must return protocol `pigeon-swarm` and `apiVersion: 1`; failure blocks application bootstrap. Changing nodes reloads the whole document to close active sessions and workers. Credentials, device-unlock state, projections, notifications, and workspace storage are partitioned by the normalized node URL. Switching back restores that node’s stored state. Existing combined-client storage keys remain unchanged.
+The selected address is a separate node API base, normally an HTTPS URL ending in `/api`. The UI validates and normalizes it before use. Remote HTTP addresses, embedded credentials, query strings, fragments, and non-network schemes must not be used. Local development can use exact loopback hosts `localhost` or `127.0.0.1`; browser mixed-content and local-network policies can still restrict requests. The selected node must allow the client origin through its CORS policy and support the independent-client API contract. The public `/client-contract` must return protocol `pigeon-swarm` and `apiVersion: 1`; failure blocks application bootstrap. Changing nodes retires the previous push subscription and reloads the whole document to close active sessions and workers. Other tabs on that client origin return to node selection when the saved selection changes, so they cannot keep an old session running. Credentials, device-unlock state, projections, notifications, and workspace storage are partitioned by the normalized node URL. Switching back restores that node’s stored state. Existing combined-client storage keys remain unchanged.
 
 The static origin denies remote scripts, JavaScript `eval`, plugins, framing, base-URL changes, and form submissions. Its CSP allows same-origin scripts and workers, blob workers, and WebAssembly compilation needed by RNNoise. Existing UI styles require inline styles. HTTPS/WSS connections are permitted for selectable remote nodes; HTTP/WS exceptions are limited to exact loopback hosts. The CSP is a defense around the trusted client, not a replacement for endpoint validation or response sanitization.
 

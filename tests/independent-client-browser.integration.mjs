@@ -54,9 +54,12 @@ test('independent built client browser contract with explicitly fake backend fix
   t.after(() => rm(directory, { recursive: true, force: true }));
   const root = join(directory, 'public');
   await cp(resolve(process.env.PIGEON_CLIENT_DIST), root, { recursive: true });
-  await writeFile(join(root, 'probe-worker.js'), 'postMessage("same-origin-worker-ready");');
+  await writeFile(join(root, 'probe-worker.js'), 'postMessage({ready: true, scope: new URL(location.href).hash});');
   await writeFile(join(root, 'probe.webmanifest'), JSON.stringify({ name: 'Client CSP probe', start_url: '/', display: 'standalone' }));
-  const origin = await listen(await createClientServer({ root }), t);
+  const clientRequests = [];
+  const clientServer = await createClientServer({ root });
+  clientServer.on('request', (request) => clientRequests.push(request.url));
+  const origin = await listen(clientServer, t);
   const browser = await chromium.launch({ headless: true, executablePath: process.env.PIGEON_CHROMIUM_EXECUTABLE });
   t.after(() => browser.close());
 
@@ -123,6 +126,10 @@ test('independent built client browser contract with explicitly fake backend fix
     const firstScope = createHash('sha256').update(`${first.origin}/api`).digest('hex');
     const secondScope = createHash('sha256').update(`${second.origin}/api`).digest('hex');
     await page.evaluate((scope) => localStorage.setItem(`pigeon-swarm-credentials:${scope}`, JSON.stringify({ identityId: 'synthetic-node-A-identity' })), firstScope);
+    const otherTab = await page.context().newPage();
+    await otherTab.goto(origin);
+    await otherTab.getByRole('link', { name: 'Change node' }).waitFor();
+    const otherDocument = await otherTab.evaluate(() => globalThis.documentId);
     await page.getByRole('link', { name: 'Change node' }).click();
     await page.getByLabel('Node address').waitFor();
     const choosingDocument = await page.evaluate(() => globalThis.documentId);
@@ -132,6 +139,10 @@ test('independent built client browser contract with explicitly fake backend fix
     await page.getByRole('link', { name: 'Change node' }).waitFor();
     await page.waitForFunction(() => document.querySelector('.app-screen'));
     assert.notEqual(await page.evaluate(() => globalThis.documentId), choosingDocument);
+    await otherTab.waitForURL(origin + '/connect');
+    await otherTab.getByRole('heading', { name: 'Connect to a node' }).waitFor();
+    assert.notEqual(await otherTab.evaluate(() => globalThis.documentId), otherDocument);
+    assert.equal(await otherTab.getByRole('link', { name: 'Change node' }).count(), 0);
     const reads = await page.evaluate(() => globalThis.storageReads);
     assert.ok(reads.includes(`pigeon-swarm-credentials:${secondScope}`));
     assert.equal(reads.includes(`pigeon-swarm-credentials:${firstScope}`), false);
@@ -156,11 +167,13 @@ test('independent built client browser contract with explicitly fake backend fix
     assert.equal(violation, 'script-src-elem');
     assert.deepEqual(remote.requests, []);
     assert.equal(await page.evaluate(() => globalThis.backendCodeExecuted), undefined);
-    assert.equal(await page.evaluate(() => new Promise((done, reject) => {
-      const worker = new Worker('/probe-worker.js');
+    assert.deepEqual(await page.evaluate(() => new Promise((done, reject) => {
+      const worker = new Worker('/probe-worker.js#pigeonNodeScope=opaque-partition', {type: 'module'});
       worker.onmessage = (event) => { worker.terminate(); done(event.data); };
       worker.onerror = (event) => { worker.terminate(); reject(new Error(event.message)); };
-    })), 'same-origin-worker-ready');
+    })), {ready: true, scope: '#pigeonNodeScope=opaque-partition'});
+    assert.ok(clientRequests.includes('/probe-worker.js'));
+    assert.equal(clientRequests.some((url) => url.includes('opaque-partition')), false);
     await page.evaluate(() => {
       document.querySelectorAll('link[rel="manifest"]').forEach((link) => link.remove());
       const link = document.createElement('link');

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { createClientServer } from "../client/server.mjs";
 import { chromium } from "playwright";
 import { startCallTestGateways } from "./call-test-https-proxy.mjs";
 
@@ -6,6 +8,13 @@ let stage = "browser startup";
 const urls = ["https://localhost:8443", "https://localhost:8444"];
 const relayAddresses = [process.env.TEST_IP_A, process.env.TEST_IP_B];
 const { stop: stopGateways, spki } = await startCallTestGateways();
+const independentClient = process.env.PIGEON_INDEPENDENT_CLIENT === "true";
+const clientServer = independentClient ? await createClientServer({root: "/opt/pigeon/client-dist"}) : undefined;
+if (clientServer) {
+  clientServer.listen(8445, '127.0.0.1');
+  await once(clientServer, 'listening');
+}
+const stopClient = async () => { if (clientServer) await new Promise(resolve => clientServer.close(resolve)); };
 const pages = [];
 const browser = await chromium
   .launch({
@@ -17,6 +26,7 @@ const browser = await chromium
     ],
   })
   .catch(async () => {
+    await stopClient();
     await stopGateways();
     throw new Error("Test browser startup failed");
   });
@@ -79,7 +89,12 @@ try {
     pages.push(page);
     stage = `register user ${index + 1}`;
     console.log(stage);
-    await page.goto(url);
+    await page.goto(independentClient ? 'http://127.0.0.1:8445' : url);
+    if (independentClient) {
+      await page.getByLabel('Node address').fill(url + '/api');
+      await page.getByRole('button', { name: 'Connect', exact: true }).click();
+      await page.getByRole('link', { name: 'Change node', exact: true }).waitFor();
+    }
     assert.ok(
       await page.evaluate(
         () => isSecureContext && Boolean(globalThis.crypto?.subtle),
@@ -121,15 +136,15 @@ try {
     let identityId;
     while (Date.now() < deadline) {
       identityId = await page.evaluate(
-        async (handle) => {
-          const response = await fetch(`/api/identities/${handle}`, {
+        async ({handle, nodeUrl}) => {
+          const response = await fetch(`${nodeUrl}/api/identities/${handle}`, {
             signal: AbortSignal.timeout(5000),
           });
           if (response.status !== 200) return null;
           const identity = await response.json();
           return typeof identity?.id === "string" ? identity.id : null;
         },
-        `caller-${2 - index}`,
+        {handle: `caller-${2 - index}`, nodeUrl: urls[index]},
       );
       if (identityId) break;
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -323,6 +338,7 @@ try {
   try {
     await browser.close();
   } finally {
+    await stopClient();
     await stopGateways();
   }
 }

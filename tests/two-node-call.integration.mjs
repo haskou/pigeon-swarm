@@ -11,8 +11,8 @@ test(
   async () => {
     assert.match(
       process.env.PIGEON_TEST_IMAGE || "",
-      /^ghcr\.io\/haskou\/pigeon-swarm@sha256:[a-f0-9]{64}$/,
-      "Set PIGEON_TEST_IMAGE to the published image digest being validated",
+      /^(?:ghcr\.io\/haskou\/pigeon-swarm@)?sha256:[a-f0-9]{64}$/,
+      "Set PIGEON_TEST_IMAGE to an immutable published digest or local image ID",
     );
     console.log(`Application image: ${process.env.PIGEON_TEST_IMAGE}`);
     const env = {
@@ -28,6 +28,8 @@ test(
           "DOCKER_TLS_VERIFY",
           "DOCKER_CERT_PATH",
           "PIGEON_TEST_IMAGE",
+          "PIGEON_INDEPENDENT_CLIENT",
+          "PIGEON_CLIENT_DIST",
         ]
           .filter((name) => process.env[name] !== undefined)
           .map((name) => [name, process.env[name]]),

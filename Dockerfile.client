@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_BUILD_IMAGE=node:24.15-bullseye
+ARG NODE_RUNTIME_IMAGE=node:24.15-bullseye-slim
+
+FROM --platform=$BUILDPLATFORM ${NODE_BUILD_IMAGE} AS frontend-deps
+WORKDIR /build/frontend
+ENV NODE_OPTIONS=--max_old_space_size=4096
+COPY --from=ui package.json yarn.lock ./
+RUN --mount=type=cache,id=pigeon-client-yarn,target=/tmp/yarn-cache,sharing=locked \
+  YARN_CACHE_FOLDER=/tmp/yarn-cache yarn --frozen-lockfile --ignore-engines
+
+FROM frontend-deps AS frontend-build
+COPY --from=ui . ./
+ARG PIGEON_SWARM_UI_SHA
+RUN VITE_INDEPENDENT_CLIENT=true VITE_API_SERVER_URL= yarn build
+RUN node --input-type=module -e 'import { writeFileSync } from "node:fs"; const sourceCommit = process.env.PIGEON_SWARM_UI_SHA; if (!/^[a-f0-9]{40}$/.test(sourceCommit || "")) throw new Error("PIGEON_SWARM_UI_SHA must be a full source commit"); writeFileSync("dist/client-release.json", JSON.stringify({ sourceCommit, contractVersion: 1 }) + "\n");'
+
+FROM ${NODE_RUNTIME_IMAGE} AS production
+WORKDIR /app
+ARG PIGEON_SWARM_UI_SHA
+ARG PIGEON_SWARM_WRAPPER_SHA
+LABEL org.opencontainers.image.title="Pigeon Swarm Independent Client" \
+  org.opencontainers.image.description="Standalone static Pigeon Swarm client" \
+  org.opencontainers.image.source="https://github.com/haskou/pigeon-swarm" \
+  org.opencontainers.image.revision="${PIGEON_SWARM_WRAPPER_SHA}"
+COPY --from=frontend-build /build/frontend/dist ./public
+COPY client/server.mjs ./client/server.mjs
+ENV NODE_ENV=production CLIENT_PORT=8080 CLIENT_ROOT=/app/public
+USER node
+EXPOSE 8080
+CMD ["node", "client/server.mjs"]

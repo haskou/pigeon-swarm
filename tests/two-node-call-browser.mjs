@@ -16,6 +16,7 @@ if (clientServer) {
 }
 const stopClient = async () => { if (clientServer) await new Promise(resolve => clientServer.close(resolve)); };
 const pages = [];
+const deliveryDiagnostics = [];
 const browser = await chromium
   .launch({
     args: [
@@ -70,7 +71,37 @@ try {
       };
     }, relayAddresses[index]);
     const page = await context.newPage();
+    const diagnostics = {
+      connectionAcks: 0,
+      conversationEvents: 0,
+      listResponses: [],
+    };
+    deliveryDiagnostics.push(diagnostics);
+    page.on("websocket", (socket) => {
+      socket.on("framereceived", ({ payload }) => {
+        try {
+          const message = JSON.parse(String(payload));
+          if (message.type === "connection_ack") diagnostics.connectionAcks++;
+          if (
+            message.type === "domain_event" &&
+            message.event?.type === "conversations.v1.conversation.was_created"
+          )
+            diagnostics.conversationEvents++;
+        } catch {}
+      });
+    });
     page.on("response", async (response) => {
+      if (
+        new URL(response.url()).pathname === "/api/conversations/" &&
+        response.request().method() === "GET"
+      ) {
+        const body = await response.json().catch(() => undefined);
+        diagnostics.listResponses.push({
+          status: response.status(),
+          count: Array.isArray(body?.conversations) ? body.conversations.length : null,
+        });
+        if (diagnostics.listResponses.length > 8) diagnostics.listResponses.shift();
+      }
       if (
         response.status() >= 400 &&
         new URL(response.url()).pathname === "/api/identities/"
@@ -323,6 +354,10 @@ try {
     "PASS two-node call: direct and community voice calls through application signalling.",
   );
 } catch (error) {
+  console.log(
+    "Conversation delivery diagnostics:",
+    JSON.stringify(deliveryDiagnostics),
+  );
   console.log(
     "Failure location:",
     error?.name,

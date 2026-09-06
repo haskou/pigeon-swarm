@@ -601,3 +601,62 @@ test("lease retirement grants carry a separate retire-only right and a bounded r
     true,
   );
 });
+
+test("HPKE framing vector fixes the exact context and authenticated header bytes", async () => {
+  const { hpkeFraming: value } = JSON.parse(
+    await readFile(
+      new URL(
+        "../docs/privacy/contracts/verification-vectors-v1.json",
+        import.meta.url,
+      ),
+    ),
+  );
+  assert.equal(
+    Buffer.from("pigeon.private-delivery.v1\0").toString("hex"),
+    value.infoHex,
+  );
+  assert.deepEqual(JSON.parse(value.aadJcs), value.header);
+  assert.equal(Buffer.from(value.aadJcs).toString("hex"), value.aadHex);
+  const frameBytes = Buffer.from(value.frameJcs);
+  assert.equal(frame(JSON.parse(value.frameJcs)), true);
+  assert.equal(frameBytes.length, value.frameByteLength);
+  const prefix = Buffer.alloc(4);
+  prefix.writeUInt32BE(frameBytes.length);
+  assert.equal(prefix.toString("hex"), value.lengthPrefixHex);
+  const plaintext = Buffer.concat([
+    prefix,
+    frameBytes,
+    Buffer.alloc(value.zeroPaddingBytes),
+  ]);
+  assert.equal(plaintext.length + 32 + 16, value.header.bucketBytes);
+  assert.equal(
+    createHash("sha256").update(plaintext).digest("hex"),
+    value.plaintextSha256Hex,
+  );
+  for (const field of Object.keys(value.header)) {
+    const changed = {
+      ...value.header,
+      [field]:
+        typeof value.header[field] === "number"
+          ? value.header[field] + 1
+          : value.header[field] + "A",
+    };
+    const encoded = JSON.stringify(
+      Object.fromEntries(
+        Object.entries(changed).sort(([a], [b]) =>
+          a < b ? -1 : a > b ? 1 : 0,
+        ),
+      ),
+    );
+    assert.notEqual(Buffer.from(encoded).toString("hex"), value.aadHex);
+  }
+  assert.equal(
+    Buffer.from("pigeon.private-lease-grant.v1\0").toString("hex"),
+    value.grantInfoHex,
+  );
+  assert.deepEqual(JSON.parse(value.grantAadJcs), value.grantAad);
+  assert.equal(
+    Buffer.from(value.grantAadJcs).toString("hex"),
+    value.grantAadHex,
+  );
+});

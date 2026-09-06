@@ -189,12 +189,35 @@ Retry control recovery with bounded backoff up to five minutes. If the seven-day
 recovery window is exhausted, surface a required authorized rejoin/history
 transfer rather than silently dropping or applying the orphaned messages.
 
-The recipient HPKE ciphertext authenticates the canonical outer `version`,
-`mailboxId`, `deliveryId`, `expiresAt` and `bucketBytes` as associated data under
-the label `pigeon.private-delivery.v1`. Changing a retained header must fail
-recipient authentication. Choose HPKE base mode with X25519/HKDF-SHA256/AES-128-GCM;
-MLS and the signed inner operation supply author authentication. Crypto adapters
-must share exact vectors for the framing and associated-data encoding.
+Each delivery uses a fresh HPKE base-mode context (mode 0), DHKEM(X25519,
+HKDF-SHA256) `0x0020`, KDF HKDF-SHA256 `0x0001` and AES-128-GCM `0x0001`.
+Use exactly UTF-8 `pigeon.private-delivery.v1` followed by one zero byte as
+HPKE `info` in SetupBaseS/SetupBaseR. Perform one Seal/Open at sequence zero;
+never reuse a context or encapsulated key across recipient copies or deliveries.
+
+The single AEAD AAD byte string is UTF-8 JCS of the object with exactly
+`version`, `mailboxId`, `deliveryId`, `expiresAt` and `bucketBytes` copied from the
+validated outer delivery. It has no label prefix, separator, trailing newline,
+ciphertext or additional fields. Reject noncanonical identifiers before constructing
+AAD. Changing any retained header must fail recipient authentication. MLS and
+the signed inner operation supply sender authentication; HPKE base mode does not.
+
+The [shared framing vector](contracts/verification-vectors-v1.json) records the
+exact `info` hex, header object, AAD JCS/hex, canonical protected-frame JSON,
+4-byte length prefix, padding count and complete plaintext SHA-256. Reconstruct
+the plaintext as length prefix + frame bytes + zero padding, with total length
+`bucketBytes - 32 - 16`; the resulting wire bytes are encapsulated key + ciphertext
+including the GCM tag. The fixture deliberately contains synthetic MLS bytes.
+Full ciphertext/KEM interoperability with real MLS remains a crypto integration
+release gate; the encoding vector fixes inputs without inventing a crypto engine.
+
+For the separately encrypted retirement grant, use the same HPKE suite and fresh
+sequence-zero context, but `info` is UTF-8 `pigeon.private-lease-grant.v1` plus a zero
+byte. Its AAD is UTF-8 JCS of exactly `{version: 1, leaseRevocationKey,
+leaseRevocationHpkeKey}` from the pinned policy. Its plaintext is JCS of the signed
+grant, with the same 4-byte length and zero padding to a fixed 4,096-byte wire
+bucket (including encapsulated key and tag); do not parse it as an MLS
+frame. Grant context/AAD bytes are also in the shared vector.
 
 The signature covers the UTF-8 bytes of the domain separator
 `pigeon.private-operation.v1` followed by a zero byte and the

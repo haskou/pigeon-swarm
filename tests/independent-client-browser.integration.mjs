@@ -231,6 +231,43 @@ test('independent built client browser contract with explicitly fake backend fix
     assert.deepEqual(manifest.errors, []);
   });
 
+  await t.test('browser blocks external image and CSS background requests while local blob images render', async (subtest) => {
+    const remote = await fakeNode(subtest, {});
+    const page = await pageFor(subtest);
+    await page.goto(origin);
+    await page.getByLabel('Node address').waitFor();
+    await page.evaluate(async (remoteOrigin) => {
+      globalThis.imageCspViolations = [];
+      document.addEventListener('securitypolicyviolation', (event) => {
+        if (event.effectiveDirective === 'img-src') globalThis.imageCspViolations.push(event.blockedURI);
+      });
+      const image = new Image();
+      const loaded = new Promise((done) => { image.onload = done; image.onerror = done; });
+      image.src = `${remoteOrigin}/avatar.png`;
+      document.body.append(image);
+      const banner = document.createElement('div');
+      banner.style.cssText = `width: 100px; height: 100px; background-image: url("${remoteOrigin}/banner.png")`;
+      document.body.append(banner);
+      banner.getBoundingClientRect();
+      await loaded;
+    }, remote.origin);
+    await page.waitForFunction(() => globalThis.imageCspViolations.length === 2, undefined, { timeout: 2000 });
+    assert.deepEqual((await page.evaluate(() => globalThis.imageCspViolations)).sort(), [`${remote.origin}/avatar.png`, `${remote.origin}/banner.png`]);
+    assert.deepEqual(remote.requests, []);
+    const dimensions = await page.evaluate(async () => {
+      const response = await fetch('/logo.png');
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const image = new Image();
+      image.src = blobUrl;
+      document.body.append(image);
+      await image.decode();
+      const dimensions = { width: image.naturalWidth, height: image.naturalHeight };
+      URL.revokeObjectURL(blobUrl);
+      return dimensions;
+    });
+    assert.ok(dimensions.width > 0 && dimensions.height > 0);
+  });
+
   await t.test('invalid self-signed TLS remains blocked without certificate overrides', async (subtest) => {
     const key = join(directory, 'fixture.key');
     const cert = join(directory, 'fixture.crt');

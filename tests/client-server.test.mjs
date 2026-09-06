@@ -105,6 +105,7 @@ test('all responses restrict script origins and preserve local media permissions
     assert.equal(directives['script-src'], "'self' 'wasm-unsafe-eval'");
     assert.equal(directives['worker-src'], "'self' blob:");
     assert.equal(directives['style-src'], "'self' 'unsafe-inline'");
+    assert.equal(directives['img-src'], "'self' data: blob:");
     assert.equal(directives['frame-ancestors'], "'none'");
     assert.equal(directives['connect-src'], 'https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*');
     assert.equal(headers['permissions-policy'], 'camera=(self), microphone=(self), display-capture=(self), geolocation=()');

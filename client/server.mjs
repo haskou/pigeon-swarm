@@ -38,7 +38,7 @@ const securityHeaders = {
     "script-src 'self' 'wasm-unsafe-eval'",
     "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*",
+    "img-src 'self' data: blob:",
     "media-src 'self' blob: https:",
     "font-src 'self'",
     "manifest-src 'self'",

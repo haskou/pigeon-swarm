@@ -86,6 +86,8 @@ The selected address is a separate node API base, normally an HTTPS URL ending i
 
 The static origin denies remote scripts, JavaScript `eval`, plugins, framing, base-URL changes, and form submissions. Its CSP allows same-origin scripts and workers, blob workers, and WebAssembly compilation needed by RNNoise. Existing UI styles require inline styles. HTTPS/WSS connections are permitted for selectable remote nodes; HTTP/WS exceptions are limited to exact loopback hosts. The CSP is a defense around the trusted client, not a replacement for endpoint validation or response sanitization.
 
+Independent mode rejects external profile-picture and banner URLs. Uploaded CID images remain available through protected fetches and local blob URLs. The static origin's image CSP permits only same-origin, data, and blob images, so cached external profile URLs cannot initiate image or CSS-background requests to a remote host.
+
 Camera, microphone, and screen capture remain limited to the client origin by Permissions Policy and still require browser permission. Remote clients need a secure HTTPS context for these features. Preserve `Permissions-Policy`, `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer` at the reverse proxy. Validate media in a real browser against the intended node and TURN configuration; serving the page successfully does not establish media connectivity.
 
 ## Validation

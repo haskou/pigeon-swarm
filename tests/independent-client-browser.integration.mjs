@@ -160,7 +160,44 @@ test('independent built client browser contract with explicitly fake backend fix
     await page.getByRole('link', { name: 'Change node' }).waitFor();
     await page.waitForFunction(() => document.querySelector('.app-screen'));
     assert.equal(page.url(), inviteUrl);
+    await page.getByRole('link', { name: 'Change node' }).click();
+    await page.getByLabel('Node address').waitFor();
+    await choose(page, `${node.origin}/api`);
+    await page.getByRole('link', { name: 'Change node' }).waitFor();
+    assert.equal(page.url(), inviteUrl);
   });
+
+  for (const previouslySelected of [false, true]) {
+    await t.test(`cross-tab node selection preserves pending invite and requires confirmation: existing=${previouslySelected}`, async (subtest) => {
+      const first = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+      const second = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+      const page = await pageFor(subtest);
+      await page.goto(origin);
+      if (previouslySelected) {
+        await choose(page, `${first.origin}/api`);
+        await page.getByRole('link', { name: 'Change node' }).waitFor();
+      }
+      const invite = await page.context().newPage();
+      const inviteUrl = `${origin}/invite/community/disposable-token?source=shared#k=disposable-secret`;
+      await invite.goto(inviteUrl);
+      if (previouslySelected) await invite.getByRole('link', { name: 'Change node' }).waitFor();
+      else await invite.getByLabel('Node address').waitFor();
+      const initialDocument = await invite.evaluate(() => globalThis.documentId);
+      await page.goto(origin + '/connect');
+      await choose(page, `${second.origin}/api`);
+      await page.getByRole('link', { name: 'Change node' }).waitFor();
+      await invite.getByRole('heading', { name: 'Connect to a node' }).waitFor();
+      assert.equal(new URL(invite.url()).pathname, '/invite/community/disposable-token');
+      assert.equal(new URL(invite.url()).hash, '#k=disposable-secret');
+      assert.notEqual(await invite.evaluate(() => globalThis.documentId), initialDocument);
+      assert.equal(await invite.getByRole('link', { name: 'Change node' }).count(), 0);
+      await choose(invite, `${second.origin}/api`);
+      await invite.getByRole('link', { name: 'Change node' }).waitFor();
+      await invite.waitForFunction(() => document.querySelector('.app-screen'));
+      assert.equal(invite.url(), inviteUrl);
+      assert.equal(clientRequests.some((url) => url.includes('disposable-secret')), false);
+    });
+  }
 
   await t.test('valid loopback contract boots real UI and ignores backend scriptURL; node switch reloads and scopes credential reads', async (subtest) => {
     const contract = { protocol: 'pigeon-swarm', apiVersion: 1 };

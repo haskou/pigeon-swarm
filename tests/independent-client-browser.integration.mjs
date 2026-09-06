@@ -150,6 +150,18 @@ test('independent built client browser contract with explicitly fake backend fix
     }
   }
 
+  await t.test('initial community invite path and key fragment survive choosing a compatible node', async (subtest) => {
+    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+    const page = await pageFor(subtest);
+    const inviteUrl = `${origin}/invite/community/disposable-token#k=disposable-secret`;
+    await page.goto(inviteUrl);
+    await page.getByLabel('Node address').waitFor();
+    await choose(page, `${node.origin}/api`);
+    await page.getByRole('link', { name: 'Change node' }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.app-screen'));
+    assert.equal(page.url(), inviteUrl);
+  });
+
   await t.test('valid loopback contract boots real UI and ignores backend scriptURL; node switch reloads and scopes credential reads', async (subtest) => {
     const contract = { protocol: 'pigeon-swarm', apiVersion: 1 };
     const first = await fakeNode(subtest, contract);

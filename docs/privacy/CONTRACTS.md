@@ -171,7 +171,26 @@ and the number of admitted keys; reject an unsatisfiable policy before adoption.
 Require canonical unpadded base64url: decode and re-encode byte-for-byte, rejecting
 nonzero unused bits. Count distinct decoded public-key bytes from the previous
 policy only, never textual property names; reject unknown
-signers and invalid signatures. Reject duplicate JSON property names before
+signers and invalid signatures.
+
+In addition to meeting the previous policy's threshold, the binding must contain
+a valid signature by its exact `sequencerKey`. That signature counts toward the
+threshold; a quorum that excludes the sequencer is insufficient. This is checked
+against the previous policy even when the candidate replaces the sequencer.
+Before signing, the sequencer durably reserves exactly one child `headHash` for
+each scope/parent head. It may sign multiple Commit/Welcome byte bindings to that
+same child, but must never sign another child for that parent. Persist the
+reservation before releasing any signature and resume that same pending child
+after restart; do not choose a competing head after a timeout. Recipients reject
+missing sequencer authorization and quarantine conflicting signed children.
+This serializes an honest sequencer; a compromised sequencer can equivocate and
+must not be described as Byzantine-safe. An unavailable sequencer leaves changes
+pending, including its own replacement, unless its existing key/state can be
+safely restored. A stale backup that cannot establish the latest signed head and
+child reservations must not resume signing; use a new scope instead. There is no
+automatic leader election or recovery-key bypass.
+
+Reject duplicate JSON property names before
 parsing/canonicalization, so duplicate signer keys cannot be hidden by a parser.
 The shape tests reject repeated-entry arrays; runtime quorum/duplicate-key parsing
 and signature validation remain required application/crypto tests.
@@ -368,6 +387,8 @@ dependent tasks must additionally demonstrate:
   loss or duplicate visible messages;
 - duplicate conflicts, expiry on reads, clock skew, quota exhaustion, replica
   partitions and tombstone reconciliation;
+- quorum without the previous sequencer, conflicting child reservations, crash
+  before/after signature release and refusal to sign from a stale restored backup;
 - device removal concurrent with delivery, replay, stale authorization and
   out-of-order legitimate operations;
 - no private IPFS/DHT/network-pubsub writes, including fallback/error paths;

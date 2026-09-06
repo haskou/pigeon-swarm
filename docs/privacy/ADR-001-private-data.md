@@ -191,14 +191,21 @@ a null parent and one locally generated or independently pinned owner. The first
 membership transition references that verified genesis head.
 
 Each private scope has one signed, monotonically increasing authorization head
-and a designated sequencer chosen in its membership policy. The sequencer orders
-commits but cannot invent the required administrator signatures. Version 1 uses
+and a designated sequencer chosen in its membership policy. Every control binding
+requires the previous sequencer's signature as well as the
+administrator quorum. The sequencer durably reserves one child per parent before
+signing, but cannot invent the other required administrator signatures. Version 1
+uses
 one pinned owner as the default authority; policies admit at most 128 authority
 keys with a threshold from one to the admitted key count. Reject unsatisfiable
 policies before adoption. A configured administrator quorum is
 recorded in the previous signed policy. Do not silently create concurrent
 leaders during a partition. Authority recovery needs the previously authorized
-quorum or the owner's offline recovery credential.
+quorum **including the previous sequencer**. An encrypted backup can restore
+those same already-authorized keys and durable head state; it grants no additional
+authority. If the required keys/state cannot be restored, freeze this scope and
+create a new one through explicit participant verification. An owner recovery
+credential does not bypass the existing policy.
 
 Sensitive operations (admission, removal, bans, role changes and device grants)
 require the current signed head and exact parent revision. If the head cannot

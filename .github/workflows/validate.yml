@@ -95,6 +95,7 @@ jobs:
         run: node --test tests/turn-browser-probe.test.mjs
 
       - name: Build immutable application image from pinned sources
+        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
           SOURCE_REPOSITORIES_TOKEN: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
         run: |
@@ -106,9 +107,11 @@ jobs:
           printf 'PIGEON_TEST_IMAGE=%s\n' "$(cat "$RUNNER_TEMP/pigeon-test-image.id")" >> "$GITHUB_ENV"
 
       - name: Verify backend-issued credentials and bidirectional browser audio
+        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: npm run test:media
 
       - name: Verify application workflows between independent nodes
+        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           node --test tests/turn-entrypoint.integration.mjs
           npm run test:e2e

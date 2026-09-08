@@ -181,6 +181,11 @@ try {
         await route.fulfill({
           status: 409,
           contentType: 'application/json',
+          headers: {
+            'access-control-allow-origin': new URL(page.url()).origin,
+            'access-control-allow-credentials': 'true',
+            vary: 'Origin',
+          },
           body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
         });
         return;

@@ -99,6 +99,8 @@ try {
       conversationEvents: 0,
       listResponses: [],
       callErrors: [],
+      historyResponses: [],
+      rejectedSignals: 0,
     };
     deliveryDiagnostics.push(diagnostics);
     page.on("websocket", (socket) => {
@@ -115,9 +117,30 @@ try {
       });
     });
     page.on("response", async (response) => {
+      const responseUrl = new URL(response.url());
+      if (
+        response.request().method() === "GET" &&
+        /\/conversations\/[^/]+\/messages\/?$/.test(responseUrl.pathname)
+      ) {
+        const body = await response.json().catch(() => null);
+        const messages = Array.isArray(body) ? body : body?.messages ?? body?.data;
+        diagnostics.historyResponses.push({
+          stage,
+          limit: responseUrl.searchParams.get("limit"),
+          paginated: responseUrl.searchParams.has("beforeMessageId"),
+          status: response.status(),
+          count: Array.isArray(messages) ? messages.length : null,
+        });
+        if (diagnostics.historyResponses.length > 20)
+          diagnostics.historyResponses.shift();
+      }
       if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
         const body = await response.json().catch(() => ({}));
-        diagnostics.callErrors.push({ stage, status: response.status(), code: /^[A-Za-z]+Error$/.test(body.code || "") ? body.code : "unknown" });
+        const suffix = responseUrl.pathname.split('/').at(-1);
+        const operation = ['signals', 'heartbeat', 'participants', 'me'].includes(suffix) ? suffix : 'call';
+        const requestBody = response.request().postDataJSON();
+        const signalType = ['offer', 'answer', 'ice_candidate'].includes(requestBody?.signalType) ? requestBody.signalType : undefined;
+        diagnostics.callErrors.push({ stage, operation, signalType, status: response.status(), code: /^[A-Za-z]+Error$/.test(body.code || "") ? body.code : "unknown" });
         console.log("Call HTTP error:", JSON.stringify(diagnostics.callErrors.at(-1)));
         if (diagnostics.callErrors.length > 10) diagnostics.callErrors.shift();
       }
@@ -145,6 +168,29 @@ try {
             : "no domain error code",
         );
       }
+    });
+    let rejectSignalsUntil;
+    await page.route('**/api/calls/*/signals', async route => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      rejectSignalsUntil ??= Date.now() + 300;
+      if (Date.now() < rejectSignalsUntil) {
+        diagnostics.rejectedSignals++;
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          headers: {
+            'access-control-allow-origin': new URL(page.url()).origin,
+            'access-control-allow-credentials': 'true',
+            vary: 'Origin',
+          },
+          body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
+        });
+        return;
+      }
+      await route.continue();
     });
     page.setDefaultTimeout(45000);
     pages.push(page);
@@ -240,6 +286,14 @@ try {
   await pages[1].waitForFunction(
     () => !document.querySelector('[data-testid="message-composer-input"]').disabled,
   );
+  const assertTimeline = async (page, messages) => {
+    const items = page.getByTestId("message-item");
+    for (const message of messages) {
+      await items.getByText(message, { exact: true }).waitFor();
+      assert.equal(await items.getByText(message, { exact: true }).count(), 1);
+    }
+    assert.equal(await items.count(), messages.length);
+  };
   stage = "bidirectional message decryption";
   const deliver = async (sender, text) => {
     await sender.bringToFront();
@@ -328,6 +382,7 @@ try {
     );
   };
   await assertAudio("direct call");
+  assert.ok(deliveryDiagnostics.every(({ rejectedSignals }) => rejectedSignals > 0), "Both clients must recover from deliberately rejected signals");
   await pages[0].getByTestId("compact-call-bar").click();
   await pages[0]
     .getByRole("button", { name: "Leave call", exact: true })
@@ -441,25 +496,25 @@ try {
       "Fresh channel reads must not show disconnected participants",
     );
   }
-  stage = "password login and persisted message decryption";
-  for (const [index, page] of pages.entries()) {
-    await page.getByTestId("own-profile-menu-button").click();
-    await page.getByRole("button", { name: "Log out", exact: true }).click();
-    await page.getByTestId("auth-identity-input").fill(`caller-${index + 1}`);
-    await page.getByTestId("auth-password-input").fill("Disposable-call-test-password1!");
-    await page.getByTestId("auth-submit-button").click();
-    await page.getByTestId("own-profile-menu-button").waitFor();
-    if (await page.getByTestId("push-notification-dismiss-button").isVisible())
-      await page.getByTestId("push-notification-dismiss-button").click();
-    await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
-    await page.getByTestId("conversation-list-item").first().click();
-    await page.getByText("Encrypted message from caller one", { exact: true }).first().waitFor();
-    await page.getByText("Encrypted message from caller two", { exact: true }).first().waitFor();
-    await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
-    await page.getByRole("button", { name: "# general", exact: true }).click();
-    await page.getByText("Community message from caller one", { exact: true }).first().waitFor();
-    await page.getByText("Community message from caller two", { exact: true }).first().waitFor();
-    await joinVoice(page);
+  for (let recovery = 0; recovery < 3; recovery++) {
+    stage = `password login and persisted message decryption ${recovery}`;
+    for (const [index, page] of pages.entries()) {
+      await page.getByTestId("own-profile-menu-button").click();
+      await page.getByRole("button", { name: "Log out", exact: true }).click();
+      await page.getByTestId("auth-identity-input").fill(`caller-${index + 1}`);
+      await page.getByTestId("auth-password-input").fill("Disposable-call-test-password1!");
+      await page.getByTestId("auth-submit-button").click();
+      await page.getByTestId("own-profile-menu-button").waitFor();
+      if (await page.getByTestId("push-notification-dismiss-button").isVisible())
+        await page.getByTestId("push-notification-dismiss-button").click();
+      await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
+      await page.getByTestId("conversation-list-item").first().click();
+      await assertTimeline(page, ["Encrypted message from caller one", "Encrypted message from caller two"]);
+      await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
+      await page.getByRole("button", { name: "# general", exact: true }).click();
+      await assertTimeline(page, ["Community message from caller one", "Community message from caller two"]);
+      if (recovery === 2) await joinVoice(page);
+    }
   }
   await assertAudio("community voice after password login");
   for (const page of pages) await expectVoiceParticipants(page, 2);

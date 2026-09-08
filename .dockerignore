@@ -1,3 +1,6 @@
 *
 !Dockerfile
 !docker-entrypoint.sh
+!scripts/
+scripts/*
+!scripts/prepare-turn-secret.cjs

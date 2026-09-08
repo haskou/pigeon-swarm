@@ -23,6 +23,14 @@ jobs:
       - name: Validate TURN secret and Compose contract
         run: node --test tests/turn-secret.test.mjs tests/automatic-turn-secret.test.mjs
 
+      - name: Verify startup files are included in the Docker build context
+        run: |
+          docker build -f - . <<'DOCKERFILE'
+          FROM scratch
+          COPY docker-entrypoint.sh /docker-entrypoint.sh
+          COPY scripts/prepare-turn-secret.cjs /prepare-turn-secret.cjs
+          DOCKERFILE
+
       - name: Validate independent static client origin
         run: node --test tests/client-server.test.mjs
 

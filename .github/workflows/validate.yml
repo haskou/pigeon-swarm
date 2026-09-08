@@ -105,7 +105,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: haskou/pigeon-swarm-ui
-          ref: 10d44054359a05e333394578e08f9a0b6486f1da
+          ref: 0f69e32545d2ccb0c861bc69b4cdd264b5bc10ac
           path: client-source
           token: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
           persist-credentials: false

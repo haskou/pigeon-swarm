@@ -99,6 +99,7 @@ try {
       conversationEvents: 0,
       listResponses: [],
       callErrors: [],
+      historyResponses: [],
     };
     deliveryDiagnostics.push(diagnostics);
     page.on("websocket", (socket) => {
@@ -115,6 +116,23 @@ try {
       });
     });
     page.on("response", async (response) => {
+      const responseUrl = new URL(response.url());
+      if (
+        response.request().method() === "GET" &&
+        /\/conversations\/[^/]+\/messages\/?$/.test(responseUrl.pathname)
+      ) {
+        const body = await response.json().catch(() => null);
+        const messages = Array.isArray(body) ? body : body?.messages ?? body?.data;
+        diagnostics.historyResponses.push({
+          stage,
+          limit: responseUrl.searchParams.get("limit"),
+          paginated: responseUrl.searchParams.has("beforeMessageId"),
+          status: response.status(),
+          count: Array.isArray(messages) ? messages.length : null,
+        });
+        if (diagnostics.historyResponses.length > 20)
+          diagnostics.historyResponses.shift();
+      }
       if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
         const body = await response.json().catch(() => ({}));
         diagnostics.callErrors.push({ stage, status: response.status(), code: /^[A-Za-z]+Error$/.test(body.code || "") ? body.code : "unknown" });
@@ -441,25 +459,27 @@ try {
       "Fresh channel reads must not show disconnected participants",
     );
   }
-  stage = "password login and persisted message decryption";
-  for (const [index, page] of pages.entries()) {
-    await page.getByTestId("own-profile-menu-button").click();
-    await page.getByRole("button", { name: "Log out", exact: true }).click();
-    await page.getByTestId("auth-identity-input").fill(`caller-${index + 1}`);
-    await page.getByTestId("auth-password-input").fill("Disposable-call-test-password1!");
-    await page.getByTestId("auth-submit-button").click();
-    await page.getByTestId("own-profile-menu-button").waitFor();
-    if (await page.getByTestId("push-notification-dismiss-button").isVisible())
-      await page.getByTestId("push-notification-dismiss-button").click();
-    await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
-    await page.getByTestId("conversation-list-item").first().click();
-    await page.getByText("Encrypted message from caller one", { exact: true }).first().waitFor();
-    await page.getByText("Encrypted message from caller two", { exact: true }).first().waitFor();
-    await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
-    await page.getByRole("button", { name: "# general", exact: true }).click();
-    await page.getByText("Community message from caller one", { exact: true }).first().waitFor();
-    await page.getByText("Community message from caller two", { exact: true }).first().waitFor();
-    await joinVoice(page);
+  for (let recovery = 0; recovery < 3; recovery++) {
+    stage = `password login and persisted message decryption ${recovery}`;
+    for (const [index, page] of pages.entries()) {
+      await page.getByTestId("own-profile-menu-button").click();
+      await page.getByRole("button", { name: "Log out", exact: true }).click();
+      await page.getByTestId("auth-identity-input").fill(`caller-${index + 1}`);
+      await page.getByTestId("auth-password-input").fill("Disposable-call-test-password1!");
+      await page.getByTestId("auth-submit-button").click();
+      await page.getByTestId("own-profile-menu-button").waitFor();
+      if (await page.getByTestId("push-notification-dismiss-button").isVisible())
+        await page.getByTestId("push-notification-dismiss-button").click();
+      await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
+      await page.getByTestId("conversation-list-item").first().click();
+      await page.getByText("Encrypted message from caller one", { exact: true }).first().waitFor();
+      await page.getByText("Encrypted message from caller two", { exact: true }).first().waitFor();
+      await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
+      await page.getByRole("button", { name: "# general", exact: true }).click();
+      await page.getByText("Community message from caller one", { exact: true }).first().waitFor();
+      await page.getByText("Community message from caller two", { exact: true }).first().waitFor();
+      if (recovery === 2) await joinVoice(page);
+    }
   }
   await assertAudio("community voice after password login");
   for (const page of pages) await expectVoiceParticipants(page, 2);

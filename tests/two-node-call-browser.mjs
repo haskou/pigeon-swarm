@@ -100,6 +100,7 @@ try {
       listResponses: [],
       callErrors: [],
       historyResponses: [],
+      rejectedSignals: 0,
     };
     deliveryDiagnostics.push(diagnostics);
     page.on("websocket", (socket) => {
@@ -135,7 +136,11 @@ try {
       }
       if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
         const body = await response.json().catch(() => ({}));
-        diagnostics.callErrors.push({ stage, status: response.status(), code: /^[A-Za-z]+Error$/.test(body.code || "") ? body.code : "unknown" });
+        const suffix = responseUrl.pathname.split('/').at(-1);
+        const operation = ['signals', 'heartbeat', 'participants', 'me'].includes(suffix) ? suffix : 'call';
+        const requestBody = response.request().postDataJSON();
+        const signalType = ['offer', 'answer', 'ice_candidate'].includes(requestBody?.signalType) ? requestBody.signalType : undefined;
+        diagnostics.callErrors.push({ stage, operation, signalType, status: response.status(), code: /^[A-Za-z]+Error$/.test(body.code || "") ? body.code : "unknown" });
         console.log("Call HTTP error:", JSON.stringify(diagnostics.callErrors.at(-1)));
         if (diagnostics.callErrors.length > 10) diagnostics.callErrors.shift();
       }
@@ -163,6 +168,20 @@ try {
             : "no domain error code",
         );
       }
+    });
+    let rejectSignalsUntil;
+    await page.route('**/api/calls/*/signals', async route => {
+      rejectSignalsUntil ??= Date.now() + 300;
+      if (Date.now() < rejectSignalsUntil) {
+        diagnostics.rejectedSignals++;
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
+        });
+        return;
+      }
+      await route.continue();
     });
     page.setDefaultTimeout(45000);
     pages.push(page);
@@ -346,6 +365,7 @@ try {
     );
   };
   await assertAudio("direct call");
+  assert.ok(deliveryDiagnostics.every(({ rejectedSignals }) => rejectedSignals > 0), "Both clients must recover from deliberately rejected signals");
   await pages[0].getByTestId("compact-call-bar").click();
   await pages[0]
     .getByRole("button", { name: "Leave call", exact: true })

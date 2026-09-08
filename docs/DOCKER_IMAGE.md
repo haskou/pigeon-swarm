@@ -425,7 +425,7 @@ Push notifications are disabled until VAPID keys are configured.
 Generate keys once per deployment:
 
 ```bash
-docker run --rm node:24.15-bullseye \
+docker run --rm node:24.15-bookworm \
   sh -lc "corepack enable >/dev/null 2>&1 || true; npx web-push generate-vapid-keys"
 ```
 

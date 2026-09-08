@@ -11,7 +11,7 @@ services:
       - SETGID
       - SETUID
     environment:
-      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Configure a private TURN secret in .env before starting the stack}
+      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-}
       CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LINK_PREVIEW_RATE_LIMIT_PER_MINUTE: ${LINK_PREVIEW_RATE_LIMIT_PER_MINUTE:-30}
@@ -40,8 +40,9 @@ services:
     image: coturn/coturn:4.11.0-r0-alpine
     depends_on:
       app:
-        condition: service_started
+        condition: service_healthy
     network_mode: service:app
+    user: "1000:1000"
     entrypoint:
       - /bin/sh
       - /opt/pigeon/run-turn-from-runtime-config.sh
@@ -55,7 +56,7 @@ services:
       - --no-multicast-peers
       - --stale-nonce=600
     environment:
-      CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:?Configure a private TURN secret in .env before starting the stack}
+      CALLS_TURN_SECRET_FILE: /run/pigeon/turn-shared-secret
       CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
       CALLS_TURN_USER_QUOTA: ${CALLS_TURN_USER_QUOTA:-16}
       CALLS_TURN_TOTAL_QUOTA: ${CALLS_TURN_TOTAL_QUOTA:-128}
@@ -66,7 +67,7 @@ services:
       - ./scripts/turn-peer-policy.conf:/opt/pigeon/turn-peer-policy.conf:ro
       - turn_runtime:/run/pigeon:ro
     tmpfs:
-      - /run/pigeon-turn:mode=0700,uid=65534,gid=65533
+      - /run/pigeon-turn:mode=0700,uid=1000,gid=1000
     healthcheck:
       test:
         - CMD

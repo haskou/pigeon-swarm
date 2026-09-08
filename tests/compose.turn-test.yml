@@ -2,7 +2,11 @@
 services:
   app:
     image: node:24.15-alpine
-    entrypoint: ["node", "-e", "setInterval(() => {}, 60000)"]
+    entrypoint: ["sh", "-c", "chown 1000:1000 /run/pigeon && exec su node -s /bin/sh -c \"node /opt/pigeon/scripts/prepare-turn-secret.cjs /run/pigeon/persisted-secret /run/pigeon/turn-shared-secret && exec node -e 'setInterval(() => {}, 60000)'\""]
+    healthcheck:
+      test: ["CMD", "test", "-s", "/run/pigeon/turn-shared-secret"]
+      interval: 1s
+      retries: 30
     ports: !reset []
     volumes: !override
       - turn_runtime:/run/pigeon

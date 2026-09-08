@@ -3,7 +3,13 @@ services:
     environment:
       NODE_EXTRA_CA_CERTS: /run/pigeon-test-ca.pem
     volumes:
+      - test_tls:/run/pigeon-test-tls
       - ${CALLS_TURN_TLS_CERTS_DIR}/fullchain.pem:/run/pigeon-test-ca.pem:ro
   turn:
     environment:
       CALLS_TURN_EXTERNAL_IP: 192.0.2.42/127.0.0.1
+
+    volumes:
+      - test_tls:/run/pigeon-turn-tls:ro
+volumes:
+  test_tls:

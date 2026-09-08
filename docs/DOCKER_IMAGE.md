@@ -17,16 +17,17 @@ Published tags are multi-architecture images for `linux/amd64` and `linux/arm64`
 
 ## Quick Start
 
-First create `.env` with a private TURN secret using the
-[configuration steps below](#configuration). Then start the example stack:
+Optionally create `.env` using the [configuration steps below](#configuration),
+then start the example stack:
 
 ```bash
 docker compose up
 ```
 
-An empty secret is a startup error. Existing installations using the former
-public fallback must follow the [rotation steps](#turn-for-webrtc-calls)
-before upgrading.
+An empty or omitted secret generates a private secret for this installation on
+first startup and retains it across restarts. Existing installations explicitly
+using the former public fallback must remove that override or follow the
+[rotation steps](#turn-for-webrtc-calls) before upgrading.
 
 The TURN entrypoint writes the secret to a mode-`0600` configuration file on
 tmpfs and removes it from the long-running `turnserver` environment. It is not
@@ -42,22 +43,20 @@ The included [`docker-compose.yml`](../docker-compose.yml) is intentionally smal
 
 ## Configuration
 
-Create `.env` once from [`.env.example`](../.env.example), generating a private
-TURN secret directly into the file. This requires OpenSSL and refuses to
-overwrite an existing `.env`. The secret is not printed or passed in arguments:
+Create `.env` once from [`.env.example`](../.env.example). The following protects
+the file and refuses to overwrite an existing configuration:
 
 ```bash
 (
   set -eu
   umask 077
   set -C
-  {
-    sed '/^CALLS_TURN_SHARED_SECRET=/d' .env.example
-    printf 'CALLS_TURN_SHARED_SECRET='
-    openssl rand -hex 32
-  } > .env
+  cat .env.example > .env
 )
 ```
+
+Leave `CALLS_TURN_SHARED_SECRET` empty for automatic provisioning. No manual key
+exchange is needed between the bundled app and coturn.
 
 Common settings:
 
@@ -68,7 +67,7 @@ Common settings:
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
-| `CALLS_TURN_SHARED_SECRET` | required; no default | Private coturn REST secret, 32–256 base64/hex-compatible characters. Generate 32 random bytes as hex; length validation alone cannot establish entropy. Backend and coturn receive the same value. |
+| `CALLS_TURN_SHARED_SECRET` | automatically generated and persisted | Optional private coturn REST secret override, 32–256 base64/hex-compatible characters. If supplied, use 32 random bytes as hex; length alone does not establish entropy. Only this installation’s issuer and coturn need this master secret. |
 | `CALLS_TURN_EXTERNAL_IP` | auto-detected IPv4 | Explicit IPv4 address or `public/private` IPv4 mapping. No hostnames; this override currently supports IPv4 only. |
 | `CALLS_TURN_USER_QUOTA` | `16` | Maximum concurrent allocations for one authenticated TURN user, including renewed credentials for that user. Positive integer, at most the total quota. |
 | `CALLS_TURN_TOTAL_QUOTA` | `128` | Maximum concurrent allocations across coturn. Positive integer up to 65535. Available relay ports can impose a lower limit. |
@@ -88,12 +87,24 @@ The frontend is built into the image and already talks to the backend through `/
 
 ## TURN For WebRTC Calls
 
-Compose refuses to start without `CALLS_TURN_SHARED_SECRET`. The TURN launcher
-also rejects the former public fallback, short values, oversized values and
-characters that could inject coturn configuration. It writes the secret to a
-mode-600 file in tmpfs and removes it from the turnserver child's environment.
-The Docker administrator can still inspect container configuration; this is
-not a substitute for controlling access to Docker and protecting `.env`.
+On first startup the app generates 32 cryptographically random bytes, stored as
+hex in `/data/local_storage/turn-shared-secret` with mode `0600`. Protect and back
+up the configured local-storage directory: this file preserves the installation’s
+secret across container replacement and restart. Each installation generates its
+own secret; there is no universal default and no need to share master secrets
+with other nodes.
+
+The app atomically copies the secret into the private `turn_runtime` volume for
+bundled coturn. Coturn waits for the app to become healthy, reads the mode-600
+file as UID/GID 1000, and reloads when that file changes. Its derived configuration
+is also mode 600 on tmpfs. The secret is never passed in coturn’s arguments or
+long-running environment. Docker administrators can access private container
+files, so controlling Docker and storage access remains necessary.
+
+An explicit override replaces the persisted secret and is retained when the
+override is later removed. Invalid overrides, including the former public
+fallback, are rejected. Deleting the persisted file without an override generates
+a new secret; deleting only the runtime volume does not rotate it.
 
 For an existing installation using the public fallback, rotate it once before
 upgrading. The following preserves other settings, saves a private backup and
@@ -118,14 +129,11 @@ rotation, not on every restart:
 docker compose up -d --force-recreate app turn
 ```
 
-Keep `.env` across restarts. Rotating the secret invalidates existing temporary
-credentials and can interrupt calls. Coordinate rotation with every backend
-that issues credentials for this TURN server. Two independent TURN servers do
-not need the same secret to exchange relayed traffic. The current backend's
-distributed credential issuance and relay-record pool validation do require
-matching secrets for participating issuers and the servers they advertise;
-independent per-server issuance is tracked in
-[pigeon-swarm-node#286](https://github.com/haskou/pigeon-swarm-node/issues/286).
+Keep `.env` and the local-storage directory across restarts. Rotating the secret
+invalidates existing temporary credentials and can interrupt calls. Apply the
+override and recreate the app and coturn together as shown above. Other nodes
+must obtain temporary credentials from the relay owner; do not copy this master
+secret between independent installations.
 
 The Compose stack runs coturn separately while sharing the application's
 network namespace. The backend writes a local runtime contract whenever the
@@ -205,9 +213,15 @@ listener and full media range with unchanged port numbers.
 
 Obtain a valid certificate for the relay hostname and place its full chain and
 unencrypted private key in an existing directory outside the repository (or
-the ignored `turn-certs/` directory). Coturn runs as UID 65534 / GID 65533 in
-the pinned image: grant that identity read access, restrict the private key
-to that identity and its administrator, and mount the directory read-only.
+the ignored `turn-certs/` directory). This Compose stack runs coturn as UID 1000 / GID 1000:
+grant that identity read access, restrict the private key to that identity and
+its administrator, and mount the directory read-only. When upgrading from the
+previous UID 65534 / GID 65533 configuration, update certificate-directory access
+and key ownership before recreating coturn. For dedicated certificate files on
+a Linux host, assign the directory and files to `1000:1000`, use mode `0700` for
+the directory and `0600` for the private key. If a certificate renewal service
+manages these files, preserve its access through a restricted group or ACL and
+ensure renewed keys remain readable by UID 1000.
 Do not commit the key or relax it to world-readable for a production deployment.
 The launcher refuses missing or unreadable files. Certificate/key validity is
 checked by coturn and by the TLS diagnostic below.

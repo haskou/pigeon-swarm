@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Validate TURN secret and Compose contract
-        run: node --test tests/turn-secret.test.mjs
+        run: node --test tests/turn-secret.test.mjs tests/automatic-turn-secret.test.mjs
 
       - name: Validate independent static client origin
         run: node --test tests/client-server.test.mjs
@@ -89,6 +89,7 @@ jobs:
         run: |
           docker pull ghcr.io/haskou/pigeon-swarm:latest
           export PIGEON_TEST_IMAGE="$(docker image inspect ghcr.io/haskou/pigeon-swarm:latest --format '{{index .RepoDigests 0}}')"
+          node --test tests/turn-entrypoint.integration.mjs
           npm run test:e2e
 
   independent-client:

@@ -17,6 +17,8 @@ docker compose exec -T turn sh -lc '
     echo "TURN secret configuration must have mode 600." >&2
     exit 1
   }
+  shared_secret="$(sed -n "s/^static-auth-secret=//p" /run/pigeon-turn/turnserver.conf)"
+  test -n "$shared_secret"
   for comm in /proc/[0-9]*/comm; do
     if [ "$(cat "$comm" 2>/dev/null || true)" = turnserver ]; then
       pid="${comm#/proc/}"
@@ -24,7 +26,7 @@ docker compose exec -T turn sh -lc '
       command_line="$(tr "\0" "\n" < "/proc/$pid/cmdline")"
       environment="$(tr "\0" "\n" < "/proc/$pid/environ")"
       case "$command_line$environment" in
-        *"$CALLS_TURN_SHARED_SECRET"*)
+        *"$shared_secret"*)
           echo "TURN secret is exposed in the turnserver process." >&2
           exit 1
           ;;
@@ -36,6 +38,6 @@ docker compose exec -T turn sh -lc '
   exit 1
 '
 
-# The app shares coturn's network namespace and already holds the issuer secret.
+# The app shares coturn's network namespace; its private file is owned by UID 1000.
 # Send source through stdin; never pass secrets or credentials as CLI arguments.
-docker compose exec -T app node --input-type=module < "$script_dir/turn-allocation-probe.mjs"
+docker compose exec -T --user 1000:1000 app node --input-type=module < "$script_dir/turn-allocation-probe.mjs"

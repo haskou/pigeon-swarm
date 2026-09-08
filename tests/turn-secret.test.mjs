@@ -55,14 +55,13 @@ for (const [name, secret] of [
   });
 }
 
-test('Compose rejects a missing secret without rendering configuration', () => {
+test('Compose accepts automatic private secret provisioning', () => {
   const env = { ...process.env };
   delete env.CALLS_TURN_SHARED_SECRET;
   const result = spawnSync('docker', ['compose', '--env-file', '/dev/null', 'config', '--quiet'], {
     encoding: 'utf8', env,
   });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /CALLS_TURN_SHARED_SECRET/);
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test('Compose accepts an explicitly supplied deployment secret', () => {
@@ -74,7 +73,9 @@ test('Compose accepts an explicitly supplied deployment secret', () => {
   assert.equal(result.status, 0, 'Compose must accept a private deployment secret');
   const config = JSON.parse(result.stdout);
   assert.ok(config.services.app.environment.CALLS_TURN_SHARED_SECRET === secret, 'Backend must receive the deployment secret');
-  assert.ok(config.services.turn.environment.CALLS_TURN_SHARED_SECRET === secret, 'Coturn must receive the same deployment secret');
+  assert.equal(config.services.turn.environment.CALLS_TURN_SECRET_FILE, '/run/pigeon/turn-shared-secret');
+  assert.equal(config.services.turn.environment.CALLS_TURN_SHARED_SECRET, undefined);
+  assert.equal(config.services.turn.user, '1000:1000');
 });
 
 for (const externalIp of ['relay.example.com', '192.0.2.999', '192.0.2.1/10.0.0.1/10.0.0.2', '192.0.2.1\nno-auth']) {

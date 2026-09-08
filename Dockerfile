@@ -107,6 +107,7 @@ RUN apt-get update \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/log/apt/*
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY scripts/prepare-turn-secret.cjs /usr/local/lib/pigeon/prepare-turn-secret.cjs
 COPY --chown=node:node --from=sources /sources/pigeon-swarm-node/package.json ./
 COPY --chown=node:node --from=production-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=backend-build /build/backend/config ./config

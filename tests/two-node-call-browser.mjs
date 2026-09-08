@@ -171,6 +171,10 @@ try {
     });
     let rejectSignalsUntil;
     await page.route('**/api/calls/*/signals', async route => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
       rejectSignalsUntil ??= Date.now() + 300;
       if (Date.now() < rejectSignalsUntil) {
         diagnostics.rejectedSignals++;
@@ -277,6 +281,14 @@ try {
   await pages[1].waitForFunction(
     () => !document.querySelector('[data-testid="message-composer-input"]').disabled,
   );
+  const assertTimeline = async (page, messages) => {
+    const items = page.getByTestId("message-item");
+    for (const message of messages) {
+      await items.getByText(message, { exact: true }).waitFor();
+      assert.equal(await items.getByText(message, { exact: true }).count(), 1);
+    }
+    assert.equal(await items.count(), messages.length);
+  };
   stage = "bidirectional message decryption";
   const deliver = async (sender, text) => {
     await sender.bringToFront();
@@ -492,12 +504,10 @@ try {
         await page.getByTestId("push-notification-dismiss-button").click();
       await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
       await page.getByTestId("conversation-list-item").first().click();
-      await page.getByText("Encrypted message from caller one", { exact: true }).first().waitFor();
-      await page.getByText("Encrypted message from caller two", { exact: true }).first().waitFor();
+      await assertTimeline(page, ["Encrypted message from caller one", "Encrypted message from caller two"]);
       await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
       await page.getByRole("button", { name: "# general", exact: true }).click();
-      await page.getByText("Community message from caller one", { exact: true }).first().waitFor();
-      await page.getByText("Community message from caller two", { exact: true }).first().waitFor();
+      await assertTimeline(page, ["Community message from caller one", "Community message from caller two"]);
       if (recovery === 2) await joinVoice(page);
     }
   }

@@ -38,9 +38,9 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
     const cert = new X509Certificate(readFileSync(resolve(certificates, 'fullchain.pem')));
     const spki = createHash('sha256').update(cert.publicKey.export({ type: 'spki', format: 'der' })).digest('base64');
     compose('up', '-d', '--wait', '--wait-timeout', '90', 'app');
-    const image = run('docker', ['image', 'inspect', env.PIGEON_TEST_IMAGE || 'ghcr.io/haskou/pigeon-swarm:latest', '--format', '{{index .RepoDigests 0}}']);
+    const image = run('docker', ['image', 'inspect', env.PIGEON_TEST_IMAGE || 'ghcr.io/haskou/pigeon-swarm:latest', '--format', '{{.Id}}']);
     assert.equal(image.status, 0, 'Application image digest must be available');
-    assert.match(image.stdout.trim(), /^ghcr\.io\/haskou\/pigeon-swarm@sha256:[a-f0-9]{64}$/);
+    assert.match(image.stdout.trim(), /^sha256:[a-f0-9]{64}$/);
     console.log(`Application image: ${image.stdout.trim()}`);
     const ip = compose('exec', '-T', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim();
     env.CALLS_TURN_EXTERNAL_IP = ip;

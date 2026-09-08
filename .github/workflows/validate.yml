@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+env:
+  PIGEON_SWARM_NODE_SHA: ce027c5fd4e685b411c670690cfa96408d045756
+  PIGEON_SWARM_UI_SHA: 4abf59dbb6225ff736952b47403d20d5654c19c6
+
 concurrency:
   group: validate-wrapper-${{ github.ref }}
   cancel-in-progress: true
@@ -90,13 +94,22 @@ jobs:
       - name: Verify browser diagnostic redaction
         run: node --test tests/turn-browser-probe.test.mjs
 
+      - name: Build immutable application image from pinned sources
+        env:
+          SOURCE_REPOSITORIES_TOKEN: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
+        run: |
+          docker build --target production \
+            --secret id=github_token,env=SOURCE_REPOSITORIES_TOKEN \
+            --build-arg PIGEON_SWARM_NODE_SHA="$PIGEON_SWARM_NODE_SHA" \
+            --build-arg PIGEON_SWARM_UI_SHA="$PIGEON_SWARM_UI_SHA" \
+            --iidfile "$RUNNER_TEMP/pigeon-test-image.id" .
+          printf 'PIGEON_TEST_IMAGE=%s\n' "$(cat "$RUNNER_TEMP/pigeon-test-image.id")" >> "$GITHUB_ENV"
+
       - name: Verify backend-issued credentials and bidirectional browser audio
         run: npm run test:media
 
       - name: Verify application workflows between independent nodes
         run: |
-          docker pull ghcr.io/haskou/pigeon-swarm:latest
-          export PIGEON_TEST_IMAGE="$(docker image inspect ghcr.io/haskou/pigeon-swarm:latest --format '{{index .RepoDigests 0}}')"
           node --test tests/turn-entrypoint.integration.mjs
           npm run test:e2e
 
@@ -114,7 +127,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: haskou/pigeon-swarm-ui
-          ref: 10d44054359a05e333394578e08f9a0b6486f1da
+          ref: ${{ env.PIGEON_SWARM_UI_SHA }}
           path: client-source
           token: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
           persist-credentials: false
@@ -140,10 +153,19 @@ jobs:
           export PIGEON_CLIENT_DIST="$GITHUB_WORKSPACE/client-source/dist"
           node --test tests/independent-client-browser.integration.mjs
 
+      - name: Build immutable application image from pinned sources
+        env:
+          SOURCE_REPOSITORIES_TOKEN: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
+        run: |
+          docker build --target production \
+            --secret id=github_token,env=SOURCE_REPOSITORIES_TOKEN \
+            --build-arg PIGEON_SWARM_NODE_SHA="$PIGEON_SWARM_NODE_SHA" \
+            --build-arg PIGEON_SWARM_UI_SHA="$PIGEON_SWARM_UI_SHA" \
+            --iidfile "$RUNNER_TEMP/pigeon-test-image.id" .
+          printf 'PIGEON_TEST_IMAGE=%s\n' "$(cat "$RUNNER_TEMP/pigeon-test-image.id")" >> "$GITHUB_ENV"
+
       - name: Verify independent client calls against real nodes
         run: |
-          docker pull ghcr.io/haskou/pigeon-swarm:latest
-          export PIGEON_TEST_IMAGE="$(docker image inspect ghcr.io/haskou/pigeon-swarm:latest --format '{{index .RepoDigests 0}}')"
           export PIGEON_CLIENT_DIST="$GITHUB_WORKSPACE/client-source/dist"
           export PIGEON_INDEPENDENT_CLIENT=true
           npm run test:e2e

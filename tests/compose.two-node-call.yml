@@ -12,6 +12,8 @@ services:
       CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_A:?}
       PIGEON_PUBLIC_BOOTSTRAP_ENABLED: "false"
     volumes: !override
+      - ../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ../scripts/prepare-turn-secret.cjs:/usr/local/lib/pigeon/prepare-turn-secret.cjs:ro
       - ipfs_a:/data/ipfs
       - local_a:/data/local_storage
       - runtime_a:/run/pigeon
@@ -28,6 +30,8 @@ services:
       CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_B:?}
       PIGEON_PUBLIC_BOOTSTRAP_ENABLED: "false"
     volumes: !override
+      - ../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ../scripts/prepare-turn-secret.cjs:/usr/local/lib/pigeon/prepare-turn-secret.cjs:ro
       - ipfs_b:/data/ipfs
       - local_b:/data/local_storage
       - runtime_b:/run/pigeon
@@ -36,7 +40,7 @@ services:
       file: ../docker-compose.yml
       service: turn
     depends_on: !override
-      app-a: { condition: service_started }
+      app-a: { condition: service_healthy }
     network_mode: service:app-a
     environment:
       CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_A:?}
@@ -52,7 +56,7 @@ services:
       file: ../docker-compose.yml
       service: turn
     depends_on: !override
-      app-b: { condition: service_started }
+      app-b: { condition: service_healthy }
     network_mode: service:app-b
     environment:
       CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_B:?}

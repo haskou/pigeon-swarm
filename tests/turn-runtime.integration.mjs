@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, mkdtempSync, mkdirSync, chmodSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
@@ -17,9 +17,7 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
       '-subj', '/CN=relay.test', '-addext', 'subjectAltName=DNS:relay.test',
       '-keyout', resolve(certificates, 'privkey.pem'), '-out', resolve(certificates, 'fullchain.pem')], { encoding: 'utf8' });
     assert.equal(generated.status, 0, 'Temporary test certificate generation failed');
-    // Disposable key, within a mode-700 parent on the host, readable by coturn's
-    // unprivileged container user. Never use this permission for a deployment key.
-    chmodSync(resolve(certificates, 'privkey.pem'), 0o644);
+
   }
   const files = ['docker-compose.yml', ...(tls ? ['docker-compose.turn-tls.yml'] : []), 'tests/compose.turn-test.yml', ...(tls ? ['tests/compose.turn-tls-test.yml'] : [])];
   const env = {
@@ -48,8 +46,24 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
   };
   const probe = readFileSync('scripts/turn-allocation-probe.mjs', 'utf8');
   try {
-    compose('up', '-d', '--wait', '--wait-timeout', '45', 'app', 'turn');
-    compose('exec', '-T', 'app', 'sh', '-c', 'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4121\n" > /run/pigeon/calls-turn-runtime.conf');
+    compose('up', '-d', '--wait', '--wait-timeout', '45', 'app');
+    if (tls) {
+      const provisioned = run('docker', ['compose', 'exec', '-T', 'app', 'node', '-e', `
+        const fs = require('node:fs');
+        const files = JSON.parse(fs.readFileSync(0, 'utf8'));
+        for (const [name, content] of Object.entries(files)) {
+          const path = '/run/pigeon-test-tls/' + name;
+          fs.writeFileSync(path, content, {mode: 0o600});
+          fs.chownSync(path, 1000, 1000);
+        }
+      `], {input: JSON.stringify(Object.fromEntries(['fullchain.pem', 'privkey.pem'].map(name => [name, readFileSync(resolve(certificates, name), 'utf8')])))});
+      assert.equal(provisioned.status, 0, 'Private TLS fixture provisioning failed');
+    }
+    compose('up', '-d', '--wait', '--wait-timeout', '45', 'turn');
+    if (tls) {
+      assert.equal(compose('exec', '-T', 'turn', 'sh', '-c', 'test -r /run/pigeon-turn-tls/privkey.pem && stat -c "%u:%g:%a" /run/pigeon-turn-tls/privkey.pem').trim(), '1000:1000:600');
+    }
+    compose('exec', '-T', '--user', '1000:1000', 'app', 'sh', '-c', 'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4121\n" > /run/pigeon/calls-turn-runtime.conf');
     for (let cycle = 0; cycle < 2; cycle += 1) {
       if (cycle) compose('restart', 'turn');
       const verified = run('sh', ['scripts/verify-turn.sh']);
@@ -101,3 +115,75 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
   }
 });
 }
+
+
+test('automatic secret persists and coturn reloads a rotated private runtime file', {timeout: 180000}, () => {
+  const env = {...process.env, CALLS_TURN_SHARED_SECRET: '', CALLS_TURN_EXTERNAL_IP: '',
+    COMPOSE_PROJECT_NAME: `pigeon-turn-auto-${randomBytes(5).toString('hex')}`,
+    COMPOSE_FILE: ['docker-compose.yml', 'tests/compose.turn-test.yml'].map(file => resolve(file)).join(':'),
+    COMPOSE_ENV_FILES: '/dev/null'};
+  const run = (args, options = {}) => spawnSync('docker', ['compose', ...args], {env, encoding: 'utf8', timeout: 90000, ...options});
+  const compose = (...args) => {
+    const result = run(args);
+    assert.equal(result.status, 0, `Compose ${args[0]} failed (configuration withheld)`);
+    return result.stdout.trim();
+  };
+  const verify = () => {
+    const result = spawnSync('sh', ['scripts/verify-turn.sh'], {env, encoding: 'utf8', timeout: 45000});
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /PASS udp:/);
+    assert.match(result.stdout, /PASS tcp:/);
+  };
+  const fingerprint = () => compose('exec', '-T', '--user', '1000:1000', 'app', 'node', '-e', `
+    const fs = require('node:fs'), crypto = require('node:crypto');
+    const stored = fs.readFileSync('/run/pigeon/persisted-secret');
+    const runtime = fs.readFileSync('/run/pigeon/turn-shared-secret');
+    if (!stored.equals(runtime) || !/^[a-f0-9]{64}$/.test(stored.toString())) process.exit(1);
+    for (const path of ['/run/pigeon/persisted-secret', '/run/pigeon/turn-shared-secret']) {
+      if ((fs.statSync(path).mode & 0o777) !== 0o600) process.exit(1);
+    }
+    console.log(crypto.createHash('sha256').update(stored).digest('hex'));
+  `);
+  try {
+    compose('up', '-d', '--wait', '--wait-timeout', '45', 'app', 'turn');
+    compose('exec', '-T', '--user', '1000:1000', 'app', 'sh', '-c', 'printf "version=1\nenabled=true\nlistening_port=4101\nrelay_port_start=4102\nrelay_port_end=4121\n" > /run/pigeon/calls-turn-runtime.conf');
+    const original = fingerprint();
+    verify();
+    compose('restart', 'app', 'turn');
+    assert.equal(fingerprint(), original);
+    verify();
+    compose('exec', '-T', '--user', '1000:1000', 'app', 'cp', '/run/pigeon/turn-shared-secret', '/run/pigeon/previous-secret');
+    const override = randomBytes(32).toString('hex');
+    const rotation = run(['exec', '-T', '--user', '1000:1000', '-e', 'CALLS_TURN_SHARED_SECRET', 'app', 'sh', '-c',
+      'node /opt/pigeon/scripts/prepare-turn-secret.cjs /run/pigeon/persisted-secret /run/pigeon/turn-shared-secret'],
+      {env: {...env, CALLS_TURN_SHARED_SECRET: override}});
+    assert.equal(rotation.status, 0, 'Rotation failed (output withheld)');
+    const rotated = fingerprint();
+    assert.notEqual(rotated, original);
+    compose('exec', '-T', 'turn', 'sh', '-c', `
+      for attempt in $(seq 1 15); do
+        if [ "$(sed -n 's/^static-auth-secret=//p' /run/pigeon-turn/turnserver.conf)" = "$(cat /run/pigeon/turn-shared-secret)" ]; then exit 0; fi
+        sleep 1
+      done
+      exit 1
+    `);
+    verify();
+    const mismatch = run(['exec', '-T', '--user', '1000:1000', '-e', 'CALLS_TURN_SHARED_SECRET', 'app', 'node', '--input-type=module'], {
+      env: {...env, CALLS_TURN_SHARED_SECRET: randomBytes(32).toString('hex')},
+      input: readFileSync('scripts/turn-allocation-probe.mjs', 'utf8'),
+    });
+    assert.equal(mismatch.status, 1);
+    assert.match(mismatch.stderr, /backend and coturn use the same secret/);
+    const previous = run(['exec', '-T', '--user', '1000:1000', '-e', 'CALLS_TURN_SECRET_FILE=/run/pigeon/previous-secret', 'app', 'node', '--input-type=module'], {
+      input: readFileSync('scripts/turn-allocation-probe.mjs', 'utf8'),
+    });
+    assert.equal(previous.status, 1);
+    assert.match(previous.stderr, /backend and coturn use the same secret/);
+    compose('up', '-d', '--force-recreate', '--wait', '--wait-timeout', '45', 'app', 'turn');
+    assert.equal(fingerprint(), rotated);
+    verify();
+    assert.ok(!compose('logs', '--no-color', 'app', 'turn').includes(override), 'Logs exposed the override');
+  } finally {
+    compose('down', '--volumes', '--remove-orphans');
+  }
+});

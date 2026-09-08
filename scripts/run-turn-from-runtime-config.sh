@@ -93,6 +93,7 @@ start_turn() {
 
 reload_runtime_configuration() {
   stop_turn
+  write_turn_config
 
   if [ ! -f "$runtime_config_path" ]; then
     echo 'Waiting for persisted node TURN configuration.' >&2
@@ -121,7 +122,24 @@ reload_runtime_configuration() {
   start_turn "$listening_port" "$relay_port_start" "$relay_port_end" "$@"
 }
 
-shared_secret="${CALLS_TURN_SHARED_SECRET:-}"
+secret_override="${CALLS_TURN_SHARED_SECRET:-}"
+unset CALLS_TURN_SHARED_SECRET
+
+load_shared_secret() {
+shared_secret="$secret_override"
+if [ -z "$shared_secret" ] && [ -n "${CALLS_TURN_SECRET_FILE:-}" ]; then
+  attempts=0
+  while [ ! -f "$CALLS_TURN_SECRET_FILE" ] && [ "$attempts" -lt 30 ]; do
+    sleep 1
+    attempts=$((attempts + 1))
+  done
+  if [ -L "$CALLS_TURN_SECRET_FILE" ] ||
+    [ "$(stat -c '%a' "$CALLS_TURN_SECRET_FILE" 2>/dev/null)" != 600 ]; then
+    echo 'TURN secret file is missing or has unsafe permissions.' >&2
+    exit 1
+  fi
+  shared_secret="$(cat "$CALLS_TURN_SECRET_FILE")"
+fi
 valid_secret=true
 case "$shared_secret" in
   '' | *[!a-zA-Z0-9_/+=-]*) valid_secret=false ;;
@@ -134,6 +152,10 @@ if [ "$valid_secret" != true ] ||
   echo 'CALLS_TURN_SHARED_SECRET must be a private deployment secret of 32-256 base64/hex-compatible characters. The public fallback is rejected. Configure the same value on its backend credential issuer and coturn.' >&2
   exit 1
 fi
+
+}
+
+load_shared_secret
 
 user_quota="${CALLS_TURN_USER_QUOTA:-16}"
 total_quota="${CALLS_TURN_TOTAL_QUOTA:-128}"
@@ -191,6 +213,8 @@ case "${CALLS_TURN_TLS_ENABLED:-false}" in
   *) echo 'CALLS_TURN_TLS_ENABLED must be true or false.' >&2; exit 1 ;;
 esac
 
+write_turn_config() {
+  load_shared_secret
 umask 077
 secret_config="$(mktemp "${turn_config_path}.XXXXXX")"
 printf 'static-auth-secret=%s\n' "$shared_secret" > "$secret_config"
@@ -202,7 +226,11 @@ if [ -n "$allowed_peers" ]; then
   done >> "$secret_config"
 fi
 mv "$secret_config" "$turn_config_path"
-unset shared_secret CALLS_TURN_SHARED_SECRET
+unset shared_secret
+
+}
+
+write_turn_config
 
 trap 'stop_turn; exit 0' INT TERM
 
@@ -210,6 +238,9 @@ while true; do
   signature="$(
     if [ -f "$runtime_config_path" ]; then
       cksum "$runtime_config_path"
+      if [ -n "${CALLS_TURN_SECRET_FILE:-}" ]; then
+        cksum "$CALLS_TURN_SECRET_FILE"
+      fi
     else
       printf missing
     fi

@@ -48,6 +48,10 @@ This repository provides:
 * automatic image publishing when `main` changes
 * a dispatch path for the source repositories to request a fresh image
 
+The bundled TURN service automatically generates a private per-installation secret
+and persists it with local storage across restarts. No shared default or manual
+secret exchange is needed between the app and its coturn service.
+
 Docker image usage is documented in [docs/DOCKER_IMAGE.md](docs/DOCKER_IMAGE.md).
 
 ## License

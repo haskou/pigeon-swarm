@@ -7,6 +7,8 @@ services:
     environment:
       LOG_LEVEL: error
     volumes: !override
+      - ./docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ./scripts/prepare-turn-secret.cjs:/usr/local/lib/pigeon/prepare-turn-secret.cjs:ro
       - media_ipfs:/data/ipfs
       - media_local:/data/local_storage
       - turn_runtime:/run/pigeon

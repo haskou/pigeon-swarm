@@ -25,7 +25,15 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Validate TURN secret and Compose contract
-        run: node --test tests/turn-secret.test.mjs
+        run: node --test tests/turn-secret.test.mjs tests/automatic-turn-secret.test.mjs
+
+      - name: Verify startup files are included in the Docker build context
+        run: |
+          docker build -f - . <<'DOCKERFILE'
+          FROM scratch
+          COPY docker-entrypoint.sh /docker-entrypoint.sh
+          COPY scripts/prepare-turn-secret.cjs /prepare-turn-secret.cjs
+          DOCKERFILE
 
       - name: Validate independent static client origin
         run: node --test tests/client-server.test.mjs
@@ -105,6 +113,7 @@ jobs:
       - name: Verify application workflows between independent nodes
         if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: |
+          node --test tests/turn-entrypoint.integration.mjs
           npm run test:e2e
 
   independent-client:

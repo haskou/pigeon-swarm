@@ -36,7 +36,7 @@ is_backend_command() {
     case "$(printf '%s' "$1" | tr '_' '-')" in
       --) shift; break ;;
       - | -h | --help | -v | --version | --v8-options | --completion-bash | --prof-process) return 1 ;;
-      -e* | --eval | --eval=* | -p* | --print | --print=* | -c | --check | --test* | --run | --run=*) return 1 ;;
+      -e* | --eval | --eval=* | -p* | --print | --print=* | -c | --check | --test | --run | --run=*) return 1 ;;
       -r | --require | --import | --loader | --experimental-loader | --conditions | -C | \
       --cpu-prof-dir | --cpu-prof-name | --cpu-prof-interval | \
       --heap-prof-dir | --heap-prof-name | --heap-prof-interval | \
@@ -51,6 +51,11 @@ is_backend_command() {
       --report-filename | --report-signal | --secure-heap | --secure-heap-min | \
       --title | --tls-cipher-list | --tls-keylog | --trace-event-categories | \
       --trace-event-file-pattern | --trace-require-module | --unhandled-rejections | \
+      --test-concurrency | --test-coverage-branches | --test-coverage-exclude | \
+      --test-coverage-functions | --test-coverage-include | --test-coverage-lines | \
+      --test-global-setup | --experimental-test-isolation | --test-isolation | \
+      --test-name-pattern | --test-reporter | --test-reporter-destination | \
+      --test-rerun-failures | --test-shard | --test-skip-pattern | --test-timeout | \
       --use-largepages | --v8-pool-size | --watch-kill-signal | --watch-path)
         [ "$#" -ge 2 ] || return 1
         shift 2

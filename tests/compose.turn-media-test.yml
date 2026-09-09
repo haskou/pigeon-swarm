@@ -8,6 +8,8 @@ services:
     environment:
       LOG_LEVEL: error
     volumes: !override
+      - ./tests:/opt/pigeon/tests:ro
+      - ./scripts/turn-allocation-probe.mjs:/opt/pigeon/scripts/turn-allocation-probe.mjs:ro
       - media_ipfs:/data/ipfs
       - media_local:/data/local_storage
       - turn_runtime:/run/pigeon

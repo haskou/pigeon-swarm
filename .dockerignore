@@ -9,3 +9,6 @@ scripts/*
 !scripts/run-turn-from-runtime-config.sh
 !scripts/check-turn-runtime.sh
 !scripts/turn-peer-policy.conf
+!patches/
+patches/*
+!patches/coturn-self-relay.patch

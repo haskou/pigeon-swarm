@@ -154,7 +154,9 @@ must obtain temporary credentials from the relay owner; do not copy this master
 secret between independent installations.
 
 The application image includes coturn 4.11.0, built from a pinned upstream commit
-for the same Debian runtime as Node.js. The default startup runs the backend and
+for the same Debian runtime as Node.js. Its [restricted self-relay handling](COTURN_SELF_RELAY.md)
+allows traffic between bound TURN sockets without whitelisting the entire private
+container address. The default startup runs the backend and
 coturn as separate supervised processes in one container; no second service or
 host-mounted startup scripts are required. An unexpected exit of either process
 stops the container. Shutdown forwards termination to both, with a ten-second

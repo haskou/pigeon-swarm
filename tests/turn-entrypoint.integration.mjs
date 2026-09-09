@@ -40,6 +40,7 @@ test('bundled entrypoint drops privileges and exports the persisted private secr
 
 for (const [label, options] of [
   ['native profiling', ['--perf-basic-prof', '--interpreted-frames-native-stack']],
+  ['single-dash V8 flags', ['-perf-basic-prof', '-expose-gc']],
   ['CPU profile directory', ['--cpu-prof', '--cpu-prof-dir', '/app/logs']],
   ['underscore profile directory', ['--cpu_prof', '--cpu_prof_dir', '/app/logs']],
   ['heap profile directory', ['--heap-prof', '--heap-prof-dir', '/app/logs']],
@@ -75,7 +76,13 @@ for (const [label, options] of [
 
 for (const [label, options, input] of [
   ['stdin script', ['-'], "process.stdout.write('direct execution');"],
+  ['combined print and eval', ['-pe', '1+1']],
   ['help', ['--help']],
+  ['assigned help', ['--help=all']],
+  ['assigned version', ['--version=true']],
+  ['assigned syntax check', ['--check=true']],
+  ['assigned V8 options', ['--v8-options=true']],
+  ['assigned shell completion', ['--completion-bash=true']],
   ['version', ['--version']],
   ['V8 options', ['--v8-options']],
   ['shell completion', ['--completion-bash']],
@@ -87,7 +94,7 @@ for (const [label, options, input] of [
       '-e', 'CALLS_TURN_USER_QUOTA=0', image, 'node', ...options, 'dist/index.js'],
     { encoding: 'utf8', input, timeout: 8000 });
     assert.equal(result.status, 0, 'Auxiliary Node commands must retain their successful exit status');
-    assert.ok(result.stdout.length > 0);
+    if (input) assert.equal(result.stdout, 'direct execution');
     assert.ok(!result.stderr.includes('TURN allocation quotas must be integers'));
   });
 }

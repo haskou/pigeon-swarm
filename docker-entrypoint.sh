@@ -33,11 +33,14 @@ is_backend_command() {
   [ "$#" -gt 0 ] && [ "${1##*/}" = node ] || return 1
   shift
   while [ "$#" -gt 0 ]; do
-    case "$(printf '%s' "$1" | tr '_' '-')" in
+    normalized_option="$(printf '%s' "$1" | tr '_' '-')"
+    case "${normalized_option%%=*}" in
+      - | -h | --help | -v | --version | --v8-options | --completion-bash | --prof-process | \
+      --build-snapshot | --build-snapshot-config | --experimental-sea-config | \
+      -e | --eval | -p | -pe | --print | -c | --check | --test | --run) return 1 ;;
+    esac
+    case "$normalized_option" in
       --) shift; break ;;
-      - | -h | --help | -v | --version | --v8-options | --completion-bash | --prof-process) return 1 ;;
-      --build-snapshot | --build-snapshot-config | --build-snapshot-config=* | --experimental-sea-config | --experimental-sea-config=*) return 1 ;;
-      -e* | --eval | --eval=* | -p* | --print | --print=* | -c | --check | --test | --run | --run=*) return 1 ;;
       -r | --require | --import | --loader | --experimental-loader | --conditions | -C | \
       --cpu-prof-dir | --cpu-prof-name | --cpu-prof-interval | \
       --heap-prof-dir | --heap-prof-name | --heap-prof-interval | \

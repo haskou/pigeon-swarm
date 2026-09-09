@@ -33,7 +33,7 @@ is_backend_command() {
   [ "$#" -gt 0 ] && [ "${1##*/}" = node ] || return 1
   shift
   while [ "$#" -gt 0 ]; do
-    case "$1" in
+    case "$(printf '%s' "$1" | tr '_' '-')" in
       --) shift; break ;;
       - | -h | --help | -v | --version | --v8-options | --completion-bash | --prof-process) return 1 ;;
       -e* | --eval | --eval=* | -p* | --print | --print=* | -c | --check | --test* | --run | --run=*) return 1 ;;

@@ -39,6 +39,7 @@ test('bundled entrypoint drops privileges and exports the persisted private secr
 for (const [label, options] of [
   ['native profiling', ['--perf-basic-prof', '--interpreted-frames-native-stack']],
   ['CPU profile directory', ['--cpu-prof', '--cpu-prof-dir', '/app/logs']],
+  ['underscore profile directory', ['--cpu_prof', '--cpu_prof_dir', '/app/logs']],
   ['heap profile directory', ['--heap-prof', '--heap-prof-dir', '/app/logs']],
   ['debug port alias', ['--inspect', '--debug-port', '127.0.0.1:9230']],
   ['default V8 log file', ['--logfile']],

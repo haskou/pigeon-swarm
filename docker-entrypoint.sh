@@ -35,6 +35,7 @@ is_backend_command() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --) shift; break ;;
+      - | -h | --help | -v | --version | --v8-options | --completion-bash | --prof-process) return 1 ;;
       -e* | --eval | --eval=* | -p* | --print | --print=* | -c | --check | --test* | --run | --run=*) return 1 ;;
       -r | --require | --import | --loader | --experimental-loader | --conditions | -C | \
       --cpu-prof-dir | --cpu-prof-name | --cpu-prof-interval | \

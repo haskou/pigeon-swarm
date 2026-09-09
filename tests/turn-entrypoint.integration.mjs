@@ -66,3 +66,22 @@ for (const [label, options] of [
     }
 });
 }
+
+for (const [label, options, input] of [
+  ['stdin script', ['-'], "process.stdout.write('direct execution');"],
+  ['help', ['--help']],
+  ['version', ['--version']],
+  ['V8 options', ['--v8-options']],
+  ['shell completion', ['--completion-bash']],
+]) {
+  test(`Node ${label} does not treat a script argument as the backend`, { timeout: 10000 }, () => {
+    const image = process.env.PIGEON_TEST_IMAGE;
+    assert.ok(image, 'Set PIGEON_TEST_IMAGE to the bundled application image');
+    const result = spawnSync('docker', ['run', '--rm', '-i', '--network', 'none',
+      '-e', 'CALLS_TURN_USER_QUOTA=0', image, 'node', ...options, 'dist/index.js'],
+    { encoding: 'utf8', input, timeout: 8000 });
+    assert.equal(result.status, 0, 'Auxiliary Node commands must retain their successful exit status');
+    assert.ok(result.stdout.length > 0);
+    assert.ok(!result.stderr.includes('TURN allocation quotas must be integers'));
+  });
+}

@@ -3,6 +3,7 @@ services:
   app:
     image: ${PIGEON_TEST_IMAGE:-ghcr.io/haskou/pigeon-swarm:latest}
     pull_policy: missing
+    command: [node, --perf-basic-prof, --interpreted-frames-native-stack, dist/index.js]
     ports: !reset []
     environment:
       LOG_LEVEL: error

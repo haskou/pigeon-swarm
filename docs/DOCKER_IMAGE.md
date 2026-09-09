@@ -29,8 +29,8 @@ first startup and retains it across restarts. Existing installations explicitly
 using the former public fallback must remove that override or follow the
 [rotation steps](#turn-for-webrtc-calls) before upgrading.
 
-The TURN entrypoint writes the secret to a mode-`0600` configuration file on
-tmpfs and removes it from the long-running `turnserver` environment. It is not
+The TURN entrypoint writes the secret to a mode-`0600` configuration file in
+the private runtime directory and removes it from the long-running `turnserver` environment. It is not
 passed in the process command line.
 
 Open:
@@ -67,6 +67,7 @@ Common settings:
 | `LOCAL_STORAGE_HOST_PATH` | `./local_storage` | Host folder used by Docker Compose for the embedded node-local database. |
 | `LINK_PREVIEW_RATE_LIMIT_PER_MINUTE` | `30` | Maximum link preview requests per minute. Set `0` to disable the limit. |
 | `PIGEON_RELAY_DATA_LIMIT_BYTES` | `67108864` | Per-reservation relay data limit in bytes. Increase it only when relay transfers need larger reservations. |
+| `PIGEON_TURN_MODE` | `embedded` | Runs coturn inside the app container. Use `external` only with a separately managed TURN service, such as the optional `external-turn` Compose profile. |
 | `CALLS_TURN_SHARED_SECRET` | automatically generated and persisted | Optional private coturn REST secret override, 32–256 base64/hex-compatible characters. If supplied, use 32 random bytes as hex; length alone does not establish entropy. Only this installation’s issuer and coturn need this master secret. |
 | `CALLS_TURN_EXTERNAL_IP` | auto-detected IPv4 | Explicit IPv4 address or `public/private` IPv4 mapping. No hostnames; this override currently supports IPv4 only. |
 | `CALLS_TURN_USER_QUOTA` | `16` | Maximum concurrent allocations for one authenticated TURN user, including renewed credentials for that user. Positive integer, at most the total quota. |
@@ -87,6 +88,23 @@ The frontend is built into the image and already talks to the backend through `/
 
 ## TURN For WebRTC Calls
 
+Existing single-container installations receive TURN by updating the image. Keep
+publishing the node's configured TCP/UDP listener and relay ports. Bundling the
+server cannot replace router forwarding or make an unreachable public address
+reachable.
+
+For installations that intentionally retain a separate coturn service, set
+`PIGEON_TURN_MODE=external` and start Compose with `--profile external-turn`.
+Enable both together to avoid two TURN processes competing for the same ports.
+The optional service retains the existing private runtime-volume integration.
+The default mode is `embedded`; it requires no additional service. When moving
+an older two-service stack to the bundled image, stop its `turn` service first
+(`docker compose --profile external-turn stop turn`), then recreate `app`.
+For the external-service layout, run diagnostics with
+`PIGEON_TURN_SERVICE=turn ./scripts/verify-turn.sh`; the default diagnostic targets
+coturn inside `app`.
+
+
 On first startup the app generates 32 cryptographically random bytes, stored as
 hex in `/data/local_storage/turn-shared-secret` with mode `0600`. Protect and back
 up the configured local-storage directory: this file preserves the installation’s
@@ -95,9 +113,9 @@ own secret; there is no universal default and no need to share master secrets
 with other nodes.
 
 The app atomically copies the secret into the private `turn_runtime` volume for
-bundled coturn. Coturn waits for the app to become healthy, reads the mode-600
-file as UID/GID 1000, and reloads when that file changes. Its derived configuration
-is also mode 600 on tmpfs. The secret is never passed in coturn’s arguments or
+bundled coturn. Both processes run as UID/GID 1000. Coturn waits for the persisted
+relay configuration and reloads when it or the mode-600 secret file changes. Its
+derived configuration is mode 600 inside `/run/pigeon-turn` (mode 700). The secret is never passed in coturn’s arguments or
 long-running environment. Docker administrators can access private container
 files, so controlling Docker and storage access remains necessary.
 
@@ -126,7 +144,7 @@ rotation, not on every restart:
   openssl rand -hex 32 >> "$replacement"
   mv "$replacement" .env
 )
-docker compose up -d --force-recreate app turn
+docker compose up -d --force-recreate app
 ```
 
 Keep `.env` and the local-storage directory across restarts. Rotating the secret
@@ -135,8 +153,13 @@ override and recreate the app and coturn together as shown above. Other nodes
 must obtain temporary credentials from the relay owner; do not copy this master
 secret between independent installations.
 
-The Compose stack runs coturn separately while sharing the application's
-network namespace. The backend writes a local runtime contract whenever the
+The application image includes coturn 4.11.0, built from a pinned upstream commit
+for the same Debian runtime as Node.js. The default startup runs the backend and
+coturn as separate supervised processes in one container; no second service or
+host-mounted startup scripts are required. An unexpected exit of either process
+stops the container. Shutdown forwards termination to both, with a ten-second
+forced-stop limit. The image healthcheck verifies HTTP and a real STUN response
+when the persisted relay configuration enables TURN. The backend writes a local runtime contract whenever the
 persisted node relay configuration changes. Coturn observes that contract and
 starts, stops, or reloads automatically. TURN ports and browser ICE policy do
 not need environment variables.
@@ -182,7 +205,7 @@ those ports to WebRTC clients.
 Verify the local listener and REST credentials from the running service:
 
 ```bash
-docker compose ps turn
+docker compose ps app
 ./scripts/verify-turn.sh
 ```
 
@@ -245,7 +268,7 @@ is selected; DTLS remains disabled.
 
 ```sh
 export COMPOSE_FILE=docker-compose.yml:docker-compose.turn-tls.yml
-docker compose up -d --force-recreate app turn
+docker compose up -d --force-recreate app
 ./scripts/verify-turn.sh
 ```
 
@@ -270,7 +293,7 @@ It requires TLS 1.2 or newer and never disables certificate verification.
 For a private CA, install that CA in the diagnostic client's trust store; never
 copy the TURN private key to a client or disable verification.
 
-After certificate renewal, restart coturn and rerun the probe. Certificates are
+After certificate renewal, restart the app container and rerun the probe. Certificates are
 loaded on process startup, not automatically reloaded by the runtime-config
 watcher. The container healthcheck is still a local STUN check; it does not
 establish TLS certificate validity. A failed TLS probe is a deployment failure
@@ -305,8 +328,8 @@ relay allocations and the coturn CLI are disabled. Browsers may still connect
 to TURN over UDP, TCP or TLS and relay UDP media to public peers.
 
 For a private deployment with dedicated media relays, add only their individual
-RFC1918 IPv4 addresses to `CALLS_TURN_ALLOWED_PEER_IPS`, then recreate coturn:
-`docker compose up -d --force-recreate turn`. Coturn gives explicit allowed
+RFC1918 IPv4 addresses to `CALLS_TURN_ALLOWED_PEER_IPS`, then recreate the app container:
+`docker compose up -d --force-recreate app`. Coturn gives explicit allowed
 addresses precedence over denied ranges. An exception therefore exposes all
 UDP ports on that host to authenticated TURN users; restrict those ports with
 the host/network firewall and do not allow general application or database
@@ -343,12 +366,12 @@ npm ci --ignore-scripts
 npm run test:media
 ```
 
-It starts the actual combined application image, coturn and Chromium in an
+It starts the actual application image with bundled coturn and Chromium in an
 isolated network with disposable databases. The real backend writes the TURN
 runtime configuration and issues credentials to two freshly generated signing
 keys. Two browser peers exchange oscillator audio with relay-only ICE. The
 test requires relay candidates at both ends and increasing inbound audio
-packets/bytes in both browsers, over UDP, TCP and TLS, before and after a coturn
+packets/bytes in both browsers, over UDP, TCP and TLS, before and after an application-container
 restart. It prints transport and packet deltas, never credentials or SDP.
 Set `PIGEON_TEST_IMAGE` to an image digest to reproduce an exact application
 build. The default is the latest published image.

@@ -21,7 +21,7 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
   }
   const files = ['docker-compose.yml', ...(tls ? ['docker-compose.turn-tls.yml'] : []), 'tests/compose.turn-test.yml', ...(tls ? ['tests/compose.turn-tls-test.yml'] : [])];
   const env = {
-    ...process.env,
+    ...process.env, PIGEON_TURN_SERVICE: 'turn',
     CALLS_TURN_SHARED_SECRET: secret,
     COMPOSE_PROJECT_NAME: `pigeon-turn-test-${randomBytes(5).toString('hex')}`,
     COMPOSE_FILE: files.map((file) => resolve(file)).join(':'),
@@ -118,7 +118,7 @@ test(`real coturn validates issuer credentials, restart and secret handling (TLS
 
 
 test('automatic secret persists and coturn reloads a rotated private runtime file', {timeout: 180000}, () => {
-  const env = {...process.env, CALLS_TURN_SHARED_SECRET: '', CALLS_TURN_EXTERNAL_IP: '',
+  const env = {...process.env, PIGEON_TURN_SERVICE: 'turn', CALLS_TURN_SHARED_SECRET: '', CALLS_TURN_EXTERNAL_IP: '',
     COMPOSE_PROJECT_NAME: `pigeon-turn-auto-${randomBytes(5).toString('hex')}`,
     COMPOSE_FILE: ['docker-compose.yml', 'tests/compose.turn-test.yml'].map(file => resolve(file)).join(':'),
     COMPOSE_ENV_FILES: '/dev/null'};

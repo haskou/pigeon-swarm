@@ -4,3 +4,8 @@
 !scripts/
 scripts/*
 !scripts/prepare-turn-secret.cjs
+!scripts/supervise-runtime.cjs
+!scripts/check-app-runtime.cjs
+!scripts/run-turn-from-runtime-config.sh
+!scripts/check-turn-runtime.sh
+!scripts/turn-peer-policy.conf

@@ -41,7 +41,7 @@ This repository packages the full app into one Docker image. The backend and fro
 This repository provides:
 
 * one published image for the complete app: [`ghcr.io/haskou/pigeon-swarm`](https://github.com/haskou/pigeon-swarm/pkgs/container/pigeon-swarm)
-* a [Docker Compose](docker-compose.yml) stack with the app and an authenticated coturn service
+* a [Docker Compose](docker-compose.yml) stack with coturn bundled in the application container
 * simple default runtime configuration
 * persistent IPFS and embedded local storage without an external database service
 * owner-managed relay configuration for private-network nodes

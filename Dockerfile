@@ -100,10 +100,12 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git build-essential pkg-config libevent-dev libssl-dev \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /build/coturn
+COPY patches/coturn-self-relay.patch /tmp/coturn-self-relay.patch
 RUN git init \
   && git remote add origin https://github.com/coturn/coturn.git \
   && git fetch --depth=1 origin 97fd597fcb64861392b399ac824b044a2f0f5786 \
   && git checkout --detach FETCH_HEAD \
+  && git apply /tmp/coturn-self-relay.patch \
   && ./configure --prefix=/usr/local --disable-rpath \
   && make -j2 \
   && install -D bin/turnserver /out/usr/local/bin/turnserver \

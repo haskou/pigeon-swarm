@@ -44,8 +44,7 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
     assert.match(image.stdout.trim(), /^sha256:[a-f0-9]{64}$/);
     console.log(`Application image: ${image.stdout.trim()}`);
     const ip = compose('exec', '-T', '--user', '1000:1000', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim();
-    env.CALLS_TURN_EXTERNAL_IP = ip;
-    env.CALLS_TURN_ALLOWED_PEER_IPS = ip;
+    env.CALLS_TURN_EXTERNAL_IP = '192.0.2.42';
     compose('up', '-d', '--wait', '--wait-timeout', '90', 'app');
     assert.equal(compose('exec', '-T', '--user', '1000:1000', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim(), ip);
     const setup = run('docker', ['compose', 'exec', '-T', 'app', 'node', '--input-type=module'], { input: `
@@ -68,6 +67,10 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
       assert.equal(health.status, 0, 'TURN did not load the backend runtime configuration');
       assert.equal(fingerprint(), originalSecret);
       assert.equal(run('docker', ['compose', 'exec', '-T', 'app', 'node', '/usr/local/lib/pigeon/check-app-runtime.cjs']).status, 0);
+      const policies = run('docker', ['compose', 'exec', '-T', '--user', '1000:1000', 'app', 'node', '/opt/pigeon/tests/turn-self-relay-probe.mjs']);
+      assert.equal(policies.status, 0, policies.stdout + policies.stderr);
+      assert.match(policies.stdout, /PASS self relay: concurrent allocation attempts/);
+      console.log(`Cycle ${cycle + 1}: ${policies.stdout.trim()}`);
       for (const transport of ['udp', 'tcp', 'tls']) {
         const result = run('docker', ['compose', 'exec', '-T', '-e', `PIGEON_MEDIA_TRANSPORT=${transport}`, '-e', `PIGEON_TEST_TLS_SPKI=${spki}`, '-e', `PIGEON_TEST_RELAY_IP=${ip}`, 'browser', 'node', '/opt/pigeon/tests/turn-browser-probe.mjs']);
         assert.equal(result.status, 0, result.stdout + result.stderr);

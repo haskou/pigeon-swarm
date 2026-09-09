@@ -3,15 +3,17 @@ set -eu
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
+turn_service="${PIGEON_TURN_SERVICE:-app}"
+
 for _attempt in $(seq 1 15); do
-  if docker compose exec -T turn sh -lc \
+  if docker compose exec -T --user 1000:1000 "$turn_service" sh -lc \
     'pidof turnserver >/dev/null 2>&1 && /opt/pigeon/check-turn-runtime.sh'; then
     break
   fi
   sleep 2
 done
 
-docker compose exec -T turn sh -lc '
+docker compose exec -T --user 1000:1000 "$turn_service" sh -lc '
   set -eu
   test "$(stat -c "%a" /run/pigeon-turn/turnserver.conf)" = 600 || {
     echo "TURN secret configuration must have mode 600." >&2

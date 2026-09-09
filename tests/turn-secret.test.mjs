@@ -58,7 +58,7 @@ for (const [name, secret] of [
 test('Compose accepts automatic private secret provisioning', () => {
   const env = { ...process.env };
   delete env.CALLS_TURN_SHARED_SECRET;
-  const result = spawnSync('docker', ['compose', '--env-file', '/dev/null', 'config', '--quiet'], {
+  const result = spawnSync('docker', ['compose', '--profile', 'external-turn', '--env-file', '/dev/null', 'config', '--quiet'], {
     encoding: 'utf8', env,
   });
   assert.equal(result.status, 0, result.stderr);
@@ -66,7 +66,7 @@ test('Compose accepts automatic private secret provisioning', () => {
 
 test('Compose accepts an explicitly supplied deployment secret', () => {
   const secret = randomBytes(32).toString('hex');
-  const result = spawnSync('docker', ['compose', '--env-file', '/dev/null', 'config', '--format', 'json'], {
+  const result = spawnSync('docker', ['compose', '--profile', 'external-turn', '--env-file', '/dev/null', 'config', '--format', 'json'], {
     encoding: 'utf8',
     env: { ...process.env, CALLS_TURN_SHARED_SECRET: secret },
   });

@@ -95,6 +95,22 @@ COPY --from=sources /sources/pigeon-swarm-node/scripts ./scripts
 RUN --mount=type=cache,id=pigeon-swarm-production-yarn,target=/tmp/yarn-cache,sharing=locked \
   YARN_CACHE_FOLDER=/tmp/yarn-cache yarn --frozen-lockfile --ignore-engines --production
 
+FROM ${NODE_RUNTIME_IMAGE} AS coturn-build
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates git build-essential pkg-config libevent-dev libssl-dev \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /build/coturn
+RUN git init \
+  && git remote add origin https://github.com/coturn/coturn.git \
+  && git fetch --depth=1 origin 97fd597fcb64861392b399ac824b044a2f0f5786 \
+  && git checkout --detach FETCH_HEAD \
+  && ./configure --prefix=/usr/local --disable-rpath \
+  && make -j2 \
+  && install -D bin/turnserver /out/usr/local/bin/turnserver \
+  && install -D bin/turnutils_stunclient /out/usr/local/bin/turnutils_stunclient \
+  && install -D docker/coturn/rootfs/usr/local/bin/detect-external-ip.sh /out/usr/local/bin/detect-external-ip \
+  && install -Dm644 LICENSE /out/usr/local/share/licenses/coturn/LICENSE
+
 FROM ${NODE_RUNTIME_IMAGE} AS production
 WORKDIR /app
 ARG IMAGE_SOURCE=https://github.com/haskou/pigeon-swarm
@@ -103,9 +119,12 @@ LABEL org.opencontainers.image.title="Pigeon Swarm" \
   org.opencontainers.image.source="${IMAGE_SOURCE}" \
   org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0"
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends gosu \
+  && apt-get install -y --no-install-recommends gosu tini dnsutils libevent-2.1-7 libevent-core-2.1-7 libevent-extra-2.1-7 libevent-openssl-2.1-7 libevent-pthreads-2.1-7 libssl3 \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/log/apt/*
+COPY --from=coturn-build /out/ /
+COPY --chmod=755 scripts/run-turn-from-runtime-config.sh scripts/check-turn-runtime.sh scripts/turn-peer-policy.conf /opt/pigeon/
+COPY scripts/supervise-runtime.cjs scripts/check-app-runtime.cjs /usr/local/lib/pigeon/
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY scripts/prepare-turn-secret.cjs /usr/local/lib/pigeon/prepare-turn-secret.cjs
 COPY --chown=node:node --from=sources /sources/pigeon-swarm-node/package.json ./
@@ -132,8 +151,9 @@ ENV NODE_ENV=production \
   TRANSPORT_DSN=libp2p-gossipsub:// \
   TRANSPORT_MAX_RETRIES=3 \
   TRANSPORT_RETRY_DELAY=1000
-RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage /run/pigeon
+RUN install -d -o node -g node /app/logs /data/ipfs /data/local_storage /run/pigeon /run/pigeon-turn \
+  && chmod 700 /run/pigeon-turn
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.API_PORT || process.env.PORT || '8080') + '/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
-ENTRYPOINT ["docker-entrypoint.sh"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["node", "/usr/local/lib/pigeon/check-app-runtime.cjs"]
+ENTRYPOINT ["/usr/bin/tini", "--", "docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]

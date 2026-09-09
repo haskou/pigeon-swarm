@@ -8,6 +8,7 @@ services:
     pull_policy: missing
     ports: !reset []
     environment:
+      PIGEON_TURN_MODE: external
       LOG_LEVEL: info
       CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_A:?}
       PIGEON_PUBLIC_BOOTSTRAP_ENABLED: "false"
@@ -26,6 +27,7 @@ services:
     pull_policy: missing
     ports: !reset []
     environment:
+      PIGEON_TURN_MODE: external
       LOG_LEVEL: info
       CALLS_TURN_SHARED_SECRET: ${TEST_SECRET_B:?}
       PIGEON_PUBLIC_BOOTSTRAP_ENABLED: "false"
@@ -36,6 +38,7 @@ services:
       - local_b:/data/local_storage
       - runtime_b:/run/pigeon
   turn-a:
+    profiles: !reset []
     extends:
       file: ../docker-compose.yml
       service: turn
@@ -52,6 +55,7 @@ services:
       - ../scripts/turn-peer-policy.conf:/opt/pigeon/turn-peer-policy.conf:ro
       - runtime_a:/run/pigeon:ro
   turn-b:
+    profiles: !reset []
     extends:
       file: ../docker-compose.yml
       service: turn

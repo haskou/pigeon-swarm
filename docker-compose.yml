@@ -13,6 +13,10 @@ services:
     environment:
       CALLS_TURN_SHARED_SECRET: ${CALLS_TURN_SHARED_SECRET:-}
       CALLS_TURN_EXTERNAL_IP: ${CALLS_TURN_EXTERNAL_IP:-}
+      PIGEON_TURN_MODE: ${PIGEON_TURN_MODE:-embedded}
+      CALLS_TURN_USER_QUOTA: ${CALLS_TURN_USER_QUOTA:-16}
+      CALLS_TURN_TOTAL_QUOTA: ${CALLS_TURN_TOTAL_QUOTA:-128}
+      CALLS_TURN_ALLOWED_PEER_IPS: ${CALLS_TURN_ALLOWED_PEER_IPS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LINK_PREVIEW_RATE_LIMIT_PER_MINUTE: ${LINK_PREVIEW_RATE_LIMIT_PER_MINUTE:-30}
       PIGEON_RELAY_DATA_LIMIT_BYTES: ${PIGEON_RELAY_DATA_LIMIT_BYTES:-67108864}
@@ -37,6 +41,7 @@ services:
       - no-new-privileges:true
 
   turn:
+    profiles: [external-turn]
     image: coturn/coturn:4.11.0-r0-alpine
     depends_on:
       app:

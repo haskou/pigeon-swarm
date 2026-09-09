@@ -15,7 +15,8 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
     COMPOSE_PROJECT_NAME: `pigeon-media-${randomBytes(5).toString('hex')}`,
     COMPOSE_FILE: ['docker-compose.yml', 'docker-compose.turn-tls.yml', 'tests/compose.turn-media-test.yml'].map(file => resolve(file)).join(':'),
     COMPOSE_ENV_FILES: '/dev/null',
-    CALLS_TURN_SHARED_SECRET: randomBytes(32).toString('hex'),
+    CALLS_TURN_SHARED_SECRET: '',
+    PIGEON_TURN_MODE: 'embedded',
     CALLS_TURN_TLS_CERTS_DIR: certificates,
     CALLS_TURN_TLS_SERVER_NAME: 'relay.test',
     CALLS_TURN_TLS_PORT: '5349',
@@ -42,9 +43,11 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
     assert.equal(image.status, 0, 'Application image digest must be available');
     assert.match(image.stdout.trim(), /^sha256:[a-f0-9]{64}$/);
     console.log(`Application image: ${image.stdout.trim()}`);
-    const ip = compose('exec', '-T', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim();
+    const ip = compose('exec', '-T', '--user', '1000:1000', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim();
     env.CALLS_TURN_EXTERNAL_IP = ip;
     env.CALLS_TURN_ALLOWED_PEER_IPS = ip;
+    compose('up', '-d', '--wait', '--wait-timeout', '90', 'app');
+    assert.equal(compose('exec', '-T', '--user', '1000:1000', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim(), ip);
     const setup = run('docker', ['compose', 'exec', '-T', 'app', 'node', '--input-type=module'], { input: `
       const result = await fetch('http://127.0.0.1:8080/api/node/relay-configuration/', {
         method: 'PUT', headers: { 'content-type': 'application/json' },
@@ -55,12 +58,16 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
       if (result.status !== 200) throw new Error('Fixture relay configuration failed: status ' + result.status);
     ` });
     assert.equal(setup.status, 0, setup.stderr);
-    compose('up', '-d', '--wait', '--wait-timeout', '45', 'turn', 'browser');
+    compose('up', '-d', '--wait', '--wait-timeout', '45', 'browser');
+    assert.deepEqual(compose('ps', '--services').trim().split('\n').sort(), ['app', 'browser']);
+    const fingerprint = () => compose('exec', '-T', '--user', '1000:1000', 'app', 'node', '-e', "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('/data/local_storage/turn-shared-secret')).digest('hex'))").trim();
+    const originalSecret = fingerprint();
     for (let cycle = 0; cycle < 2; cycle += 1) {
-      if (cycle) compose('restart', 'turn');
-      // Wait for the actual backend's persisted runtime settings to reach coturn.
-      const health = run('docker', ['compose', 'exec', '-T', 'turn', 'sh', '-c', 'for i in $(seq 1 20); do pidof turnserver >/dev/null && /opt/pigeon/check-turn-runtime.sh && exit 0; sleep 1; done; exit 1']);
+      if (cycle) compose('restart', 'app');
+      const health = run('docker', ['compose', 'exec', '-T', 'app', 'sh', '-c', 'for i in $(seq 1 20); do pidof turnserver >/dev/null && /opt/pigeon/check-turn-runtime.sh && exit 0; sleep 1; done; exit 1']);
       assert.equal(health.status, 0, 'TURN did not load the backend runtime configuration');
+      assert.equal(fingerprint(), originalSecret);
+      assert.equal(run('docker', ['compose', 'exec', '-T', 'app', 'node', '/usr/local/lib/pigeon/check-app-runtime.cjs']).status, 0);
       for (const transport of ['udp', 'tcp', 'tls']) {
         const result = run('docker', ['compose', 'exec', '-T', '-e', `PIGEON_MEDIA_TRANSPORT=${transport}`, '-e', `PIGEON_TEST_TLS_SPKI=${spki}`, '-e', `PIGEON_TEST_RELAY_IP=${ip}`, 'browser', 'node', '/opt/pigeon/tests/turn-browser-probe.mjs']);
         assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -68,6 +75,19 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
         console.log(`Cycle ${cycle + 1}: ${result.stdout.trim()}`);
       }
     }
+    const signalTurn = signal => compose('exec', '-T', '--user', '1000:1000', 'app', 'sh', '-c', `kill -${signal} $(cat /run/pigeon-turn/turnserver.pid)`);
+    signalTurn('STOP');
+    try {
+      assert.equal(run('docker', ['compose', 'exec', '-T', 'app', 'node', '/usr/local/lib/pigeon/check-app-runtime.cjs']).status, 1, 'HTTP alone must not mark a stalled TURN server healthy');
+    } finally {
+      signalTurn('CONT');
+    }
+    const container = compose('ps', '-q', 'app').trim();
+    assert.equal(run('docker', ['update', '--restart=no', container]).status, 0);
+    signalTurn('KILL');
+    const stopped = run('docker', ['wait', container], { timeout: 20000 });
+    assert.equal(stopped.status, 0, 'TURN death must stop the application container');
+    assert.equal(stopped.stdout.trim(), '1');
   } finally {
     compose('down', '--volumes', '--remove-orphans');
     rmSync(temporary, { recursive: true, force: true });

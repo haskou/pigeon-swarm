@@ -40,7 +40,6 @@ is_backend_command() {
       --cpu-prof-dir | --cpu-prof-name | --cpu-prof-interval | \
       --heap-prof-dir | --heap-prof-name | --heap-prof-interval | \
       --diagnostic-dir | --heapsnapshot-near-heap-limit | --heapsnapshot-signal | \
-      --max-old-space-size | --max-semi-space-size | --stack-size | --logfile | \
       --env-file | --env-file-if-exists | --experimental-config-file | \
       --experimental-sea-config | --build-snapshot-config | --snapshot-blob | \
       --allow-fs-read | --allow-fs-write | --disable-proto | --disable-warning | \

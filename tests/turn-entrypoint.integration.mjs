@@ -41,6 +41,7 @@ for (const [label, options] of [
   ['CPU profile directory', ['--cpu-prof', '--cpu-prof-dir', '/app/logs']],
   ['heap profile directory', ['--heap-prof', '--heap-prof-dir', '/app/logs']],
   ['debug port alias', ['--inspect', '--debug-port', '127.0.0.1:9230']],
+  ['default V8 log file', ['--logfile']],
   ['memory limit', ['--max-old-space-size=256']],
 ]) {
   test(`Node ${label} options retain supervision of the bundled TURN process`, { timeout: 20000 }, () => {

@@ -29,8 +29,8 @@ first startup and retains it across restarts. Existing installations explicitly
 using the former public fallback must remove that override or follow the
 [rotation steps](#turn-for-webrtc-calls) before upgrading.
 
-The TURN entrypoint writes the secret to a mode-`0600` configuration file on
-tmpfs and removes it from the long-running `turnserver` environment. It is not
+The TURN entrypoint writes the secret to a mode-`0600` configuration file in
+the private runtime directory and removes it from the long-running `turnserver` environment. It is not
 passed in the process command line.
 
 Open:

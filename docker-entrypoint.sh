@@ -44,7 +44,7 @@ is_backend_command() {
       --env-file | --env-file-if-exists | --experimental-config-file | \
       --experimental-sea-config | --build-snapshot-config | --snapshot-blob | \
       --allow-fs-read | --allow-fs-write | --disable-proto | --disable-warning | \
-      --dns-result-order | --icu-data-dir | --input-type | --inspect-port | \
+      --dns-result-order | --icu-data-dir | --input-type | --inspect-port | --debug-port | \
       --inspect-publish-uid | --localstorage-file | --max-http-header-size | \
       --max-old-space-size-percentage | --network-family-autoselection-attempt-timeout | \
       --openssl-config | --redirect-warnings | --report-directory | --report-dir | \

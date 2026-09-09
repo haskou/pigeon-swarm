@@ -40,11 +40,14 @@ for (const [label, options] of [
   ['native profiling', ['--perf-basic-prof', '--interpreted-frames-native-stack']],
   ['CPU profile directory', ['--cpu-prof', '--cpu-prof-dir', '/app/logs']],
   ['heap profile directory', ['--heap-prof', '--heap-prof-dir', '/app/logs']],
-  ['memory limit', ['--max-old-space-size', '256']],
+  ['memory limit', ['--max-old-space-size=256']],
 ]) {
   test(`Node ${label} options retain supervision of the bundled TURN process`, { timeout: 20000 }, () => {
     const image = process.env.PIGEON_TEST_IMAGE;
     assert.ok(image, 'Set PIGEON_TEST_IMAGE to the bundled application image');
+    const accepted = spawnSync('docker', ['run', '--rm', '--network', 'none',
+      '--entrypoint', 'node', image, ...options, '-e', 'process.exit(0)'], { encoding: 'utf8', timeout: 5000 });
+    assert.equal(accepted.status, 0, `The bundled Node runtime must accept ${label} options: ${accepted.stderr}`);
     const name = `pigeon-profiled-entrypoint-${randomBytes(5).toString('hex')}`;
     try {
       const started = spawnSync('docker', ['run', '-d', '--name', name, '--network', 'none',

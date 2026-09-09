@@ -205,7 +205,7 @@ those ports to WebRTC clients.
 Verify the local listener and REST credentials from the running service:
 
 ```bash
-docker compose ps turn
+docker compose ps app
 ./scripts/verify-turn.sh
 ```
 

@@ -35,8 +35,23 @@ is_backend_command() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --) shift; break ;;
-      -e | --eval | --eval=* | -p | --print | --print=* | -c | --check | --test | --run) return 1 ;;
-      -r | --require | --import | --loader | --experimental-loader | --conditions | -C)
+      -e* | --eval | --eval=* | -p* | --print | --print=* | -c | --check | --test* | --run | --run=*) return 1 ;;
+      -r | --require | --import | --loader | --experimental-loader | --conditions | -C | \
+      --cpu-prof-dir | --cpu-prof-name | --cpu-prof-interval | \
+      --heap-prof-dir | --heap-prof-name | --heap-prof-interval | \
+      --diagnostic-dir | --heapsnapshot-near-heap-limit | --heapsnapshot-signal | \
+      --max-old-space-size | --max-semi-space-size | --stack-size | --logfile | \
+      --env-file | --env-file-if-exists | --experimental-config-file | \
+      --experimental-sea-config | --build-snapshot-config | --snapshot-blob | \
+      --allow-fs-read | --allow-fs-write | --disable-proto | --disable-warning | \
+      --dns-result-order | --icu-data-dir | --input-type | --inspect-port | \
+      --inspect-publish-uid | --localstorage-file | --max-http-header-size | \
+      --max-old-space-size-percentage | --network-family-autoselection-attempt-timeout | \
+      --openssl-config | --redirect-warnings | --report-directory | --report-dir | \
+      --report-filename | --report-signal | --secure-heap | --secure-heap-min | \
+      --title | --tls-cipher-list | --tls-keylog | --trace-event-categories | \
+      --trace-event-file-pattern | --trace-require-module | --unhandled-rejections | \
+      --use-largepages | --v8-pool-size | --watch-kill-signal | --watch-path)
         [ "$#" -ge 2 ] || return 1
         shift 2
         ;;

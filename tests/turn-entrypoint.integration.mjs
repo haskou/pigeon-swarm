@@ -36,19 +36,28 @@ test('bundled entrypoint drops privileges and exports the persisted private secr
   }
 });
 
-test('Node profiling options retain supervision of the bundled TURN process', { timeout: 20000 }, () => {
-  const image = process.env.PIGEON_TEST_IMAGE;
-  assert.ok(image, 'Set PIGEON_TEST_IMAGE to the bundled application image');
-  const name = `pigeon-profiled-entrypoint-${randomBytes(5).toString('hex')}`;
-  try {
-    const started = spawnSync('docker', ['run', '-d', '--name', name, '--network', 'none',
-      '-e', 'CALLS_TURN_USER_QUOTA=0', image, 'node', '--perf-basic-prof',
-      '--interpreted-frames-native-stack', 'dist/index.js'], { encoding: 'utf8', timeout: 5000 });
-    assert.equal(started.status, 0, 'The image must accept Node profiling options');
-    const stopped = spawnSync('docker', ['wait', name], { encoding: 'utf8', timeout: 8000 });
-    assert.equal(stopped.status, 0, 'Invalid TURN configuration must stop the profiled backend, not leave it running without TURN');
-    assert.equal(stopped.stdout.trim(), '1');
-  } finally {
-    spawnSync('docker', ['rm', '-f', name], { stdio: 'ignore', timeout: 5000 });
-  }
+for (const [label, options] of [
+  ['native profiling', ['--perf-basic-prof', '--interpreted-frames-native-stack']],
+  ['CPU profile directory', ['--cpu-prof', '--cpu-prof-dir', '/app/logs']],
+  ['heap profile directory', ['--heap-prof', '--heap-prof-dir', '/app/logs']],
+  ['memory limit', ['--max-old-space-size', '256']],
+]) {
+  test(`Node ${label} options retain supervision of the bundled TURN process`, { timeout: 20000 }, () => {
+    const image = process.env.PIGEON_TEST_IMAGE;
+    assert.ok(image, 'Set PIGEON_TEST_IMAGE to the bundled application image');
+    const name = `pigeon-profiled-entrypoint-${randomBytes(5).toString('hex')}`;
+    try {
+      const started = spawnSync('docker', ['run', '-d', '--name', name, '--network', 'none',
+        '-e', 'CALLS_TURN_USER_QUOTA=0', image, 'node', ...options, 'dist/index.js'], { encoding: 'utf8', timeout: 5000 });
+      assert.equal(started.status, 0, 'The image must accept Node profiling options');
+      const stopped = spawnSync('docker', ['wait', name], { encoding: 'utf8', timeout: 8000 });
+      assert.equal(stopped.status, 0, 'Invalid TURN configuration must stop the profiled backend, not leave it running without TURN');
+      assert.equal(stopped.stdout.trim(), '1');
+      const logs = spawnSync('docker', ['logs', name], { encoding: 'utf8', timeout: 5000 });
+      assert.equal(logs.status, 0);
+      assert.ok(logs.stderr.includes('TURN allocation quotas must be integers'), 'The TURN validation must have run');
+    } finally {
+      spawnSync('docker', ['rm', '-f', name], { stdio: 'ignore', timeout: 5000 });
+    }
 });
+}

@@ -36,13 +36,14 @@ is_backend_command() {
     case "$(printf '%s' "$1" | tr '_' '-')" in
       --) shift; break ;;
       - | -h | --help | -v | --version | --v8-options | --completion-bash | --prof-process) return 1 ;;
+      --build-snapshot | --build-snapshot-config | --build-snapshot-config=* | --experimental-sea-config | --experimental-sea-config=*) return 1 ;;
       -e* | --eval | --eval=* | -p* | --print | --print=* | -c | --check | --test | --run | --run=*) return 1 ;;
       -r | --require | --import | --loader | --experimental-loader | --conditions | -C | \
       --cpu-prof-dir | --cpu-prof-name | --cpu-prof-interval | \
       --heap-prof-dir | --heap-prof-name | --heap-prof-interval | \
       --diagnostic-dir | --heapsnapshot-near-heap-limit | --heapsnapshot-signal | \
       --env-file | --env-file-if-exists | --experimental-config-file | \
-      --experimental-sea-config | --build-snapshot-config | --snapshot-blob | \
+      --snapshot-blob | \
       --allow-fs-read | --allow-fs-write | --disable-proto | --disable-warning | \
       --dns-result-order | --icu-data-dir | --input-type | --inspect-port | --debug-port | \
       --inspect-publish-uid | --localstorage-file | --max-http-header-size | \

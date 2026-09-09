@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
+import { mkdtempSync, writeFileSync, statSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 
 test('bundled entrypoint drops privileges and exports the persisted private secret', { timeout: 60000 }, () => {
@@ -89,3 +91,26 @@ for (const [label, options, input] of [
     assert.ok(!result.stderr.includes('TURN allocation quotas must be integers'));
   });
 }
+
+test('Node snapshot generation completes without starting TURN', { timeout: 20000 }, () => {
+  const image = process.env.PIGEON_TEST_IMAGE;
+  assert.ok(image, 'Set PIGEON_TEST_IMAGE to the bundled application image');
+  const directory = mkdtempSync(join(tmpdir(), 'pigeon-snapshot-'));
+  const script = join(directory, 'index.js');
+  const blob = join(directory, 'snapshot.blob');
+  const name = `pigeon-snapshot-${randomBytes(5).toString('hex')}`;
+  writeFileSync(script, 'globalThis.snapshotProbe = true;');
+  try {
+    const result = spawnSync('docker', ['run', '--name', name, '--network', 'none',
+      '-e', 'CALLS_TURN_USER_QUOTA=0', '--mount', `type=bind,source=${script},target=/app/dist/index.js,readonly`,
+      image, 'node', '--build-snapshot', '--snapshot-blob=/tmp/pigeon-test.blob', 'dist/index.js'],
+    { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, 'Snapshot generation must retain its successful exit status');
+    const copied = spawnSync('docker', ['cp', `${name}:/tmp/pigeon-test.blob`, blob], { encoding: 'utf8', timeout: 5000 });
+    assert.equal(copied.status, 0);
+    assert.ok(statSync(blob).size > 0, 'Node must have generated a snapshot blob');
+  } finally {
+    spawnSync('docker', ['rm', '-f', name], { stdio: 'ignore', timeout: 5000 });
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

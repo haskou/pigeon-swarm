@@ -1,0 +1,172 @@
+--- a/src/apps/relay/turn_ports.h
++++ b/src/apps/relay/turn_ports.h
+@@ -68,6 +68,12 @@
+ int turnipports_is_allocated(turnipports *tp, uint8_t transport, const ioa_addr *backend_addr, uint16_t port);
+ int turnipports_is_available(turnipports *tp, uint8_t transport, const ioa_addr *backend_addr, uint16_t port);
+
++void turnipports_mark_bound_udp(turnipports *tp, const ioa_addr *socket_addr);
++int turnipports_has_udp_relay_addr(turnipports *tp, const ioa_addr *socket_addr);
++int turnipports_lock_bound_udp(turnipports *tp, const ioa_addr *socket_addr);
++void turnipports_unlock_bound_udp(turnipports *tp);
++
++
+ //////////////////////////////////////////////////
+
+ #ifdef __cplusplus
+--- a/src/apps/relay/turn_ports.c
++++ b/src/apps/relay/turn_ports.c
+@@ -50,6 +50,7 @@
+
+ struct _turnports {
+   uint32_t status[PORTS_SIZE];
++  unsigned char bound_udp[PORTS_SIZE];
+   uint32_t low;
+   uint32_t high;
+   uint16_t range_start;
+@@ -114,6 +115,7 @@
+
+ static void turnports_init(turnports *tp, uint16_t start, uint16_t end) {
+
++  memset(tp->bound_udp, 0, sizeof(tp->bound_udp));
+   tp->low = start;
+   tp->high = ((uint32_t)end) + 1;
+
+@@ -372,6 +374,9 @@
+     addr_set_port(&ba, 0);
+     TURN_MUTEX_LOCK((const turn_mutex *)&(tp->mutex));
+     if (ur_addr_map_get(get_map(tp, transport), &ba, &t)) {
++      if (transport == STUN_ATTRIBUTE_TRANSPORT_UDP_VALUE) {
++        ((turnports *)t)->bound_udp[addr_get_port(socket_addr)] = 0;
++      }
+       turnports_release((turnports *)t, addr_get_port(socket_addr));
+     }
+     TURN_MUTEX_UNLOCK((const turn_mutex *)&(tp->mutex));
+@@ -413,3 +418,50 @@
+ }
+
+ //////////////////////////////////////////////////////////////////
++
++static turnports *turnipports_find_udp(turnipports *tp, const ioa_addr *socket_addr) {
++  ioa_addr address;
++  ur_addr_map_value_type value = 0;
++  addr_cpy(&address, socket_addr);
++  addr_set_port(&address, 0);
++  ur_addr_map_get(&(tp->ip_to_turnports_udp), &address, &value);
++  return (turnports *)value;
++}
++
++void turnipports_mark_bound_udp(turnipports *tp, const ioa_addr *socket_addr) {
++  if (tp && socket_addr) {
++    TURN_MUTEX_LOCK(&(tp->mutex));
++    turnports *ports = turnipports_find_udp(tp, socket_addr);
++    const uint16_t port = addr_get_port(socket_addr);
++    if (ports && turnports_is_allocated(ports, port)) {
++      ports->bound_udp[port] = 1;
++    }
++    TURN_MUTEX_UNLOCK(&(tp->mutex));
++  }
++}
++
++int turnipports_has_udp_relay_addr(turnipports *tp, const ioa_addr *socket_addr) {
++  int found = 0;
++  if (tp && socket_addr) {
++    TURN_MUTEX_LOCK(&(tp->mutex));
++    found = turnipports_find_udp(tp, socket_addr) != NULL;
++    TURN_MUTEX_UNLOCK(&(tp->mutex));
++  }
++  return found;
++}
++
++int turnipports_lock_bound_udp(turnipports *tp, const ioa_addr *socket_addr) {
++  if (tp && socket_addr) {
++    TURN_MUTEX_LOCK(&(tp->mutex));
++    turnports *ports = turnipports_find_udp(tp, socket_addr);
++    if (ports && ports->bound_udp[addr_get_port(socket_addr)]) {
++      return 1;
++    }
++    TURN_MUTEX_UNLOCK(&(tp->mutex));
++  }
++  return 0;
++}
++
++void turnipports_unlock_bound_udp(turnipports *tp) {
++  TURN_MUTEX_UNLOCK(&(tp->mutex));
++}
+--- a/src/apps/relay/ns_ioalib_engine_impl.c
++++ b/src/apps/relay/ns_ioalib_engine_impl.c
+@@ -986,6 +986,9 @@
+         }
+       }
+       s->local_addr_known = 1;
++      if (s->st == UDP_SOCKET && (s->sat == RELAY_SOCKET || s->sat == RELAY_RTCP_SOCKET)) {
++        turnipports_mark_bound_udp(s->e->tp, &(s->local_addr));
++      }
+       return 0;
+     }
+   }
+@@ -3155,12 +3158,31 @@
+
+ int would_block(void) { return socket_ewouldblock(); }
+
++int ioa_is_mapped_relay_addr(ioa_engine_handle e, const ioa_addr *addr) {
++  if (!e || !addr || !turnipports_has_udp_relay_addr(e->tp, addr)) {
++    return 0;
++  }
++  ioa_addr public_addr;
++  map_addr_from_private_to_public(addr, &public_addr);
++  return !addr_eq_no_port(addr, &public_addr);
++}
++
+ int udp_send(ioa_socket_handle s, const ioa_addr *dest_addr, const char *buffer, int len) {
+   int rc = 0;
+   evutil_socket_t fd = -1;
+
+   if (!s) {
+     return -1;
++  }
++
++  int bound_peer_locked = 0;
++  const ioa_addr *peer_addr = dest_addr ? dest_addr : &(s->remote_addr);
++  if (s->st == UDP_SOCKET && (s->sat == RELAY_SOCKET || s->sat == RELAY_RTCP_SOCKET) &&
++      ioa_is_mapped_relay_addr(s->e, peer_addr)) {
++    if (!turnipports_lock_bound_udp(s->e->tp, peer_addr)) {
++      return len;
++    }
++    bound_peer_locked = 1;
+   }
+
+   if (s->parent_s) {
+@@ -3214,6 +3236,9 @@
+     }
+   }
+
++  if (bound_peer_locked) {
++    turnipports_unlock_bound_udp(s->e->tp);
++  }
+   return rc;
+ }
+
+--- a/src/server/ns_turn_ioalib.h
++++ b/src/server/ns_turn_ioalib.h
+@@ -297,6 +297,8 @@
+ void set_ioa_socket_sub_session(ioa_socket_handle s, tcp_connection *tc);
+ int register_callback_on_ioa_socket(ioa_engine_handle e, ioa_socket_handle s, int event_type, ioa_net_event_handler cb,
+                                     void *ctx, int clean_preexisting);
++int ioa_is_mapped_relay_addr(ioa_engine_handle e, const ioa_addr *addr);
++
+ int send_data_from_ioa_socket_nbh(ioa_socket_handle s, ioa_addr *dest_addr, ioa_network_buffer_handle nbh, int ttl,
+                                   int tos, int *skip);
+ void close_ioa_socket(ioa_socket_handle s);
+--- a/src/server/ns_turn_server.c
++++ b/src/server/ns_turn_server.c
+@@ -298,6 +298,10 @@
+     }
+     if (ioa_addr_is_zero(peer_addr)) {
+       return 0;
++    }
++
++    if (*(server->no_tcp_relay) && ioa_is_mapped_relay_addr(server->e, peer_addr)) {
++      return 1;
+     }
+
+     if (server->ip_whitelist) {

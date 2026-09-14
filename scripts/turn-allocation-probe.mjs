@@ -4,7 +4,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { createSocket } from 'node:dgram';
 import { createConnection } from 'node:net';
 import { connect as connectTls } from 'node:tls';
-import { readFileSync } from 'node:fs';
+import { readFileSync, openSync, closeSync, fstatSync, constants } from 'node:fs';
 import { once } from 'node:events';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -157,11 +157,29 @@ async function check(transport, port, secret, expiresIn, expectedAllocation) {
   }
 }
 
+export function readIssuerSecret() {
+  const override = process.env.CALLS_TURN_SHARED_SECRET;
+  delete process.env.CALLS_TURN_SHARED_SECRET;
+  if (override) return override;
+  const fd = openSync(process.env.CALLS_TURN_SECRET_FILE || '/run/pigeon/turn-shared-secret', constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.size > 256 || (info.mode & 0o777) !== 0o600) {
+      throw new Error('Backend TURN secret file has unsafe permissions or format.');
+    }
+    const secret = readFileSync(fd, 'utf8');
+    if (!/^[a-zA-Z0-9_/+=-]{32,256}$/.test(secret)) {
+      throw new Error('Backend TURN secret file has unsafe permissions or format.');
+    }
+    return secret;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 async function main() {
 try {
-  const secret = process.env.CALLS_TURN_SHARED_SECRET;
-  delete process.env.CALLS_TURN_SHARED_SECRET;
-  if (!secret) throw new Error('Backend TURN secret is missing.');
+  const secret = readIssuerSecret();
   const config = readFileSync(process.env.PIGEON_TURN_RUNTIME_CONFIG_PATH || '/run/pigeon/calls-turn-runtime.conf', 'utf8');
   const settings = new Map(config.trim().split('\n').map((line) => line.split('=')));
   const port = Number(settings.get('listening_port'));

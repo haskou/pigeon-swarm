@@ -3,13 +3,17 @@ services:
   app:
     image: ${PIGEON_TEST_IMAGE:-ghcr.io/haskou/pigeon-swarm:latest}
     pull_policy: missing
+    command: [node, --perf-basic-prof, --interpreted-frames-native-stack, dist/index.js]
     ports: !reset []
     environment:
       LOG_LEVEL: error
     volumes: !override
+      - ./tests:/opt/pigeon/tests:ro
+      - ./scripts/turn-allocation-probe.mjs:/opt/pigeon/scripts/turn-allocation-probe.mjs:ro
       - media_ipfs:/data/ipfs
       - media_local:/data/local_storage
       - turn_runtime:/run/pigeon
+      - ${CALLS_TURN_TLS_CERTS_DIR}:/run/pigeon-turn-tls:ro
   browser:
     image: mcr.microsoft.com/playwright:v1.60.0-noble
     network_mode: service:app

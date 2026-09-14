@@ -36,13 +36,22 @@ The scenario checks:
 - Invitation acceptance and bidirectional private-message decryption.
 - Community creation, discovery, instant membership and bidirectional text delivery.
 - Direct and community voice calls with increasing inbound audio in both browsers.
+- Recovery when each client initially receives `409 CallParticipantNotFoundError`
+  for all signalling requests during a 300 ms participant-replication window.
 - Leaving and rejoining voice, including another call after password login.
 - Removing participants after a normal departure and after a client loses network access and closes without a successful leave request.
-- Remembered-session restoration, explicit logout/login, and retained private and community history.
+- Remembered-session restoration, three explicit logout/password-login cycles,
+  and exact retained private and community messages.
 - Fresh channel reads after departures, with no stale participant rows.
 
-No test code copies SDP or ICE candidates between
-browsers or inserts call records into a database.
+The temporary signalling rejection is injected at the HTTP boundary; subsequent
+requests go to the real nodes. The test verifies that both clients exercised the
+rejection path. No test code copies SDP or ICE candidates between browsers or
+inserts call records into a database.
+
+Failure diagnostics distinguish preview requests from timeline history and
+report response status, result count, pagination and call operation/signal type.
+They exclude message bodies, identity IDs and key material.
 
 For media verification, each browser is restricted to the UDP TURN URL advertised
 by its own backend, retaining the backend-issued credentials. Both selected

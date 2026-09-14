@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  PIGEON_SWARM_NODE_SHA: cd1dec21d76820cae9bc5f30f34ba22ce123ab2e
+  PIGEON_SWARM_NODE_SHA: a09b84e84c9b984a099c88b71976ea3058134807
   PIGEON_SWARM_UI_SHA: 8fab1731015ed59d41019e75b6861721e069eb75
 
 concurrency:

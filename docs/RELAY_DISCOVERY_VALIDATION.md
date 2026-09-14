@@ -47,13 +47,13 @@ image or enabled by normal startup.
 
 ## Acceptance matrix
 
-| Scenario | Required evidence |
-| --- | --- |
-| A starts before B; B initially cannot reach the public directory | No premature private connection; automatic A–B connection after restoring public traffic |
-| C joins an already working A–B network | All three relays discover each other without private address injection |
-| Both C links are closed twice | Full mesh and fresh application traffic recover after each interruption |
+| Scenario                                                                                                   | Required evidence                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| A starts before B; B initially cannot reach the public directory                                           | No premature private connection; automatic A–B connection after restoring public traffic                                             |
+| C joins an already working A–B network                                                                     | All three relays discover each other without private address injection                                                               |
+| Both C links are closed twice                                                                              | Full mesh and fresh application traffic recover after each interruption                                                              |
 | All public directory traffic is blocked; the chosen initiator cannot make new private outbound connections | Firewall counters prove rejected attempts; another relay restores the cached private path within 90 seconds, including fresh traffic |
-| C's application process restarts | Persisted private peer identity, retained mDNS block, restored full mesh and fresh traffic |
+| C's application process restarts                                                                           | Persisted private peer identity, retained mDNS block, restored full mesh and fresh traffic                                           |
 
 The first full-image run exposed a startup race: concurrent key creation could
 give the live relay a different identity from the one saved on disk. The backend
@@ -69,6 +69,8 @@ network, call, unique payload and valid expiry. A successful HTTP POST or a peer
 count alone cannot pass the traffic probe. Test identities and storage are
 disposable; cleanup removes only containers and the network created by this run.
 
+Before starting the topology, an isolated container checks the compiled backend against a real filesystem: a partial `ENOSPC` write must leave no final key or temporary directory, twelve concurrent callers must share the persisted identity, reload must preserve it, and an exclusive-publication race must preserve the competing key. Key files must have mode `0600`; no private key material is printed.
+
 ## Bounds and scope
 
 Discovery runs every 2 seconds, connected discovery every 4 seconds, publication
@@ -78,11 +80,11 @@ guarantees. The production 45-second fallback dial window remains unchanged.
 Individual mesh waits are bounded at 120 seconds and the test has a 10-minute
 outer timeout. Phase timing includes fresh traffic where reported.
 
-The local acceptance run on 2026-09-14, with backend `cd1dec21d768` and client
-`8fab1731015e`, completed in 95.6 seconds. Delayed public recovery took 2.6 seconds,
-late publisher startup 7.0 seconds, repeated link recovery 3.5 and 3.3 seconds,
-cached recovery with 48 rejected outbound attempts 50.4 seconds, and process
-restart recovery 6.8 seconds. These measurements describe that isolated run only.
+The local acceptance run on 2026-09-14, with backend `a09b84e84c9b` and client
+`8fab1731015e`, completed in 91.2 seconds. Delayed public recovery took 4.6 seconds,
+late publisher startup 6.0 seconds, repeated link recovery 2.9 and 3.0 seconds,
+cached recovery with 47 rejected outbound attempts 50.5 seconds, and process
+restart recovery 5.3 seconds. These measurements describe that isolated run only.
 
 Cache expiry, replacement, coalesced discovery, bounded retry delays and duplicate
 dial protection are additionally covered by the backend's

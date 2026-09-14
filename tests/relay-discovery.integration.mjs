@@ -181,6 +181,23 @@ test(
     };
     let createdNetwork = false;
     try {
+      const keyProbe = `${name}-key-probe`;
+      containers.push(keyProbe);
+      console.log(
+        await docker([
+          "run",
+          "--name",
+          keyProbe,
+          "--network",
+          "none",
+          "--entrypoint",
+          "node",
+          "-v",
+          `${resolve("tests/relay-key-persistence.cjs")}:/test/probe.cjs:ro`,
+          image,
+          "/test/probe.cjs",
+        ]),
+      );
       await docker([
         "build",
         "-t",

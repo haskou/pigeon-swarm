@@ -77,14 +77,16 @@ Discovery runs every 2 seconds, connected discovery every 4 seconds, publication
 every 2 seconds, and public peer waits are 1 second. Records remain valid for
 10 minutes. These accelerated fixture settings are not production latency
 guarantees. The production 45-second fallback dial window remains unchanged.
-Individual mesh waits are bounded at 120 seconds and the test has a 10-minute
-outer timeout. Phase timing includes fresh traffic where reported.
+Individual mesh waits are bounded at 120 seconds. Each traffic probe has a
+5-minute process budget to accommodate sequential replication, signalling and
+cleanup deadlines. All operations remain capped by the shared 9-minute work
+deadline, with a 10-minute outer test timeout. Phase timing includes fresh traffic where reported.
 
 The local acceptance run on 2026-09-14, with backend `a09b84e84c9b` and client
-`8fab1731015e`, completed in 91.2 seconds. Delayed public recovery took 4.6 seconds,
-late publisher startup 6.0 seconds, repeated link recovery 2.9 and 3.0 seconds,
-cached recovery with 47 rejected outbound attempts 50.5 seconds, and process
-restart recovery 5.3 seconds. These measurements describe that isolated run only.
+`8fab1731015e`, completed in 91.6 seconds. Delayed public recovery took 3.7 seconds,
+late publisher startup 6.3 seconds, repeated link recovery 2.8 and 2.8 seconds,
+cached recovery with 46 rejected outbound attempts 50.4 seconds, and process
+restart recovery 5.9 seconds. These measurements describe that isolated run only.
 
 Cache expiry, replacement, coalesced discovery, bounded retry delays and duplicate
 dial protection are additionally covered by the backend's

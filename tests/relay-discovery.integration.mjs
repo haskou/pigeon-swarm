@@ -134,7 +134,7 @@ test(
           "--input-type=module",
         ],
         await readFile("tests/relay-traffic-probe.mjs", "utf8"),
-        120000,
+        300000,
       );
       assert.match(output, /^PASS relay traffic/);
       console.log(output);

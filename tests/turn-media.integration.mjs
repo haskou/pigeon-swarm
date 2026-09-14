@@ -51,7 +51,7 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
       const result = await fetch('http://127.0.0.1:8080/api/node/relay-configuration/', {
         method: 'PUT', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ publicHost: ${JSON.stringify(ip)}, callsRelay: { port: 4101 },
-          privateRelay: { enabled: true, portStart: 4102, portEnd: 4133, publicationEnabled: false, discoveryEnabled: false },
+          privateRelay: { enabled: true, portStart: 4102, portEnd: 4105, publicationEnabled: false, discoveryEnabled: false },
           publicNetwork: { enabled: false }, manualRelayMultiaddrs: [] }),
       });
       if (result.status !== 200) throw new Error('Fixture relay configuration failed: status ' + result.status);

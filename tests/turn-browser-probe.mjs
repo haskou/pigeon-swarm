@@ -45,9 +45,10 @@ stage = 'backend credential issuance';
 const configurations = await Promise.all([configuration(), configuration()]);
 stage = 'browser startup';
 const browser = await chromium.launch({ headless: true, args });
+const pages = [];
 try {
   stage = 'browser audio setup';
-  const pages = await Promise.all([browser.newPage(), browser.newPage()]);
+  for (let index = 0; index < 2; index += 1) pages.push(await browser.newPage());
   for (const [index, page] of pages.entries()) {
     const config = configurations[index];
     await page.evaluate(async config => {
@@ -105,7 +106,16 @@ try {
   }
   console.log(`PASS ${mode}: backend-issued credentials; relay/relay in both browsers; inbound audio packet deltas ${second.map((entry, index) => entry.packets - first[index].packets).join('/')}.`);
 } finally {
-  await browser.close();
+  try {
+    await Promise.all(pages.map(page => page.evaluate(async () => {
+      window.mediaProbe?.peer.close();
+      window.mediaProbe?.tone.stop();
+      await window.mediaProbe?.audio.close();
+    })));
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } finally {
+    await browser.close();
+  }
 }
 }
 

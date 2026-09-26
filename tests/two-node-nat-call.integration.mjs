@@ -1,3 +1,3 @@
 import { testTwoNodeCalls } from "./two-node-call-runner.mjs";
 
-testTwoNodeCalls();
+testTwoNodeCalls({ nat: true });

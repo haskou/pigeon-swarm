@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, X509Certificate } from "node:crypto";
 
-export async function startCallTestGateways() {
+export async function startCallTestGateways(hosts = ["app-a", "app-b"]) {
   const directory = mkdtempSync(join(tmpdir(), "call-test-tls-"));
   const key = join(directory, "key.pem");
   const cert = join(directory, "cert.pem");
@@ -51,7 +51,7 @@ export async function startCallTestGateways() {
     );
   };
   try {
-    for (const [index, host] of ["app-a", "app-b"].entries()) {
+    for (const [index, host] of hosts.entries()) {
       const server = https.createServer(credentials, (request, response) => {
         const upstream = http.request(
           {

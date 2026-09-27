@@ -65,6 +65,10 @@ success and failure; a cleanup failure identifies the generated project name.
 
 ## Coverage limits
 
+For the same UI workflow across two simulated home NATs, run
+`npm run test:e2e:nat`. See [NAT call validation](NAT_CALL_VALIDATION.md) for the
+isolated topology, negative network controls and remaining coverage limits.
+
 This is automated evidence for application signalling and bidirectional media
 between independent relays on a local Docker network. It does not establish public
 reachability, real home NAT/CGNAT behavior, blocked-UDP fallback, or recovery of an

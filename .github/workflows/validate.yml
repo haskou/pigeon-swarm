@@ -120,6 +120,10 @@ jobs:
           node --test tests/turn-entrypoint.integration.mjs
           npm run test:e2e
 
+      - name: Verify application calls across two NAT routers
+        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        run: npm run test:e2e:nat
+
   independent-client:
     name: Validate independent client
     if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)

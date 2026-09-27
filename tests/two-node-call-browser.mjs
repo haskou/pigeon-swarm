@@ -7,7 +7,10 @@ import { startCallTestGateways } from "./call-test-https-proxy.mjs";
 let stage = "browser startup";
 const urls = ["https://localhost:8443", "https://localhost:8444"];
 const relayAddresses = [process.env.TEST_IP_A, process.env.TEST_IP_B];
-const { stop: stopGateways, spki } = await startCallTestGateways();
+const nat = process.env.PIGEON_TEST_NAT === "true";
+const { stop: stopGateways, spki } = nat
+  ? { stop: async () => {}, spki: undefined }
+  : await startCallTestGateways();
 const independentClient = process.env.PIGEON_INDEPENDENT_CLIENT === "true";
 const clientServer = independentClient ? await createClientServer({root: "/opt/pigeon/client-dist"}) : undefined;
 if (clientServer) {
@@ -18,7 +21,8 @@ const stopClient = async () => { if (clientServer) await new Promise(resolve => 
 const pages = [];
 const deliveryDiagnostics = [];
 const callDiagnostics = [];
-const browser = await chromium
+const browsers = [];
+const browser = nat ? undefined : await chromium
   .launch({
     args: [
       "--use-fake-device-for-media-stream",
@@ -32,13 +36,16 @@ const browser = await chromium
     await stopGateways();
     throw new Error("Test browser startup failed");
   });
+if (browser) browsers.push(browser);
 try {
   for (const [index, url] of urls.entries()) {
-    const context = await browser.newContext({
+    const client = nat ? await chromium.connect(`ws://${relayAddresses[index]}:9222/pigeon`) : browser;
+    if (nat) browsers.push(client);
+    const context = await client.newContext({
       permissions: ["microphone"],
       viewport: { width: 1440, height: 900 },
     });
-    await context.addInitScript((expectedRelay) => {
+    await context.addInitScript(({ expectedRelay, nat }) => {
       localStorage.setItem("pigeon-swarm-language-v2", "en");
       localStorage.setItem("pigeon-swarm-language-explicit-v3", "true");
       if (window.PublicKeyCredential?.getClientCapabilities)
@@ -65,7 +72,7 @@ try {
             },
           );
           super(
-            { ...configuration, iceServers, iceTransportPolicy: "relay" },
+            nat ? configuration : { ...configuration, iceServers, iceTransportPolicy: "relay" },
             ...rest,
           );
           window.callProbePeers.push(this);
@@ -81,7 +88,7 @@ try {
           }
         }
       };
-    }, relayAddresses[index]);
+    }, { expectedRelay: relayAddresses[index], nat });
     const page = await context.newPage();
     const callEvents = [];
     callDiagnostics.push(callEvents);
@@ -331,6 +338,7 @@ try {
           (stat) => stat.type === "inbound-rtp" && stat.kind === "audio",
         );
         return {
+          selectedPairSucceeded: pair?.state === "succeeded",
           local: pair && stats.get(pair.localCandidateId)?.candidateType,
           remote: pair && stats.get(pair.remoteCandidateId)?.candidateType,
           localAddress: pair && stats.get(pair.localCandidateId)?.address,
@@ -341,6 +349,14 @@ try {
           ),
           packets: inbound.reduce(
             (sum, entry) => sum + (entry.packetsReceived || 0),
+            0,
+          ),
+          audioEnergy: inbound.reduce(
+            (sum, entry) => sum + (entry.totalAudioEnergy || 0),
+            0,
+          ),
+          audioSamples: inbound.reduce(
+            (sum, entry) => sum + (entry.totalSamplesReceived || 0),
             0,
           ),
         };
@@ -369,16 +385,30 @@ try {
     const before = await Promise.all(pages.map(sample));
     await new Promise((resolve) => setTimeout(resolve, 5000));
     const after = await Promise.all(pages.map(sample));
+    if (nat) console.log("NAT audio samples:", JSON.stringify(after.map((entry, index) => ({
+      local: entry?.local,
+      remote: entry?.remote,
+      packetsReceived: entry?.packets - before[index]?.packets,
+      bytesReceived: entry?.bytes - before[index]?.bytes,
+      decodedSamples: entry?.audioSamples - before[index]?.audioSamples,
+      audibleEnergyIncreased: entry?.audioEnergy > before[index]?.audioEnergy,
+    }))));
     for (let index = 0; index < 2; index++) {
-      assert.equal(after[index]?.local, "relay");
-      assert.equal(after[index]?.remote, "relay");
-      assert.equal(after[index]?.localAddress, relayAddresses[index]);
-      assert.equal(after[index]?.remoteAddress, relayAddresses[1 - index]);
+      assert.equal(after[index]?.selectedPairSucceeded, true, "Audio must use a successful ICE candidate pair");
+      if (!nat) {
+        assert.equal(after[index]?.local, "relay");
+        assert.equal(after[index]?.remote, "relay");
+        assert.equal(after[index]?.localAddress, relayAddresses[index]);
+        assert.equal(after[index]?.remoteAddress, relayAddresses[1 - index]);
+      } else {
+        assert.ok(after[index].audioSamples > before[index].audioSamples, "The receiving browser must decode fresh audio samples");
+        assert.ok(after[index].audioEnergy > before[index].audioEnergy, "Decoded synthetic audio must contain a non-silent signal");
+      }
       assert.ok(after[index].bytes > before[index].bytes);
       assert.ok(after[index].packets > before[index].packets);
     }
     console.log(
-      `PASS ${label}: distinct relay addresses; inbound audio packet deltas ${after.map((entry, index) => entry.packets - before[index].packets).join("/")}`,
+      `PASS ${label}: ${nat ? "application-selected ICE across NAT" : "distinct relay addresses"}; inbound audio packet deltas ${after.map((entry, index) => entry.packets - before[index].packets).join("/")}`,
     );
   };
   await assertAudio("direct call");
@@ -581,7 +611,7 @@ try {
   process.exitCode = 1;
 } finally {
   try {
-    await browser.close();
+    await Promise.all(browsers.map(browser => browser.close()));
   } finally {
     await stopClient();
     await stopGateways();

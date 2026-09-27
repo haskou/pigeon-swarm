@@ -54,8 +54,9 @@ secret exchange is needed between the app and its coturn service.
 
 Docker image usage is documented in [docs/DOCKER_IMAGE.md](docs/DOCKER_IMAGE.md).
 
-Application acceptance tests cover [automatic relay discovery and recovery](docs/RELAY_DISCOVERY_VALIDATION.md)
-and [messaging, calls and session recovery between nodes](docs/TWO_NODE_CALL_VALIDATION.md).
+Application acceptance tests cover [automatic relay discovery and recovery](docs/RELAY_DISCOVERY_VALIDATION.md),
+[messaging, calls and session recovery between nodes](docs/TWO_NODE_CALL_VALIDATION.md),
+and [complete browser workflows across two NAT routers](docs/NAT_CALL_VALIDATION.md).
 
 ## License
 

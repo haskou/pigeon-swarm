@@ -1,0 +1,118 @@
+# Overlay: each application and browser share a LAN-side namespace. Only the
+# two routers connect those LANs to the isolated, simulated public network.
+x-router: &router
+  image: pigeon-call-nat-router:test
+  build:
+    context: .
+    dockerfile: Dockerfile.nat-router
+  cap_add: [NET_ADMIN]
+  sysctls:
+    net.ipv4.ip_forward: "1"
+    net.ipv6.conf.all.disable_ipv6: "1"
+  entrypoint: [sh, /opt/pigeon/tests/call-test-nat-router.sh]
+  volumes:
+    - .:/opt/pigeon/tests:ro
+  healthcheck:
+    test: [CMD, test, -f, /tmp/router-ready]
+    interval: 1s
+    retries: 10
+
+x-browser: &browser
+  image: mcr.microsoft.com/playwright:v1.60.0-noble
+  entrypoint: [node, /opt/pigeon/tests/call-test-browser-server.mjs]
+  shm_size: 256mb
+  volumes:
+    - .:/opt/pigeon/tests:ro
+    - ../node_modules:/opt/pigeon/node_modules:ro
+  healthcheck:
+    test: [CMD, node, -e, "require('node:fs').accessSync('/tmp/browser-ready')"]
+    interval: 1s
+    retries: 30
+
+services:
+  app-a:
+    network_mode: service:net-a
+    depends_on:
+      net-a: {condition: service_healthy}
+  app-b:
+    network_mode: service:net-b
+    depends_on:
+      net-b: {condition: service_healthy}
+  turn-a:
+    environment:
+      CALLS_TURN_EXTERNAL_IP: 172.29.203.11/10.203.1.10
+      CALLS_TURN_ALLOWED_PEER_IPS: 172.29.203.11,172.29.203.12
+  turn-b:
+    environment:
+      CALLS_TURN_EXTERNAL_IP: 172.29.203.12/10.203.2.10
+      CALLS_TURN_ALLOWED_PEER_IPS: 172.29.203.11,172.29.203.12
+  router-a:
+    <<: *router
+    environment:
+      PUBLIC_IP: 172.29.203.11
+      GATEWAY_IP: 10.203.1.2
+      NODE_IP: 10.203.1.10
+      LAN_SUBNET: 10.203.1.0/24
+    networks:
+      default: {ipv4_address: 172.29.203.11}
+      lan-a: {ipv4_address: 10.203.1.2}
+  router-b:
+    <<: *router
+    environment:
+      PUBLIC_IP: 172.29.203.12
+      GATEWAY_IP: 10.203.2.2
+      NODE_IP: 10.203.2.10
+      LAN_SUBNET: 10.203.2.0/24
+    networks:
+      default: {ipv4_address: 172.29.203.12}
+      lan-b: {ipv4_address: 10.203.2.2}
+  net-a:
+    image: pigeon-call-nat-router:test
+    networks:
+      lan-a: {ipv4_address: 10.203.1.10}
+    sysctls: {net.ipv6.conf.all.disable_ipv6: "1"}
+    healthcheck:
+      test: [CMD, test, -f, /tmp/route-ready]
+      interval: 1s
+      retries: 10
+    cap_add: [NET_ADMIN]
+    entrypoint: [sh, -ec, "ip route replace default via 10.203.1.2; iptables -A OUTPUT -d 224.0.0.0/4 -j DROP; touch /tmp/route-ready; exec sleep infinity"]
+  net-b:
+    image: pigeon-call-nat-router:test
+    networks:
+      lan-b: {ipv4_address: 10.203.2.10}
+    sysctls: {net.ipv6.conf.all.disable_ipv6: "1"}
+    healthcheck:
+      test: [CMD, test, -f, /tmp/route-ready]
+      interval: 1s
+      retries: 10
+    cap_add: [NET_ADMIN]
+    entrypoint: [sh, -ec, "ip route replace default via 10.203.2.2; iptables -A OUTPUT -d 224.0.0.0/4 -j DROP; touch /tmp/route-ready; exec sleep infinity"]
+  browser-a:
+    <<: *browser
+    network_mode: service:app-a
+  browser-b:
+    <<: *browser
+    network_mode: service:app-b
+  browser:
+    networks: !override
+      default: {ipv4_address: 172.29.203.20}
+
+networks:
+  default:
+    internal: true
+    enable_ipv6: false
+    ipam:
+      config: [{subnet: 172.29.203.0/24}]
+  lan-a:
+    # Docker internal bridges drop forwarded packets even via a custom router.
+    # The net-a namespace replaces Docker's gateway before the app can start.
+    driver_opts: {com.docker.network.bridge.enable_ip_masquerade: "false"}
+    enable_ipv6: false
+    ipam:
+      config: [{subnet: 10.203.1.0/24}]
+  lan-b:
+    driver_opts: {com.docker.network.bridge.enable_ip_masquerade: "false"}
+    enable_ipv6: false
+    ipam:
+      config: [{subnet: 10.203.2.0/24}]

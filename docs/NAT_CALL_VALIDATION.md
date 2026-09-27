@@ -47,6 +47,10 @@ use Chromium's synthetic audio device.
 
 ## Assertions
 
+The detached UDP receivers deliberately delay binding for five seconds. The
+runner waits for both bind acknowledgements, with a bounded readiness deadline,
+before sending any probe. This exercises slow container startup on every run.
+
 Before opening the UI, both directions must pass a network preflight:
 
 - The other node's private HTTP address is unreachable.

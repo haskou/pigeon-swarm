@@ -7,11 +7,23 @@ export async function prepareNatNetwork(compose) {
       import {writeFileSync} from 'node:fs';
       const socket = dgram.createSocket('udp4');
       socket.on('message', (data, peer) => socket.send(JSON.stringify({token:data.toString(), address:peer.address}), peer.port, peer.address));
-      socket.bind(4133, '0.0.0.0', () => writeFileSync('/tmp/nat-probe.pid', String(process.pid)));
+      // Exercise a slow detached startup: sending before bind must not race this delay.
+      setTimeout(() => socket.bind(4133, '0.0.0.0', () => writeFileSync('/tmp/nat-probe.pid', String(process.pid))), 5000);
       setTimeout(() => socket.close(), 60000);
     `);
   }
   try {
+    for (const name of ["a", "b"]) {
+      await compose("exec", "-T", `app-${name}`, "node", "--input-type=module", "-e", `
+        import assert from 'node:assert/strict';
+        import {existsSync} from 'node:fs';
+        import {setTimeout} from 'node:timers/promises';
+        const deadline = Date.now() + 10000;
+        while (!existsSync('/tmp/nat-probe.pid') && Date.now() < deadline)
+          await setTimeout(50);
+        assert.ok(existsSync('/tmp/nat-probe.pid'), 'NAT UDP probe ${name} did not bind within 10 seconds');
+      `);
+    }
     for (const [index, name] of ["a", "b"].entries()) {
       const remote = index === 0 ? "b" : "a";
       const publicIp = index === 0 ? "172.29.203.12" : "172.29.203.11";
@@ -63,7 +75,16 @@ export async function prepareNatNetwork(compose) {
     console.log("PASS NAT isolation: private addresses blocked, bidirectional SNAT/DNAT verified, blocked UDP fails and restored UDP succeeds");
   } finally {
     for (const name of ["a", "b"])
-      await compose("exec", "-T", `app-${name}`, "node", "-e", "process.kill(Number(require('node:fs').readFileSync('/tmp/nat-probe.pid', 'utf8')))");
+      await compose("exec", "-T", `app-${name}`, "node", "-e", `
+        const fs = require('node:fs');
+        try {
+          process.kill(Number(fs.readFileSync('/tmp/nat-probe.pid', 'utf8')));
+        } catch (error) {
+          // Preserve the readiness failure; outer Compose cleanup owns unbound processes.
+          if (error.code !== 'ENOENT' && error.code !== 'ESRCH') throw error;
+        }
+        fs.rmSync('/tmp/nat-probe.pid', {force:true});
+      `);
   }
   for (const name of ["a", "b"])
     await compose("exec", "-T", `router-${name}`, "iptables", "-Z", "FORWARD");

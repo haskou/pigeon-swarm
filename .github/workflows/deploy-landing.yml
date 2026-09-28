@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "site/**"
+      - "docs/assets/**"
       - ".github/workflows/deploy-landing.yml"
   workflow_dispatch:
 

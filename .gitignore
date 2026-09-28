@@ -9,3 +9,4 @@ turn-certs/
 site/node_modules/
 site/dist/
 site/.astro
+site/src/assets/docs/

@@ -1,6 +1,6 @@
 # Current private-data inventory
 
-Snapshot: backend `4f43437`, UI `5682be6`, reviewed 2026-09-06. This is a code
+Snapshot: backend `4f43437`, UI `5682be6`, reviewed 2026-09-06; the identity publication and push failure log rows were re-evaluated at node `fdc8ce19` (PR haskou/pigeon-swarm-node#319) and are the only exceptions. This is a code
 inventory, not production telemetry. “No bounded TTL established” means the
 inspected path supplies no basis for promising expiry or erasure; it is not a
 claim that every installation keeps data forever.
@@ -27,7 +27,7 @@ Public and private IPFS stores/routing must be distinguished in every capture.
 | Replica claims | [CID, node, network and time](https://github.com/haskou/pigeon-swarm-node/blob/4f43437f18a70ee4588fc05b8651f47bc5d23a0f/src/contexts/content-replication/domain/ContentReplicaClaim.ts) | OrbitDB claims expose location/copy relationships | Claim expiry/removal cannot retract blocks | At most two selected blob/mailbox copies; no public replica catalog |
 | Presence | [identity, ownerNodeId, status/custom message, activity/heartbeat times](https://github.com/haskou/pigeon-swarm-node/blob/4f43437f18a70ee4588fc05b8651f47bc5d23a0f/src/contexts/presence/domain/IdentityPresence.ts) | Runtime leases and network events map identities to nodes/activity | Lease expiry is not capture erasure | Opt-in relationship scope, encrypted, 90-second expiry |
 | Push subscriptions | [endpoint, identity, p256dh/auth, expiry/createdAt](https://github.com/haskou/pigeon-swarm-node/blob/4f43437f18a70ee4588fc05b8651f47bc5d23a0f/src/contexts/push-notifications/infrastructure/local-db/LocalPushSubscriptionRepository.ts) | Local Level; node operator can map identity to delivery endpoint | Subscription expiry exists; full backup/log retention not established | Optional opaque installation subscription; generic wakeup, no private event IDs |
-| Push failure logs | [Full endpoint and endpoint host on failure](https://github.com/haskou/pigeon-swarm-node/blob/4f43437f18a70ee4588fc05b8651f47bc5d23a0f/src/contexts/push-notifications/infrastructure/web-push/WebPushNotificationDelivery.ts) | Node logs add another endpoint copy | Log retention not established | Redact endpoint/capability entirely; bounded request-local diagnostics |
+| Push failure logs | [Endpoint host only on failure; the full endpoint is no longer logged](https://github.com/haskou/pigeon-swarm-node/blob/fdc8ce19/src/contexts/push-notifications/infrastructure/web-push/WebPushNotificationDelivery.ts) | Node logs hold the push service host | Log retention not established | Bounded request-local diagnostics |
 | Local node database | [JSON records and namespace/index keys](https://github.com/haskou/pigeon-swarm-node/blob/4f43437f18a70ee4588fc05b8651f47bc5d23a0f/src/shared/infrastructure/local-db/EmbeddedLocalDatabase.ts) | Level JSON, no record-encryption wrapper at this layer | Application-specific; no general privacy TTL | Opaque queues and configuration only; atomic expiry/outbox handling |
 
 ## Additional relationship indexes and client copies

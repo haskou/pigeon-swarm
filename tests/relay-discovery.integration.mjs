@@ -119,6 +119,11 @@ test(
       const nodes = ["10", "11", "12"]
         .slice(0, count)
         .map((octet) => `http://11.254.0.${octet}:8080/api/`);
+      await docker([
+        "cp",
+        "tests/signed-pigeon-client.mjs",
+        `${name}-a:/app/signed-pigeon-client.mjs`,
+      ]);
       const output = await docker(
         [
           "exec",

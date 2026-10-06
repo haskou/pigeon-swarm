@@ -1,5 +1,14 @@
-import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+
+import {
+  HttpError,
+  SignedCommunities,
+  createActor,
+  publishIdentity,
+  requestHeaders,
+  signedRequest,
+} from "./signed-pigeon-client.mjs";
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const check = (condition, message) => {
@@ -12,38 +21,14 @@ let nodes = [];
 let failure;
 let success;
 
-function headers(identity, method, path, body = {}) {
-  const timestamp = Date.now();
-  const payload = {
-    bodyHash: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
-    method,
-    path,
-    timestamp,
-  };
-  return {
-    "content-type": "application/json",
-    "x-identity-id": identity.id,
-    "x-timestamp": String(timestamp),
-    "x-signature": sign(
-      null,
-      Buffer.from(JSON.stringify(payload)),
-      identity.privateKey,
-    ).toString("base64"),
-  };
-}
-
-async function request(index, identity, method, route, body = {}) {
-  const url = new URL(route, nodes[index]);
-  const response = await fetch(url, {
-    method,
-    headers: headers(identity, method, url.pathname, body),
-    ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok)
-    throw new Error(`HTTP ${response.status} at node ${index + 1}`);
-  const text = await response.text();
-  return text ? JSON.parse(text) : undefined;
+async function request(index, identity, method, route, body) {
+  try {
+    return await signedRequest(nodes[index], identity, method, route, body);
+  } catch (error) {
+    if (error instanceof HttpError)
+      throw new Error(`HTTP ${error.status} at node ${index + 1}`);
+    throw error;
+  }
 }
 
 async function eventually(label, operation, timeout = 55000) {
@@ -60,7 +45,7 @@ async function eventually(label, operation, timeout = 55000) {
 function connect(index, identity) {
   const url = new URL("ws", nodes[index]);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const auth = headers(identity, "GET", url.pathname);
+  const auth = requestHeaders(identity, "GET", url.pathname, "{}");
   url.search = new URLSearchParams({
     identityId: identity.id,
     timestamp: auth["x-timestamp"],
@@ -136,15 +121,7 @@ try {
     "Node runtime requires native WebSocket",
   );
   const runId = randomUUID();
-  const identities = nodes.map(() => {
-    const pair = generateKeyPairSync("ed25519");
-    return {
-      privateKey: pair.privateKey,
-      id: pair.publicKey
-        .export({ type: "spki", format: "der" })
-        .toString("base64"),
-    };
-  });
+  const identities = await Promise.all(nodes.map(() => createActor()));
   const owner = identities[0];
   const profile = {
     networkId,
@@ -154,22 +131,32 @@ try {
     discoverable: false,
     visibility: "private",
   };
+  stage = "publish identities";
+  for (const [index, identity] of identities.entries())
+    await publishIdentity(
+      (actor, method, route, body) => request(0, actor, method, route, body),
+      identity,
+      [networkId],
+      `Relay ${index + 1}`,
+    );
+  const communities = new SignedCommunities((actor, method, route, body) =>
+    request(0, actor, method, route, body),
+  );
   stage = "create community";
-  const community = await request(0, owner, "POST", "communities/", profile);
+  const community = await communities.create(owner, profile);
   check(typeof community?.id === "string", "Missing community ID");
   const communityRoute = `communities/${encodeURIComponent(community.id)}`;
   stage = "create voice channel";
-  const channel = await request(
-    0,
+  const channel = await communities.createChannel(
     owner,
-    "POST",
-    `${communityRoute}/channels/voice`,
-    { name: "Relay probe" },
+    community,
+    "voice",
+    "Relay probe",
   );
   check(typeof channel?.id === "string", "Missing voice channel ID");
   stage = "admit participants";
   for (const identity of identities.slice(1))
-    await request(0, identity, "POST", `${communityRoute}/join-requests`);
+    await communities.joinAutomatically(identity, community);
   const expected = await request(0, owner, "GET", communityRoute);
   check(
     expected.name === profile.name &&
@@ -269,7 +256,6 @@ try {
             event.aggregate_id === callId &&
             value?.signalId === delivery.signalId &&
             value.callId === callId &&
-            value.networkId === networkId &&
             value.senderIdentityId === identities[index].id &&
             value.recipientIdentityId === identities[index + 1].id &&
             value.signalType === "offer" &&

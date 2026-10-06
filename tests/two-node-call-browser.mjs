@@ -230,12 +230,6 @@ try {
       .getByTestId("auth-password-confirmation-input")
       .fill("Disposable-call-test-password1!");
     await page.getByTestId("auth-recovery-key-confirm").click();
-    const passkey = page.getByTestId("auth-passkey-prf-toggle");
-    if (
-      (await passkey.isEnabled()) &&
-      (await passkey.getAttribute("aria-pressed")) === "true"
-    )
-      await passkey.click();
     stage = `registration submit ${index + 1}`;
     await page.getByTestId("auth-submit-button").click();
     stage = `workspace after registration ${index + 1}`;
@@ -413,7 +407,6 @@ try {
   };
   await assertAudio("direct call");
   assert.ok(deliveryDiagnostics.every(({ rejectedSignals }) => rejectedSignals > 0), "Both clients must recover from deliberately rejected signals");
-  await pages[0].getByTestId("compact-call-bar").click();
   await pages[0]
     .getByRole("button", { name: "Leave call", exact: true })
     .click();
@@ -472,10 +465,18 @@ try {
       .getByTitle(/Join (voice|voice channel)/i)
       .filter({ hasText: "voice-test" })
       .click();
-  const leaveVoice = async (page) => {
-    await page.getByTestId("compact-call-bar").click();
-    await page.getByRole("button", { name: "Leave call", exact: true }).click();
+  const unlockSession = async (page) => {
+    const unlockPassword = page.getByTestId("auth-password-input");
+    const profileMenu = page.getByTestId("own-profile-menu-button");
+    await unlockPassword.or(profileMenu).waitFor();
+    if (await unlockPassword.isVisible()) {
+      await unlockPassword.fill("Disposable-call-test-password1!");
+      await page.getByTestId("auth-submit-button").click();
+    }
+    await profileMenu.waitFor();
   };
+  const leaveVoice = (page) =>
+    page.getByRole("button", { name: "Leave call", exact: true }).click();
   const expectVoiceParticipants = (page, count) =>
     page.waitForFunction(
       (expected) => document.querySelectorAll("[data-testid=voice-channel-participant]").length === expected,
@@ -509,7 +510,7 @@ try {
     );
   for (const page of pages) {
     await page.reload();
-    await page.getByTestId("own-profile-menu-button").waitFor();
+    await unlockSession(page);
     if (await page.getByTestId("push-notification-dismiss-button").isVisible())
       await page.getByTestId("push-notification-dismiss-button").click();
     await page
@@ -559,7 +560,7 @@ try {
   pages[1] = await returningContext.newPage();
   pages[1].setDefaultTimeout(45000);
   await pages[1].goto(independentClient ? 'http://127.0.0.1:8445' : urls[1]);
-  await pages[1].getByTestId("own-profile-menu-button").waitFor();
+  await unlockSession(pages[1]);
   await pages[1].getByRole("button", { name: "Relay voice test", exact: true }).click();
   await expectVoiceParticipants(pages[1], 0);
   console.log("PASS password login, retained community history, and presence expiry after abrupt client departure");

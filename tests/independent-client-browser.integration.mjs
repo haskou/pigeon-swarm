@@ -109,7 +109,7 @@ test('independent built client browser contract with explicitly fake backend fix
   for (const savedSelection of [null, '{corrupt-json']) {
     for (const unsubscribeSucceeds of [true, false]) {
       await t.test(`missing or corrupt selection retires old notifications before connecting: ${savedSelection ?? 'absent'}, unsubscribe=${unsubscribeSucceeds}`, async (subtest) => {
-        const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+        const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 2 });
         const page = await pageFor(subtest);
         await page.goto(origin);
         if (savedSelection !== null) {
@@ -151,7 +151,7 @@ test('independent built client browser contract with explicitly fake backend fix
   }
 
   await t.test('initial community invite path and key fragment survive choosing a compatible node', async (subtest) => {
-    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 2 });
     const page = await pageFor(subtest);
     const inviteUrl = `${origin}/invite/community/disposable-token#k=disposable-secret`;
     await page.goto(inviteUrl);
@@ -169,8 +169,8 @@ test('independent built client browser contract with explicitly fake backend fix
 
   for (const previouslySelected of [false, true]) {
     await t.test(`cross-tab node selection preserves pending invite and requires confirmation: existing=${previouslySelected}`, async (subtest) => {
-      const first = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
-      const second = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+      const first = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 2 });
+      const second = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 2 });
       const page = await pageFor(subtest);
       await page.goto(origin);
       if (previouslySelected) {
@@ -200,10 +200,10 @@ test('independent built client browser contract with explicitly fake backend fix
   }
 
   await t.test('valid loopback contract boots real UI and ignores backend scriptURL; node switch reloads and scopes credential reads', async (subtest) => {
-    const contract = { protocol: 'pigeon-swarm', apiVersion: 1 };
+    const contract = { protocol: 'pigeon-swarm', apiVersion: 2 };
     const first = await fakeNode(subtest, contract);
     contract.scriptURL = `${first.origin}/malicious.js`;
-    const second = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 });
+    const second = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 2 });
     const page = await pageFor(subtest);
     await page.goto(origin);
     const gateDocument = await page.evaluate(() => globalThis.documentId);
@@ -321,7 +321,7 @@ test('independent built client browser contract with explicitly fake backend fix
     const key = join(directory, 'fixture.key');
     const cert = join(directory, 'fixture.crt');
     execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=localhost'], { stdio: 'ignore' });
-    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 1 }, { key: await readFile(key), cert: await readFile(cert) });
+    const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 2 }, { key: await readFile(key), cert: await readFile(cert) });
     const page = await pageFor(subtest);
     const failures = [];
     page.on('requestfailed', (request) => failures.push(request.failure()?.errorText));

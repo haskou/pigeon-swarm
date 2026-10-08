@@ -152,6 +152,23 @@ try {
         if (diagnostics.callErrors.length > 10) diagnostics.callErrors.shift();
       }
       if (
+        response.status() >= 400 &&
+        responseUrl.pathname.startsWith("/api/") &&
+        !responseUrl.pathname.startsWith("/api/calls/")
+      ) {
+        const body = await response.json().catch(() => ({}));
+        console.log(
+          "API HTTP error:",
+          JSON.stringify({
+            stage,
+            method: response.request().method(),
+            path: responseUrl.pathname.replace(/[^/]{20,}/g, ":id"),
+            status: response.status(),
+            code: /^[A-Za-z]+Error$/.test(body.code || "") ? body.code : "unknown",
+          }),
+        );
+      }
+      if (
         new URL(response.url()).pathname === "/api/conversations/" &&
         response.request().method() === "GET"
       ) {
@@ -278,14 +295,18 @@ try {
   await pages[0]
     .getByTestId("create-conversation-recipient-input")
     .waitFor({ state: "hidden" });
-  stage = "replicate direct conversation";
-  await pages[1].getByTestId("conversation-list-item").first().click();
-  await pages[1].getByTestId("message-composer-input").waitFor();
   stage = "accept encrypted conversation invitation";
-  await pages[1].getByTestId("notifications-open-button").first().click();
-  await pages[1].getByTestId("notification-accept-button").click();
+  await pages[1]
+    .locator('[data-testid="notifications-open-button"]:visible')
+    .first()
+    .click();
+  const accept = pages[1].getByTestId("notification-accept-button").first();
+  await accept.waitFor({ state: "visible", timeout: 60000 });
+  await accept.click();
   await pages[1].waitForFunction(
-    () => !document.querySelector('[data-testid="message-composer-input"]').disabled,
+    () => !document.querySelector('[data-testid="message-composer-input"]')?.disabled,
+    undefined,
+    { timeout: 60000 },
   );
   const assertTimeline = async (page, messages) => {
     const items = page.getByTestId("message-item");

@@ -12,7 +12,7 @@ import { randomBytes } from "node:crypto";
 
 import { KeyPair, SHA256Hash } from "@haskou/pigeon-swarm-crypto";
 
-const MUTATION_DOMAIN = "pigeon:public-mutation:v1\n";
+const MUTATION_DOMAIN = "pigeon:public-mutation:v2\n";
 const FIRST_POSITION = { predecessor: null, sequence: 0 };
 
 export class HttpError extends Error {
@@ -140,6 +140,7 @@ export async function publishIdentity(request, actor, networks, name) {
 function signMutation(actor, intent, position = FIRST_POSITION) {
   const body = {
     author: {
+      authorizationRevision: 0,
       deviceCredential: normalizeKey(actor.device.toPrimitives().publicKey),
       identityId: actor.id,
     },
@@ -150,7 +151,7 @@ function signMutation(actor, intent, position = FIRST_POSITION) {
     recordId: intent.recordId,
     sequence: position.sequence,
     store: intent.store,
-    version: 1,
+    version: 2,
   };
   const signature = actor.device
     .sign(`${MUTATION_DOMAIN}${canonicalJson(body)}`)

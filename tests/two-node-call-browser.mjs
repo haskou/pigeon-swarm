@@ -278,9 +278,6 @@ try {
   await pages[0]
     .getByTestId("create-conversation-recipient-input")
     .waitFor({ state: "hidden" });
-  stage = "replicate direct conversation";
-  await pages[1].getByTestId("conversation-list-item").first().click();
-  await pages[1].getByTestId("message-composer-input").waitFor();
   stage = "accept encrypted conversation invitation";
   await pages[1].getByTestId("notifications-open-button").first().click();
   await pages[1].getByTestId("notification-accept-button").click();

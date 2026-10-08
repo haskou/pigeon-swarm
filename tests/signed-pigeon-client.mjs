@@ -372,6 +372,69 @@ export class SignedCommunities {
       { acceptedAt, acceptedMutation, createdAt, mutation, operation },
     );
   }
+
+  // Removes `identityId` from the roster. The log entry targets the member.
+  async kick(actor, community, identityId) {
+    const createdAt = Date.now();
+    return this.request(
+      actor,
+      "DELETE",
+      `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}/kick`,
+      {
+        moderationLog: signModerationLog(actor, {
+          action: "member_kicked",
+          communityId: community.id,
+          createdAt,
+          target: { id: identityId, type: "member" },
+        }),
+        operation: await this.operation(
+          actor,
+          community.id,
+          community.networkId,
+          "member_kicked",
+          { identityId },
+          createdAt,
+        ),
+      },
+    );
+  }
+
+  async ban(actor, community, identityId, reason) {
+    const createdAt = Date.now();
+    return this.request(
+      actor,
+      "POST",
+      `communities/${encodeURIComponent(community.id)}/bans`,
+      {
+        identityId,
+        moderationLog: signModerationLog(actor, {
+          action: "member_banned",
+          communityId: community.id,
+          createdAt,
+          details: { reason },
+          target: { id: identityId, type: "member" },
+        }),
+        operation: await this.operation(
+          actor,
+          community.id,
+          community.networkId,
+          "member_banned",
+          { identityId },
+          createdAt,
+        ),
+        reason,
+      },
+    );
+  }
+
+  async moderationLogs(actor, community) {
+    const page = await this.request(
+      actor,
+      "GET",
+      `communities/${encodeURIComponent(community.id)}/moderation-logs`,
+    );
+    return page.logs;
+  }
 }
 
 // Derived exactly as the node does: the call id binds creator and nonce.

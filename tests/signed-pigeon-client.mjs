@@ -8,7 +8,7 @@
 //
 // The module is meant to run inside a Pigeon container (working directory
 // /app), where the crypto package is installed next to the node itself.
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { KeyPair, SHA256Hash } from "@haskou/pigeon-swarm-crypto";
 
@@ -371,5 +371,103 @@ export class SignedCommunities {
       `communities/${encodeURIComponent(community.id)}/join-requests`,
       { acceptedAt, acceptedMutation, createdAt, mutation, operation },
     );
+  }
+}
+
+// Derived exactly as the node does: the call id binds creator and nonce.
+export function deriveCallId(creatorIdentityId, nonce) {
+  const bytes = createHash("sha256")
+    .update(`${creatorIdentityId}:${nonce}`)
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6] % 16) + 128;
+  bytes[8] = (bytes[8] % 64) + 128;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// User-signed call events: start, participant join/leave and end. Each
+// participant record chains its previous proof, as the node's fold requires.
+export class SignedCalls {
+  constructor(request) {
+    this.request = request;
+    this.participantProofs = new Map();
+  }
+
+  async startChannelCall(actor, networkId, scope, sessionEpoch = 1) {
+    const nonce = `wrapper-${base64Url(randomBytes(12))}`;
+    const startedAt = Date.now();
+    const callId = deriveCallId(actor.id, nonce);
+    const payload = {
+      callId,
+      creatorIdentityId: actor.id,
+      id: `call:${callId}`,
+      networkId,
+      nonce,
+      participantIds: [],
+      scope: {
+        channelId: scope.channelId,
+        communityId: scope.communityId,
+        type: "community_channel",
+      },
+      scopeType: "call_start",
+      sessionEpoch,
+      startedAt,
+    };
+    const mutation = signMutation(actor, {
+      kind: "put",
+      payload,
+      recordId: payload.id,
+      store: "calls",
+    });
+    return this.request(actor, "POST", "calls/", {
+      channelId: scope.channelId,
+      communityId: scope.communityId,
+      mutation,
+      nonce,
+      scopeType: "community_channel",
+      sessionEpoch,
+      startedAt,
+    });
+  }
+
+  async setParticipantState(actor, callId, state) {
+    const at = Date.now();
+    const payload = {
+      at,
+      callId,
+      id: `call-participant:${callId}:${actor.id}`,
+      identityId: actor.id,
+      scopeType: "call_participant",
+      state,
+    };
+    const key = `${callId}:${actor.id}`;
+    const previous = this.participantProofs.get(key);
+    const mutation = signMutation(
+      actor,
+      { kind: "put", payload, recordId: payload.id, store: "calls" },
+      previous
+        ? {
+            predecessor: mutationDigest(previous),
+            sequence: previous.sequence + 1,
+          }
+        : FIRST_POSITION,
+    );
+    this.participantProofs.set(key, mutation);
+    const joined = state === "joined";
+    return this.request(
+      actor,
+      joined ? "POST" : "DELETE",
+      `calls/${encodeURIComponent(callId)}/participants${joined ? "" : "/me"}`,
+      { at, mutation },
+    );
+  }
+
+  join(actor, callId) {
+    return this.setParticipantState(actor, callId, "joined");
+  }
+
+  leave(actor, callId) {
+    return this.setParticipantState(actor, callId, "left");
   }
 }

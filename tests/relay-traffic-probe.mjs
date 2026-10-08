@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import {
   HttpError,
+  SignedCalls,
   SignedCommunities,
   createActor,
   publishIdentity,
@@ -17,6 +18,7 @@ const check = (condition, message) => {
 let stage = "configuration";
 const sockets = [];
 const joined = [];
+let calls;
 let nodes = [];
 let failure;
 let success;
@@ -182,19 +184,19 @@ try {
   );
 
   stage = "join replicated call";
-  const callBody = {
-    scopeType: "community_channel",
-    communityId: community.id,
-    channelId: channel.id,
-  };
-  let callId;
+  calls = new SignedCalls((actor, method, route, body) =>
+    request(0, actor, method, route, body),
+  );
+  const call = await calls.startChannelCall(
+    owner,
+    networkId,
+    { communityId: community.id, channelId: channel.id },
+    1,
+  );
+  check(typeof call?.id === "string", "Missing call ID");
+  const callId = call.id;
   for (const identity of identities) {
-    const call = await request(0, identity, "POST", "calls/", callBody);
-    check(
-      typeof call?.id === "string" && (!callId || call.id === callId),
-      "Participants did not join the same call",
-    );
-    callId = call.id;
+    await calls.join(identity, callId);
     joined.push({ identity, callId });
   }
   const callRoute = `calls/${encodeURIComponent(callId)}`;
@@ -303,12 +305,7 @@ try {
 } finally {
   for (const { identity, callId } of joined) {
     try {
-      await request(
-        0,
-        identity,
-        "DELETE",
-        `calls/${encodeURIComponent(callId)}/participants/me`,
-      );
+      await calls.leave(identity, callId);
     } catch {
       failure ||= "Relay traffic probe could not leave every call participant";
     }

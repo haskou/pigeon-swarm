@@ -184,3 +184,49 @@ jobs:
           export PIGEON_CLIENT_DIST="$GITHUB_WORKSPACE/client-source/dist"
           export PIGEON_INDEPENDENT_CLIENT=true
           npm run test:e2e
+
+  ui-e2e:
+    name: Validate UI against a real node
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out image project
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check out supported client source
+        uses: actions/checkout@v7
+        with:
+          repository: haskou/pigeon-swarm-ui
+          ref: ${{ env.PIGEON_SWARM_UI_SHA }}
+          path: client-source
+          token: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install client test tooling
+        working-directory: client-source
+        run: |
+          yarn install --frozen-lockfile
+          yarn playwright install --with-deps chromium
+
+      - name: Build immutable application image from pinned sources
+        env:
+          SOURCE_REPOSITORIES_TOKEN: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
+        run: |
+          docker build --target production \
+            --secret id=github_token,env=SOURCE_REPOSITORIES_TOKEN \
+            --build-arg PIGEON_SWARM_NODE_SHA="$PIGEON_SWARM_NODE_SHA" \
+            --build-arg PIGEON_SWARM_UI_SHA="$PIGEON_SWARM_UI_SHA" \
+            --iidfile "$RUNNER_TEMP/pigeon-test-image.id" .
+          printf 'PIGEON_TEST_IMAGE=%s\n' "$(cat "$RUNNER_TEMP/pigeon-test-image.id")" >> "$GITHUB_ENV"
+
+      - name: Verify UI flows against the real node in the image
+        run: |
+          export PIGEON_UI_SOURCE="$GITHUB_WORKSPACE/client-source"
+          npm run test:ui-e2e

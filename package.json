@@ -8,6 +8,7 @@
     "test:e2e": "node --test tests/two-node-call.integration.mjs",
     "test:relay": "node --test tests/relay-discovery.integration.mjs",
     "test:moderation": "node --test tests/moderation.integration.mjs",
+    "test:ui-e2e": "node --test tests/ui-e2e.integration.mjs",
     "test:calls": "node --test tests/two-node-call.integration.mjs",
     "test:privacy": "node --test tests/privacy-contracts.test.mjs",
     "test:e2e:nat": "node --test tests/two-node-nat-call.integration.mjs"

@@ -213,7 +213,7 @@ try {
   success = `PASS community convergence nodes=${nodes.length} concurrent-operations=${outcomes.length} members=${final.community.memberIds.length}`;
 } catch (error) {
   const detail =
-    /^(HTTP [0-9]{3} at node [0-9]+|Timed out: [a-zA-Z0-9 ]+|Operations rejected at submission: [a-zA-Z0-9:, ]+|[A-Z][A-Za-z ]+ (?:must|on every node|after convergence)[A-Za-z ,]*)$/.test(
+    /^(HTTP [0-9]{3} at node [0-9]+(: [^\n]{0,300})?|Timed out: [a-zA-Z0-9 ]+|Operations rejected at submission: [^\n]{1,900}|[A-Z][A-Za-z ]+ (?:must|on every node|after convergence)[A-Za-z ,]*)$/.test(
       error?.message || "",
     )
       ? `: ${error.message}`

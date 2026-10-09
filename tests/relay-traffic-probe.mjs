@@ -307,7 +307,7 @@ try {
     }),
   );
   const detail =
-    /^(HTTP [0-9]{3} at node [0-9]+|Timed out: [a-zA-Z0-9 ]+)$/.test(
+    /^(HTTP [0-9]{3} at node [0-9]+(: [^\n]{0,300})?|Timed out: [a-zA-Z0-9 ]+( \(last: [^\n]{0,400}\))?)$/.test(
       error?.message || "",
     )
       ? `: ${error.message}`

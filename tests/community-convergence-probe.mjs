@@ -38,7 +38,9 @@ try {
       return await signedRequest(nodes[index], identity, method, route, body);
     } catch (error) {
       if (error instanceof HttpError)
-        throw new Error(`HTTP ${error.status} at node ${index + 1}`);
+        throw new Error(
+        `HTTP ${error.status} at node ${index + 1}: ${String(error.bodyText).slice(0, 300)}`,
+      );
       throw error;
     }
   };
@@ -211,7 +213,7 @@ try {
   success = `PASS community convergence nodes=${nodes.length} concurrent-operations=${outcomes.length} members=${final.community.memberIds.length}`;
 } catch (error) {
   const detail =
-    /^(HTTP [0-9]{3} at node [0-9]+|Timed out: [a-zA-Z0-9 ]+|Operations rejected at submission: [a-zA-Z0-9:, ]+|[A-Z][A-Za-z ]+ (?:must|on every node|after convergence)[A-Za-z ,]*)$/.test(
+    /^(HTTP [0-9]{3} at node [0-9]+(: [^\n]{0,300})?|Timed out: [a-zA-Z0-9 ]+|Operations rejected at submission: [^\n]{1,900}|[A-Z][A-Za-z ]+ (?:must|on every node|after convergence)[A-Za-z ,]*)$/.test(
       error?.message || "",
     )
       ? `: ${error.message}`

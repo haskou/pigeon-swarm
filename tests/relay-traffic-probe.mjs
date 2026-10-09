@@ -28,20 +28,26 @@ async function request(index, identity, method, route, body) {
     return await signedRequest(nodes[index], identity, method, route, body);
   } catch (error) {
     if (error instanceof HttpError)
-      throw new Error(`HTTP ${error.status} at node ${index + 1}`);
+      throw new Error(
+        `HTTP ${error.status} at node ${index + 1}: ${String(error.bodyText).slice(0, 300)}`,
+      );
     throw error;
   }
 }
 
 async function eventually(label, operation, timeout = 55000) {
   const deadline = Date.now() + timeout;
+  let last = "no observation";
   while (Date.now() < deadline) {
     try {
       if (await operation()) return;
-    } catch {}
+      last = "condition not met";
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
     await pause(250);
   }
-  throw new Error(`Timed out: ${label}`);
+  throw new Error(`Timed out: ${label} (last: ${last})`);
 }
 
 function connect(index, identity) {
@@ -204,14 +210,19 @@ try {
     nodes.map((_, index) =>
       eventually(`call replica at node ${index + 1}`, async () => {
         const call = await request(index, identities[index], "GET", callRoute);
-        return (
+        const joinedCount = identities.filter((identity) =>
+          call.participants?.some(
+            (p) => p.identityId === identity.id && p.status === "joined",
+          ),
+        ).length;
+        if (
           call.id === callId &&
           call.networkId === networkId &&
-          identities.every((identity) =>
-            call.participants?.some(
-              (p) => p.identityId === identity.id && p.status === "joined",
-            ),
-          )
+          joinedCount === identities.length
+        )
+          return true;
+        throw new Error(
+          `joined ${joinedCount}/${identities.length}, network match ${call.networkId === networkId}`,
         );
       }),
     ),
@@ -296,7 +307,7 @@ try {
     }),
   );
   const detail =
-    /^(HTTP [0-9]{3} at node [0-9]+|Timed out: [a-zA-Z0-9 ]+)$/.test(
+    /^(HTTP [0-9]{3} at node [0-9]+(: [^\n]{0,300})?|Timed out: [a-zA-Z0-9 ]+( \(last: [^\n]{0,400}\))?)$/.test(
       error?.message || "",
     )
       ? `: ${error.message}`

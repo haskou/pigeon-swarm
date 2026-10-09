@@ -139,6 +139,7 @@ export async function publishIdentity(request, actor, networks, name) {
 
 function signMutation(actor, intent, position = FIRST_POSITION) {
   const body = {
+    ...(intent.frontier ? { frontier: [...intent.frontier].sort() } : {}),
     author: {
       authorizationRevision: 0,
       deviceCredential: normalizeKey(actor.device.toPrimitives().publicKey),
@@ -226,6 +227,7 @@ function signModerationLog(actor, input) {
       scopeType: "community_moderation_log",
       target: { id: input.target.id, type: input.target.type },
     },
+    frontier: input.frontier,
     recordId: id,
     store: "moderationLogs",
   });
@@ -248,14 +250,22 @@ export class SignedCommunities {
     return result.frontier;
   }
 
-  async operation(actor, communityId, networkId, action, args, createdAt) {
+  async operation(
+    actor,
+    communityId,
+    networkId,
+    action,
+    args,
+    createdAt,
+    parents,
+  ) {
     return signOperation(actor, {
       action,
       args,
       communityId,
       createdAt,
       networkId,
-      parents: await this.frontier(actor, communityId),
+      parents: parents ?? (await this.frontier(actor, communityId)),
     });
   }
 
@@ -291,6 +301,7 @@ export class SignedCommunities {
 
   async createChannel(actor, community, type, name) {
     const createdAt = Date.now();
+    const parents = await this.frontier(actor, community.id);
     const channelId = entityId("channel", community.id, actor.id, createdAt);
     return this.request(
       actor,
@@ -298,6 +309,7 @@ export class SignedCommunities {
       `communities/${encodeURIComponent(community.id)}/channels/${type}`,
       {
         moderationLog: signModerationLog(actor, {
+          frontier: parents,
           action: "channel_created",
           communityId: community.id,
           createdAt,
@@ -312,6 +324,7 @@ export class SignedCommunities {
           "channel_created",
           { channelId, name, type },
           createdAt,
+          parents,
         ),
       },
     );
@@ -356,10 +369,14 @@ export class SignedCommunities {
       recordId: base.id,
       store: "requests",
     });
-    const mutation = signMutation(actor, intent(record("pending", createdAt)));
+    const frontier = operation.parents;
+    const mutation = signMutation(actor, {
+      ...intent(record("pending", createdAt)),
+      frontier,
+    });
     const acceptedMutation = signMutation(
       actor,
-      intent(record("accepted", acceptedAt)),
+      { ...intent(record("accepted", acceptedAt)), frontier },
       {
         predecessor: mutationDigest(mutation),
         sequence: mutation.sequence + 1,
@@ -376,12 +393,14 @@ export class SignedCommunities {
   // Removes `identityId` from the roster. The log entry targets the member.
   async kick(actor, community, identityId) {
     const createdAt = Date.now();
+    const parents = await this.frontier(actor, community.id);
     return this.request(
       actor,
       "DELETE",
       `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}/kick`,
       {
         moderationLog: signModerationLog(actor, {
+          frontier: parents,
           action: "member_kicked",
           communityId: community.id,
           createdAt,
@@ -394,6 +413,7 @@ export class SignedCommunities {
           "member_kicked",
           { identityId },
           createdAt,
+          parents,
         ),
       },
     );
@@ -401,6 +421,7 @@ export class SignedCommunities {
 
   async ban(actor, community, identityId, reason) {
     const createdAt = Date.now();
+    const parents = await this.frontier(actor, community.id);
     return this.request(
       actor,
       "POST",
@@ -408,6 +429,7 @@ export class SignedCommunities {
       {
         identityId,
         moderationLog: signModerationLog(actor, {
+          frontier: parents,
           action: "member_banned",
           communityId: community.id,
           createdAt,
@@ -421,6 +443,7 @@ export class SignedCommunities {
           "member_banned",
           { identityId },
           createdAt,
+          parents,
         ),
         reason,
       },
@@ -439,6 +462,7 @@ export class SignedCommunities {
   // Creates a custom role. The role id is derived like the node does.
   async createRole(actor, community, name, permissions) {
     const createdAt = Date.now();
+    const parents = await this.frontier(actor, community.id);
     const roleId = entityId("role", community.id, actor.id, createdAt);
     return this.request(
       actor,
@@ -446,6 +470,7 @@ export class SignedCommunities {
       `communities/${encodeURIComponent(community.id)}/roles`,
       {
         moderationLog: signModerationLog(actor, {
+          frontier: parents,
           action: "role_created",
           communityId: community.id,
           createdAt,
@@ -460,6 +485,7 @@ export class SignedCommunities {
           "role_created",
           { name, permissions, roleId },
           createdAt,
+          parents,
         ),
         permissions,
       },
@@ -469,12 +495,14 @@ export class SignedCommunities {
   // Replaces the custom roles assigned to `identityId`.
   async setMemberRoles(actor, community, identityId, roleIds) {
     const createdAt = Date.now();
+    const parents = await this.frontier(actor, community.id);
     return this.request(
       actor,
       "PUT",
       `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}/roles`,
       {
         moderationLog: signModerationLog(actor, {
+          frontier: parents,
           action: "member_roles_updated",
           communityId: community.id,
           createdAt,
@@ -488,6 +516,7 @@ export class SignedCommunities {
           "member_roles_updated",
           { identityId, roleIds },
           createdAt,
+          parents,
         ),
         roleIds,
       },

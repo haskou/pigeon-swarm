@@ -132,15 +132,33 @@ try {
   );
 
   stage = "submit concurrent operations";
+  // Control operations form one chain per community: operations signed on the
+  // same frontier conflict (409) and the client re-signs on the new frontier.
+  // An operation that lost a race against the removal of its own precondition
+  // (revoked delegation, member already gone) may end as 403, 404 or 409.
+  const submit = async (operation, mayLose = false) => {
+    let last;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        last = error;
+        if (!/^HTTP 409 /.test(error.message)) break;
+        await pause(100 + Math.random() * 400);
+      }
+    }
+    if (mayLose && /^HTTP (403|404|409) /.test(last.message)) return "lost";
+    throw last;
+  };
   const outcomes = await Promise.allSettled([
-    at(0).kick(owner, community, memberB.id),
-    at(2).ban(owner, community, memberC.id, "concurrent ban"),
+    submit(() => at(0).kick(owner, community, memberB.id)),
+    submit(() => at(2).ban(owner, community, memberC.id, "concurrent ban")),
     // Race between a delegated kick and the revocation of that delegation.
-    at(1).kick(admin, community, memberD.id),
-    at(0).setMemberRoles(owner, community, admin.id, []),
+    submit(() => at(1).kick(admin, community, memberD.id), true),
+    submit(() => at(0).setMemberRoles(owner, community, admin.id, [])),
     // Voluntary leave racing an owner kick of the same member.
-    at(1).leave(memberE, community),
-    at(2).kick(owner, community, memberE.id),
+    submit(() => at(1).leave(memberE, community), true),
+    submit(() => at(2).kick(owner, community, memberE.id), true),
   ]);
   const rejected = outcomes
     .map((outcome, index) => ({ outcome, index }))

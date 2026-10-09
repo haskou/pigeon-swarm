@@ -435,6 +435,83 @@ export class SignedCommunities {
     );
     return page.logs;
   }
+
+  // Creates a custom role. The role id is derived like the node does.
+  async createRole(actor, community, name, permissions) {
+    const createdAt = Date.now();
+    const roleId = entityId("role", community.id, actor.id, createdAt);
+    return this.request(
+      actor,
+      "POST",
+      `communities/${encodeURIComponent(community.id)}/roles`,
+      {
+        moderationLog: signModerationLog(actor, {
+          action: "role_created",
+          communityId: community.id,
+          createdAt,
+          details: { name, permissions },
+          target: { id: roleId, type: "role" },
+        }),
+        name,
+        operation: await this.operation(
+          actor,
+          community.id,
+          community.networkId,
+          "role_created",
+          { name, permissions, roleId },
+          createdAt,
+        ),
+        permissions,
+      },
+    );
+  }
+
+  // Replaces the custom roles assigned to `identityId`.
+  async setMemberRoles(actor, community, identityId, roleIds) {
+    const createdAt = Date.now();
+    return this.request(
+      actor,
+      "PUT",
+      `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}/roles`,
+      {
+        moderationLog: signModerationLog(actor, {
+          action: "member_roles_updated",
+          communityId: community.id,
+          createdAt,
+          details: { roleIds },
+          target: { id: identityId, type: "member" },
+        }),
+        operation: await this.operation(
+          actor,
+          community.id,
+          community.networkId,
+          "member_roles_updated",
+          { identityId, roleIds },
+          createdAt,
+        ),
+        roleIds,
+      },
+    );
+  }
+
+  // The authenticated member leaves the community.
+  async leave(actor, community) {
+    return this.request(
+      actor,
+      "DELETE",
+      `communities/${encodeURIComponent(community.id)}/members/me`,
+      {
+        operation: await this.operation(
+          actor,
+          community.id,
+          community.networkId,
+          "member_left",
+          { identityId: actor.id },
+          Date.now(),
+        ),
+      },
+    );
+  }
 }
 
 // Derived exactly as the node does: the call id binds creator and nonce.

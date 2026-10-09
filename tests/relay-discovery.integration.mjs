@@ -144,6 +144,33 @@ test(
       assert.match(output, /^PASS relay traffic/);
       console.log(output);
     };
+    const communityConvergence = async () => {
+      const nodes = ["10", "11", "12"].map(
+        (octet) => `http://11.254.0.${octet}:8080/api/`,
+      );
+      await docker([
+        "cp",
+        "tests/signed-pigeon-client.mjs",
+        `${name}-a:/app/signed-pigeon-client.mjs`,
+      ]);
+      const output = await docker(
+        [
+          "exec",
+          "-i",
+          "-e",
+          `COMMUNITY_TEST_NODES=${JSON.stringify(nodes)}`,
+          "-e",
+          `COMMUNITY_TEST_NETWORK_ID=${network.id}`,
+          `${name}-a`,
+          "node",
+          "--input-type=module",
+        ],
+        await readFile("tests/community-convergence-probe.mjs", "utf8"),
+        300000,
+      );
+      assert.match(output, /^PASS community convergence/);
+      console.log(output);
+    };
     const mesh = async (nodes) => {
       await wait("automatic private relay mesh", async () => {
         const states = await Promise.all(nodes.map(state));
@@ -395,6 +422,7 @@ test(
       await start("c", 12);
       await mesh(["a", "b", "c"]);
       await traffic("late-publisher");
+      await communityConvergence();
       console.log(
         JSON.stringify({
           phase: "late-publisher",

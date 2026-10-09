@@ -69,6 +69,18 @@ network, call, unique payload and valid expiry. A successful HTTP POST or a peer
 count alone cannot pass the traffic probe. Test identities and storage are
 disposable; cleanup removes only containers and the network created by this run.
 
+Once C has joined, a second probe (`tests/community-convergence-probe.mjs`)
+drives one community across the three nodes with signed operations: a custom
+role with `manage_members` is created and assigned, then six operations are
+submitted concurrently to different nodes (an owner kick, an owner ban, a
+delegated kick racing the revocation of that delegation, and a voluntary leave
+racing an owner kick of the same member). Every node must end with an identical
+community document and role listing, the owner must remain a member, the banned
+member must be listed as banned everywhere, kicked or departed members must not
+be banned, and the state must not change three seconds after convergence. The
+outcome of the delegated kick is intentionally not asserted, only that all nodes
+agree on it. This checks convergence of content, not only peer connectivity.
+
 Before starting the topology, an isolated container checks the compiled backend against a real filesystem: a partial `ENOSPC` write must leave no final key or temporary directory, twelve concurrent callers must share the persisted identity, reload must preserve it, and an exclusive-publication race must preserve the competing key. Key files must have mode `0600`; no private key material is printed.
 
 ## Bounds and scope

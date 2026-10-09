@@ -38,7 +38,9 @@ try {
       return await signedRequest(nodes[index], identity, method, route, body);
     } catch (error) {
       if (error instanceof HttpError)
-        throw new Error(`HTTP ${error.status} at node ${index + 1}`);
+        throw new Error(
+        `HTTP ${error.status} at node ${index + 1}: ${String(error.bodyText).slice(0, 300)}`,
+      );
       throw error;
     }
   };

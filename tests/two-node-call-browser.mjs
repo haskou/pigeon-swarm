@@ -8,6 +8,8 @@ let stage = "browser startup";
 const urls = ["https://localhost:8443", "https://localhost:8444"];
 const relayAddresses = [process.env.TEST_IP_A, process.env.TEST_IP_B];
 const nat = process.env.PIGEON_TEST_NAT === "true";
+const canary = process.env.PIGEON_TEST_CANARY;
+if (!/^pigeon-canary-[a-f0-9]{32}$/.test(canary ?? "")) throw new Error("PIGEON_TEST_CANARY must be set by the runner");
 const { stop: stopGateways, spki } = nat
   ? { stop: async () => {}, spki: undefined }
   : await startCallTestGateways();
@@ -311,7 +313,10 @@ try {
   const assertTimeline = async (page, messages) => {
     const items = page.getByTestId("message-item");
     for (const message of messages) {
-      await items.getByText(message, { exact: true }).waitFor();
+      await items.getByText(message, { exact: true }).waitFor().catch(error => {
+        if (message === canary) throw new Error("Plaintext canary is not visible in the timeline");
+        throw error;
+      });
       assert.equal(await items.getByText(message, { exact: true }).count(), 1);
     }
     assert.equal(await items.count(), messages.length);
@@ -326,6 +331,9 @@ try {
   };
   await deliver(pages[0], "Encrypted message from caller one");
   await deliver(pages[1], "Encrypted message from caller two");
+  await deliver(pages[0], canary).catch(() => {
+    throw new Error("Plaintext canary message was not delivered and displayed on both pages");
+  });
   console.log(
     "PASS encrypted DM invitation acceptance and bidirectional message decryption",
   );
@@ -561,7 +569,7 @@ try {
         await page.getByTestId("push-notification-dismiss-button").click();
       await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
       await page.getByTestId("conversation-list-item").first().click();
-      await assertTimeline(page, ["Encrypted message from caller one", "Encrypted message from caller two"]);
+      await assertTimeline(page, ["Encrypted message from caller one", "Encrypted message from caller two", canary]);
       await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
       await page.getByRole("button", { name: "# general", exact: true }).click();
       await assertTimeline(page, ["Community message from caller one", "Community message from caller two"]);

@@ -129,7 +129,7 @@ async function check(transport, port, secret, expiresIn, expectedAllocation) {
     const auth = [attribute(0x0006, username), attribute(0x0014, realm), attribute(0x0015, nonce)];
     const result = await connection.exchange(message(0x0003, [requestedTransport, ...auth], key), key);
     if (!expectedAllocation) {
-      if (result.type !== 0x0113 || errorCode(result) !== 401) throw new Error('TURN did not reject invalid credentials with 401.');
+      if (result.type !== 0x0113 || errorCode(result) !== 401) throw new Error(`TURN did not reject invalid credentials with 401 (STUN type 0x${result.type.toString(16)}, error code ${errorCode(result) ?? 'none'}).`);
       return;
     }
     if (result.type !== 0x0103 || !result.integrityValid || !result.attributes.has(0x0016)) {

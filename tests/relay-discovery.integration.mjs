@@ -72,7 +72,7 @@ test(
           node,
           `
     const response = await fetch('http://127.0.0.1:${port}${path}', {method:${JSON.stringify(method)}, headers:{'content-type':'application/json'}, signal:AbortSignal.timeout(5000), body:${body === undefined ? "undefined" : `JSON.stringify(${JSON.stringify(body)})`}});
-    if (!response.ok) throw new Error('HTTP status ' + response.status);
+    if (!response.ok) throw new Error('HTTP status ' + response.status + ' for ${method} ${path}');
     console.log(JSON.stringify(await response.json()));
   `,
         ),

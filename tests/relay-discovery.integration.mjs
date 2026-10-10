@@ -558,6 +558,18 @@ test(
         }),
       );
     } catch (error) {
+      for (const container of containers) {
+        const logs = await docker(["logs", "--tail", "2000", container]).catch(
+          () => "",
+        );
+        const lines = String(logs)
+          .split("\n")
+          .filter((line) => /call|mutation|reject|warn|error/i.test(line))
+          .slice(-60);
+        console.log(
+          JSON.stringify({ container, relevantLogLines: lines }, null, 1),
+        );
+      }
       for (const node of ["a", "b", "c"]) {
         const snapshot = await state(node).catch(() => undefined);
         if (snapshot)

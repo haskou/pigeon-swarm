@@ -79,6 +79,9 @@ jobs:
           }
           NODE
 
+      - name: Validate release verification matrix
+        run: node --test tests/release-verification.test.mjs
+
       - name: Verify TURN authentication and restart against real coturn
         run: node --test tests/turn-runtime.integration.mjs
 

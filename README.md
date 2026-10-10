@@ -58,6 +58,8 @@ Application acceptance tests cover [automatic relay discovery and recovery](docs
 [messaging, calls and session recovery between nodes](docs/TWO_NODE_CALL_VALIDATION.md),
 and [complete browser workflows across two NAT routers](docs/NAT_CALL_VALIDATION.md).
 
+The complete release check matrix, its residual limits and the external checks are in [docs/RELEASE_VERIFICATION.md](docs/RELEASE_VERIFICATION.md).
+
 ## License
 
 This project is licensed under the PolyForm Noncommercial License 1.0.0. Commercial use requires a separate commercial license from the author.

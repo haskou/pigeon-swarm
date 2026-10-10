@@ -11,6 +11,7 @@
     "test:ui-e2e": "node --test tests/ui-e2e.integration.mjs",
     "test:calls": "node --test tests/two-node-call.integration.mjs",
     "test:privacy": "node --test tests/privacy-contracts.test.mjs",
+    "test:release": "node --test tests/release-verification.test.mjs",
     "test:e2e:nat": "node --test tests/two-node-nat-call.integration.mjs"
   },
   "devDependencies": {

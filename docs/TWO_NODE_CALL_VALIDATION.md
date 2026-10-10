@@ -42,6 +42,7 @@ The scenario checks:
 - Removing participants after a normal departure and after a client loses network access and closes without a successful leave request.
 - Remembered-session restoration, three explicit logout/password-login cycles,
   and exact retained private and community messages.
+- A synthetic plaintext canary is sent as a private message and must be displayed in both browsers and after logins. After the run, both nodes are stopped and each data volume is scanned by a one-off container; container logs are checked too. The scan must find no raw or base64 copy of the canary, and a planted control copy must be detected.
 - Fresh channel reads after departures, with no stale participant rows.
 
 The temporary signalling rejection is injected at the HTTP boundary; subsequent
@@ -52,6 +53,7 @@ inserts call records into a database.
 Failure diagnostics distinguish preview requests from timeline history and
 report response status, result count, pagination and call operation/signal type.
 They exclude message bodies, identity IDs and key material.
+The canary scan covers only raw and base64 byte sequences in application data files and container logs. It does not cover other encodings, encrypted or compressed storage contents, browser storage, DHT, push, or traffic captures.
 
 For media verification, each browser is restricted to the UDP TURN URL advertised
 by its own backend, retaining the backend-issued credentials. Both selected

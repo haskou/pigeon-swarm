@@ -17,6 +17,35 @@ export function testTwoNodeCalls({ nat = false } = {}) {
         "Set PIGEON_TEST_IMAGE to an immutable published digest or local image ID",
       );
       console.log(`Application image: ${process.env.PIGEON_TEST_IMAGE}`);
+      const canary = `pigeon-canary-${randomBytes(16).toString("hex")}`;
+      const canaryStorageScan = `
+import { lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const canary = Buffer.from(process.env.PIGEON_TEST_CANARY);
+const needles = [canary, Buffer.from(canary.toString("base64"))];
+const control = "/tmp/pigeon-canary-control";
+const scan = (root) => {
+  const counts = { files: 0, matches: 0 };
+  const walk = (path) => {
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) return;
+    if (stat.isDirectory()) {
+      for (const entry of readdirSync(path)) walk(join(path, entry));
+      return;
+    }
+    if (!stat.isFile()) return;
+    counts.files++;
+    const bytes = readFileSync(path);
+    if (needles.some((needle) => bytes.includes(needle))) counts.matches++;
+  };
+  walk(root);
+  return counts;
+};
+writeFileSync(control, canary);
+const negative = scan(control);
+rmSync(control);
+console.log(JSON.stringify({ control: negative, data: scan("/data") }));
+`;
       const env = {
         ...Object.fromEntries(
           [
@@ -53,7 +82,7 @@ export function testTwoNodeCalls({ nat = false } = {}) {
       const deadline = Date.now() + 540000;
       const run = (args, options = {}) =>
         new Promise((resolve) => {
-          const child = spawn("docker", ["compose", ...args], {
+          const child = spawn("docker", [...(options.raw ? [] : ["compose"]), ...args], {
             env,
             stdio: ["pipe", "pipe", "pipe"],
           });
@@ -303,6 +332,8 @@ export function testTwoNodeCalls({ nat = false } = {}) {
             `TEST_IP_A=${env.TEST_IP_A}`,
             "-e",
             `TEST_IP_B=${env.TEST_IP_B}`,
+            "-e",
+            `PIGEON_TEST_CANARY=${canary}`,
             "browser",
             "node",
             "/opt/pigeon/tests/two-node-call-browser.mjs",
@@ -312,6 +343,21 @@ export function testTwoNodeCalls({ nat = false } = {}) {
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.match(result.stdout, /PASS two-node call/);
         if (nat) await verifyNatTraffic(compose);
+        await compose("stop", "app-a", "app-b");
+        for (const name of ["a", "b"]) {
+          const id = await compose("ps", "-a", "-q", `app-${name}`);
+          const scan = await run(
+            ["run", "--rm", "-i", "--entrypoint", "node", "-e", `PIGEON_TEST_CANARY=${canary}`, "--volumes-from", id, process.env.PIGEON_TEST_IMAGE, "--input-type=module"],
+            { raw: true, input: canaryStorageScan },
+          );
+          assert.equal(scan.status, 0, `Canary storage scan failed for app-${name}: ${scan.stderr.trim().split("\n").slice(-6).join(" | ").slice(0, 800)}`);
+          const counts = JSON.parse(scan.stdout.trim().split("\n").at(-1));
+          assert.equal(counts.control.matches, 1, `Negative control was not detected in app-${name}`);
+          assert.ok(counts.data.files > 0, `No application data was scanned for app-${name}`);
+          assert.equal(counts.data.matches, 0, `Plaintext canary found in app-${name} application data`);
+          const logs = await run(["logs", "--no-color", `app-${name}`]);
+          assert.equal((logs.stdout + logs.stderr).includes(canary), false, `Plaintext canary found in app-${name} logs`);
+        }
       } catch (error) {
         failure = error;
       } finally {

@@ -116,11 +116,33 @@ export async function signedRequest(
   return text ? JSON.parse(text) : undefined;
 }
 
+const ADMISSION_DIFFICULTY_BITS = 16;
+
+// Hashcash the node requires to mint an identity: SHA-256 over the id, the
+// sorted networks and the nonce must start with the configured zero bits.
+export function mineAdmissionNonce(identityId, networks) {
+  const prefix = `pigeon-identity-admission:v1:${identityId}:${[...networks].sort().join(",")}:`;
+  for (let nonce = 0; ; nonce += 1) {
+    const digest = createHash("sha256").update(`${prefix}${nonce}`).digest();
+    let bits = 0;
+    for (const byte of digest) {
+      if (byte === 0) {
+        bits += 8;
+        continue;
+      }
+      bits += Math.clz32(byte) - 24;
+      break;
+    }
+    if (bits >= ADMISSION_DIFFICULTY_BITS) return String(nonce);
+  }
+}
+
 // Publishes the identity with its independent genesis device credential and
 // recovery authority, which the node needs to verify the actor's mutations.
 export async function publishIdentity(request, actor, networks, name) {
   const deviceCredential = actor.device.toPrimitives().publicKey;
   const unsigned = {
+    admissionNonce: mineAdmissionNonce(actor.id, networks),
     authorizationRevision: 0,
     deviceCredential,
     deviceCredentialCommitment: sha256(deviceCredential),

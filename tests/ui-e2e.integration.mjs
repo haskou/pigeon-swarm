@@ -15,6 +15,13 @@ const specs = [
   "e2e/direct-message-sync.spec.ts",
   "e2e/call-page-departure.spec.ts",
 ];
+// Engine and viewport coverage: the session specs that need no second device.
+const crossEngineSpecs = [
+  "e2e/login-methods.spec.ts",
+  "e2e/empty-members-column.spec.ts",
+  "e2e/remember-session.spec.ts",
+];
+const crossEngineProjects = ["mobile-chromium", "desktop-firefox"];
 
 const run = (command, args, options = {}) =>
   new Promise((resolve, reject) => {
@@ -107,19 +114,27 @@ test(
         60000,
         "UI is not served by the image",
       );
-      await run(
-        "yarn",
-        ["playwright", "test", ...specs, "--project=desktop-chromium"],
-        {
-          cwd: uiSource,
-          env: {
-            ...process.env,
-            CI: "true",
-            E2E_BASE_URL: origin,
-            E2E_NETWORK_ID: network.id,
+      const playwright = (projects, files) =>
+        run(
+          "yarn",
+          [
+            "playwright",
+            "test",
+            ...files,
+            ...projects.map((project) => `--project=${project}`),
+          ],
+          {
+            cwd: uiSource,
+            env: {
+              ...process.env,
+              CI: "true",
+              E2E_BASE_URL: origin,
+              E2E_NETWORK_ID: network.id,
+            },
           },
-        },
-      );
+        );
+      await playwright(["desktop-chromium"], specs);
+      await playwright(crossEngineProjects, crossEngineSpecs);
     } catch (error) {
       await run("docker", ["logs", "--tail", "200", name]).catch(() => {});
       throw error;

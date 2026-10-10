@@ -206,9 +206,24 @@ try {
     joined.push({ identity, callId });
   }
   const callRoute = `calls/${encodeURIComponent(callId)}`;
+  // Leases are ephemeral gossip: a real client renews them with heartbeats, so a
+  // single lost gossip message heals on the next heartbeat instead of never.
+  let lastHeartbeatAt = Date.now();
+  const heartbeatDue = async () => {
+    if (Date.now() - lastHeartbeatAt < 5000) return;
+    lastHeartbeatAt = Date.now();
+    await Promise.all(
+      identities.map((identity) =>
+        request(0, identity, "POST", `${callRoute}/participants/me/heartbeat`, {
+          mediaConnections: [],
+        }),
+      ),
+    );
+  };
   await Promise.all(
     nodes.map((_, index) =>
       eventually(`call replica at node ${index + 1}`, async () => {
+        await heartbeatDue();
         const call = await request(index, identities[index], "GET", callRoute);
         const joinedCount = identities.filter((identity) =>
           call.participants?.some(

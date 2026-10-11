@@ -192,16 +192,21 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     // wait until the recipient has read it.
     await waitFor(
       async () => {
-        const syncNotice = await bob.page
-          .getByText("Direct messages could not be synced. Retrying.")
+        const notice = await bob.page
+          .getByText(/could not be synced|Conversation key is required/)
           .count();
+        const composer = await bob.page
+          .getByTestId("message-composer-input")
+          .isEnabled({ timeout: 2000 })
+          .catch(() => false);
 
         assert.ok(
           bob.counts.reads > 0,
           `recipient inbox not read; ${JSON.stringify({
             bob: bob.counts.seen,
             alice: alice.counts.seen,
-            syncNotice: syncNotice > 0,
+            syncNotice: notice > 0,
+            composerEnabled: composer,
           })}`,
         );
       },

@@ -94,6 +94,9 @@ jobs:
       - name: Validate storage benchmark budgets and cleanup
         run: node --test benchmarks/private-storage/*.test.mjs
 
+      - name: Validate canary scan encodings
+        run: node --test tests/canary-scan.test.mjs
+
       - name: Verify browser diagnostic redaction
         run: node --test tests/turn-browser-probe.test.mjs
 

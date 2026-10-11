@@ -5,6 +5,7 @@ import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import test from "node:test";
 import { prepareNatNetwork, verifyNatTraffic } from "./call-test-nat-network.mjs";
+import { canaryForms, matchedForms } from "./canary-scan.mjs";
 
 export function testTwoNodeCalls({ nat = false } = {}) {
   test(
@@ -18,34 +19,8 @@ export function testTwoNodeCalls({ nat = false } = {}) {
       );
       console.log(`Application image: ${process.env.PIGEON_TEST_IMAGE}`);
       const canary = `pigeon-canary-${randomBytes(16).toString("hex")}`;
-      const canaryStorageScan = `
-import { lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-const canary = Buffer.from(process.env.PIGEON_TEST_CANARY);
-const needles = [canary, Buffer.from(canary.toString("base64"))];
-const control = "/tmp/pigeon-canary-control";
-const scan = (root) => {
-  const counts = { files: 0, matches: 0 };
-  const walk = (path) => {
-    const stat = lstatSync(path);
-    if (stat.isSymbolicLink()) return;
-    if (stat.isDirectory()) {
-      for (const entry of readdirSync(path)) walk(join(path, entry));
-      return;
-    }
-    if (!stat.isFile()) return;
-    counts.files++;
-    const bytes = readFileSync(path);
-    if (needles.some((needle) => bytes.includes(needle))) counts.matches++;
-  };
-  walk(root);
-  return counts;
-};
-writeFileSync(control, canary);
-const negative = scan(control);
-rmSync(control);
-console.log(JSON.stringify({ control: negative, data: scan("/data") }));
-`;
+      const forms = canaryForms(canary);
+      const canaryScanner = resolve("tests/canary-scan.mjs");
       const env = {
         ...Object.fromEntries(
           [
@@ -347,16 +322,32 @@ console.log(JSON.stringify({ control: negative, data: scan("/data") }));
         for (const name of ["a", "b"]) {
           const id = await compose("ps", "-a", "-q", `app-${name}`);
           const scan = await run(
-            ["run", "--rm", "-i", "--entrypoint", "node", "-e", `PIGEON_TEST_CANARY=${canary}`, "--volumes-from", id, process.env.PIGEON_TEST_IMAGE, "--input-type=module"],
-            { raw: true, input: canaryStorageScan },
+            [
+              "run",
+              "--rm",
+              "--entrypoint",
+              "node",
+              "-e",
+              `PIGEON_TEST_CANARY=${canary}`,
+              "-v",
+              `${canaryScanner}:/tmp/canary-scan.mjs:ro`,
+              "--volumes-from",
+              id,
+              process.env.PIGEON_TEST_IMAGE,
+              "/tmp/canary-scan.mjs",
+              "/data",
+            ],
+            { raw: true },
           );
           assert.equal(scan.status, 0, `Canary storage scan failed for app-${name}: ${scan.stderr.trim().split("\n").slice(-6).join(" | ").slice(0, 800)}`);
           const counts = JSON.parse(scan.stdout.trim().split("\n").at(-1));
-          assert.equal(counts.control.matches, 1, `Negative control was not detected in app-${name}`);
+          assert.equal(counts.control.files, forms.size, `Negative controls were not all planted for app-${name}`);
+          assert.equal(counts.control.matchingFiles, forms.size, `Planted control detected for only ${counts.control.forms.length} of ${forms.size} encodings in app-${name}`);
           assert.ok(counts.data.files > 0, `No application data was scanned for app-${name}`);
-          assert.equal(counts.data.matches, 0, `Plaintext canary found in app-${name} application data`);
+          assert.equal(counts.data.matchingFiles, 0, `Plaintext canary found in app-${name} application data as ${counts.data.forms.join(", ")}`);
           const logs = await run(["logs", "--no-color", `app-${name}`]);
-          assert.equal((logs.stdout + logs.stderr).includes(canary), false, `Plaintext canary found in app-${name} logs`);
+          const logLeaks = matchedForms(Buffer.from(logs.stdout + logs.stderr), forms);
+          assert.deepEqual(logLeaks, [], `Plaintext canary found in app-${name} logs as ${logLeaks.join(", ")}`);
         }
       } catch (error) {
         failure = error;

@@ -74,7 +74,34 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   try {
     const suffix = randomBytes(3).toString("hex");
     const password = `Disposable-mailbox-test-password1!${suffix}`;
-    const register = async (handle) => {
+    const visible = (page, testId) =>
+      page.getByTestId(testId).filter({ visible: true }).first();
+    const dismissPushPrompt = async (page) => {
+      const dismiss = visible(page, "push-notification-dismiss-button");
+
+      if ((await dismiss.count()) > 0) await dismiss.click();
+    };
+    const openSidebar = async (page) => {
+      if ((await visible(page, "create-conversation-button").count()) > 0) {
+        return;
+      }
+
+      await visible(page, "workspace-sidebar-open-button").click();
+      await visible(page, "create-conversation-button").waitFor({
+        state: "visible",
+      });
+    };
+    const selectConversation = async (page, title) => {
+      await openSidebar(page);
+      const row = page
+        .getByTestId("conversation-list-item")
+        .filter({ hasText: title })
+        .first();
+
+      await row.waitFor({ state: "visible" });
+      await row.click();
+    };
+    const register = async (name, handle) => {
       const context = await browser.newContext({ locale: "en-US" });
       const page = await context.newPage();
       page.setDefaultTimeout(45000);
@@ -111,64 +138,51 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       });
       await page.goto(origin);
       await page.getByTestId("auth-mode-control").locator("button").nth(1).click();
-      await page.getByTestId("auth-name-input").fill(handle);
+      await page.getByTestId("auth-name-input").fill(name);
       await page.getByTestId("auth-handle-input").fill(handle);
       await page.getByTestId("auth-password-input").fill(password);
       await page.getByTestId("auth-password-confirmation-input").fill(password);
       await page.getByTestId("auth-recovery-key-confirm").click();
       await page.getByTestId("auth-submit-button").click();
-      await page.getByTestId("create-conversation-button").first().waitFor();
-      if (await page.getByTestId("push-notification-dismiss-button").isVisible())
-        await page.getByTestId("push-notification-dismiss-button").click();
+      await visible(page, "create-conversation-button").waitFor({
+        state: "visible",
+      });
+      await dismissPushPrompt(page);
       return { page, counts };
     };
-    const alice = await register(`mailbox-a-${suffix}`);
-    const bob = await register(`mailbox-b-${suffix}`);
-    const recipientId = await waitFor(
-      async () => {
-        const response = await fetch(
-          `${origin}/api/identities/mailbox-b-${suffix}`,
-        );
-        assert.ok(response.ok, `identity status ${response.status}`);
-        const identity = await response.json();
-        assert.equal(typeof identity?.id, "string");
-        return identity.id;
-      },
-      60000,
-      "recipient identity is not available on the node",
-    );
-    await alice.page.getByTestId("create-conversation-button").first().click();
+    const alice = await register(`Mailbox A ${suffix}`, `mailbox-a-${suffix}`);
+    const bob = await register(`Mailbox B ${suffix}`, `mailbox-b-${suffix}`);
+
+    await openSidebar(alice.page);
+    await visible(alice.page, "create-conversation-button").click();
     await alice.page
       .getByTestId("create-conversation-recipient-input")
-      .fill(recipientId);
+      .fill(`@mailbox-b-${suffix}`);
     await alice.page.getByTestId("create-conversation-submit-button").click();
     await alice.page
       .getByTestId("create-conversation-recipient-input")
       .waitFor({ state: "hidden" });
-    await bob.page
-      .locator('[data-testid="notifications-open-button"]:visible')
-      .first()
-      .click();
-    const accept = bob.page.getByTestId("notification-accept-button").first();
-    await accept.waitFor({ state: "visible", timeout: 60000 });
-    await accept.click();
-    await bob.page.waitForFunction(
-      () =>
-        !document.querySelector('[data-testid="message-composer-input"]')
-          ?.disabled,
-      undefined,
-      { timeout: 60000 },
-    );
-    // The recipient's first sync creates the inbox. A send before that is
-    // refused by the node, so wait until the recipient has read it.
+    await dismissPushPrompt(alice.page);
+
+    await openSidebar(bob.page);
+    await visible(bob.page, "notifications-open-button").click();
+    await visible(bob.page, "notification-accept-button").click();
+    await dismissPushPrompt(bob.page);
+
+    await selectConversation(alice.page, `Mailbox B ${suffix}`);
+    await selectConversation(bob.page, `Mailbox A ${suffix}`);
+    // The recipient's sync starts with the active conversation and creates the
+    // inbox on its first pass. A send before that is refused by the node, so
+    // wait until the recipient has read it.
     await waitFor(
       () => assert.ok(bob.counts.reads > 0, "recipient inbox not read yet"),
       60000,
       "recipient mailbox sync did not start",
     );
-    const composer = alice.page.getByTestId("message-composer-input");
-    await composer.fill(`mailbox probe ${suffix}`);
-    await composer.press("Enter");
+    await alice.page
+      .getByTestId("message-composer-input")
+      .fill(`mailbox probe ${suffix}`);
+    await alice.page.getByTestId("message-send-button").click();
     await waitFor(
       () =>
         assert.ok(

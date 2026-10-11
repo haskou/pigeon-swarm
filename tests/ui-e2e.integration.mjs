@@ -105,11 +105,27 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       const context = await browser.newContext({ locale: "en-US" });
       const page = await context.newPage();
       page.setDefaultTimeout(45000);
-      const counts = { inboxes: 0, appends: 0, reads: 0, envelopes: 0, acks: 0 };
+      const counts = {
+        inboxes: 0,
+        appends: 0,
+        reads: 0,
+        envelopes: 0,
+        acks: 0,
+        seen: {},
+      };
+      const tally = (key) => {
+        counts.seen[key] = (counts.seen[key] ?? 0) + 1;
+      };
+      page.on("requestfailed", (request) => {
+        if (new URL(request.url()).pathname.startsWith("/api/mailboxes/")) {
+          tally(`${request.method()} failed`);
+        }
+      });
       page.on("response", async (response) => {
         const { pathname } = new URL(response.url());
         if (!pathname.startsWith("/api/mailboxes/")) return;
         const method = response.request().method();
+        tally(`${method} ${response.status()}`);
         if (method === "PUT" && response.ok()) {
           counts.inboxes += 1;
         } else if (
@@ -175,7 +191,20 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     // inbox on its first pass. A send before that is refused by the node, so
     // wait until the recipient has read it.
     await waitFor(
-      () => assert.ok(bob.counts.reads > 0, "recipient inbox not read yet"),
+      async () => {
+        const syncNotice = await bob.page
+          .getByText("Direct messages could not be synced. Retrying.")
+          .count();
+
+        assert.ok(
+          bob.counts.reads > 0,
+          `recipient inbox not read; ${JSON.stringify({
+            bob: bob.counts.seen,
+            alice: alice.counts.seen,
+            syncNotice: syncNotice > 0,
+          })}`,
+        );
+      },
       60000,
       "recipient mailbox sync did not start",
     );

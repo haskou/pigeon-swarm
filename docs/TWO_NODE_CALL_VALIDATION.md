@@ -31,6 +31,7 @@ together can exchange Docker-assigned IPs and invalidate those bootstrap address
 Registration starts only after both nodes report the expected peer and converged
 OrbitDB stores. Users register through the interface with a password and a
 generated recovery key. All subsequent actions use normal application controls.
+Before the cross-node invitation, each browser waits for its node to report the private network converged with the peer connected, so keychain metadata published during registration has replicated.
 The scenario checks:
 
 - Invitation acceptance and bidirectional private-message decryption.
@@ -54,6 +55,7 @@ inserts call records into a database.
 Failure diagnostics distinguish preview requests from timeline history and
 report response status, result count, pagination and call operation/signal type.
 They exclude message bodies, identity IDs and key material.
+Decryption timeouts also report per-node counts of message items and encrypted states (decrypt-failed or missing-key), classified by DOM class and copy presence without logging message text.
 The canary scan covers the encodings listed above in application data files and container logs. It does not cover encrypted or compressed storage contents, browser storage, DHT, push, or traffic captures.
 
 For media verification, each browser is restricted to the UDP TURN URL advertised

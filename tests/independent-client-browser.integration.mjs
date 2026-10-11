@@ -199,7 +199,7 @@ test('independent built client browser contract with explicitly fake backend fix
     });
   }
 
-  await t.test('valid loopback contract boots real UI and ignores backend scriptURL; node switch reloads and scopes credential reads', async (subtest) => {
+  await t.test('valid loopback contract boots real UI and ignores backend scriptURL; node switch reloads and reads no remembered credentials', async (subtest) => {
     const contract = { protocol: 'pigeon-swarm', apiVersion: 2 };
     const first = await fakeNode(subtest, contract);
     contract.scriptURL = `${first.origin}/malicious.js`;
@@ -237,7 +237,8 @@ test('independent built client browser contract with explicitly fake backend fix
     assert.notEqual(await otherTab.evaluate(() => globalThis.documentId), otherDocument);
     assert.equal(await otherTab.getByRole('link', { name: 'Change node' }).count(), 0);
     const reads = await page.evaluate(() => globalThis.storageReads);
-    assert.ok(reads.includes(`pigeon-swarm-credentials:${secondScope}`));
+    // Remember-me was removed upstream (UI #242): no remembered credential may be read for either node.
+    assert.equal(reads.includes(`pigeon-swarm-credentials:${secondScope}`), false);
     assert.equal(reads.includes(`pigeon-swarm-credentials:${firstScope}`), false);
     assert.equal(reads.includes('pigeon-swarm-credentials'), false);
     assert.ok(second.requests.includes('/api/node/networks/'));

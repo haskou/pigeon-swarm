@@ -433,7 +433,7 @@ The example Compose file uses host folders by default:
 
 The image starts as root only long enough to create and assign ownership for `/data/ipfs`, `/data/local_storage`, and `/app/logs`. The application process then runs as the non-root `node` user.
 
-Back up both host folders if the node carries data you need to keep. Removing either folder creates a fresh local node state.
+Back up both host folders if the node carries data you need to keep. [Backup and restore](BACKUP_RESTORE.md) describes the procedure and its limits. Removing either folder creates a fresh local node state.
 
 ## Peer-to-peer Networking
 

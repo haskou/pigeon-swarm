@@ -37,6 +37,48 @@ services:
       - ipfs_b:/data/ipfs
       - local_b:/data/local_storage
       - runtime_b:/run/pigeon
+  restore-copy:
+    profiles: [restore]
+    image: ${PIGEON_TEST_IMAGE:-ghcr.io/haskou/pigeon-swarm:latest}
+    pull_policy: missing
+    network_mode: none
+    user: "0:0"
+    entrypoint: [/bin/sh, -eu, -c]
+    command:
+      - |
+        /bin/sh /opt/pigeon/restore-copy.sh /source/ipfs /target/ipfs
+        /bin/sh /opt/pigeon/restore-copy.sh /source/local_storage /target/local_storage
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ../scripts/restore-copy.sh:/opt/pigeon/restore-copy.sh:ro
+      - ipfs_a:/source/ipfs:ro
+      - local_a:/source/local_storage:ro
+      - ipfs_restored:/target/ipfs
+      - local_restored:/target/local_storage
+  app-restored:
+    profiles: [restore]
+    stop_grace_period: 10s
+    extends:
+      file: ../docker-compose.yml
+      service: app
+    image: ${PIGEON_TEST_IMAGE:-ghcr.io/haskou/pigeon-swarm:latest}
+    pull_policy: missing
+    ports: !reset []
+    environment:
+      PIGEON_TURN_MODE: external
+      LOG_LEVEL: info
+      # Empty so the node must use the TURN secret persisted in its copied local storage.
+      CALLS_TURN_SHARED_SECRET: ""
+      PIGEON_PUBLIC_BOOTSTRAP_ENABLED: "false"
+    volumes: !override
+      - ../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ../scripts/prepare-turn-secret.cjs:/usr/local/lib/pigeon/prepare-turn-secret.cjs:ro
+      - ipfs_restored:/data/ipfs
+      - local_restored:/data/local_storage
+      - runtime_restored:/run/pigeon
   turn-a:
     profiles: !reset []
     extends:
@@ -89,6 +131,9 @@ volumes:
   local_b:
   runtime_a:
   runtime_b:
+  ipfs_restored:
+  local_restored:
+  runtime_restored:
 networks:
   default:
     internal: true

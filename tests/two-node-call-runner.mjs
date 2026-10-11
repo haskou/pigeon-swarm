@@ -9,7 +9,7 @@ import { canaryForms, matchedForms } from "./canary-scan.mjs";
 
 export function testTwoNodeCalls({ nat = false } = {}) {
   test(
-    nat ? "two NAT-separated nodes preserve UI messaging, voice and sessions" : "two application nodes preserve messaging, voice and session workflows",
+    nat ? "two NAT-separated nodes preserve UI messaging, voice and sessions" : "two application nodes preserve messaging, voice, session and restored-copy workflows",
     { timeout: 600000 },
     async () => {
       assert.match(
@@ -103,6 +103,36 @@ export function testTwoNodeCalls({ nat = false } = {}) {
           `Compose ${args[0]} failed; configuration output withheld`,
         );
         return result.stdout.trim();
+      };
+      const caller = "caller-1";
+      const identitySnapshot = async (service) => {
+        const result = await run(["exec", "-T", service, "node", "--input-type=module"], {
+          input: `
+            const get = async (path) => {
+              const response = await fetch('http://127.0.0.1:8080/api/' + path, { signal: AbortSignal.timeout(5000) });
+              if (!response.ok) throw new Error('Snapshot request failed with status ' + response.status);
+              return response.json();
+            };
+            const identity = await get('identities/${caller}');
+            const { networks } = await get('node/networks/');
+            console.log(JSON.stringify({
+              identity: { id: identity.id, handle: identity.profile?.handle, networks: [...identity.networks].sort() },
+              nodeNetworks: networks.map(({ id, name }) => ({ id, name })).sort((a, b) => a.id.localeCompare(b.id)),
+            }));
+          `,
+        });
+        assert.equal(result.status, 0, `Identity snapshot failed for ${service}`);
+        return JSON.parse(result.stdout.trim());
+      };
+      const startedPeerId = async (service) => {
+        let peerId;
+        for (let attempt = 0; attempt < 20 && !peerId; attempt++) {
+          const logs = await run(["logs", "--no-color", service]);
+          const starts = [...(logs.stdout + logs.stderr).matchAll(/Started private network "Private call integration" with Peer ID: ([A-Za-z0-9]+)/g)];
+          peerId = starts.at(-1)?.[1];
+          if (!peerId) await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        return peerId;
       };
       let failure;
       try {
@@ -318,9 +348,30 @@ export function testTwoNodeCalls({ nat = false } = {}) {
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.match(result.stdout, /PASS two-node call/);
         if (nat) await verifyNatTraffic(compose);
+        const before = nat ? undefined : await identitySnapshot("app-a");
+        if (!nat) {
+          assert.equal(before.identity.handle, caller);
+          assert.ok(before.identity.id, "Caller identity must have an ID before the copy");
+          assert.ok(
+            before.nodeNetworks.some((entry) => entry.id === network.id),
+            "Node must list the private network before the copy",
+          );
+        }
         await compose("stop", "app-a", "app-b");
-        for (const name of ["a", "b"]) {
-          const id = await compose("ps", "-a", "-q", `app-${name}`);
+        const services = nat ? ["app-a", "app-b"] : ["app-a", "app-b", "app-restored"];
+        if (!nat) {
+          await compose("run", "-T", "--rm", "--no-deps", "restore-copy");
+          await compose("up", "-d", "--wait", "--wait-timeout", "90", "app-restored");
+          assert.deepEqual(await identitySnapshot("app-restored"), before, "Restored node must keep the caller identity and node networks");
+          assert.equal(await startedPeerId("app-restored"), peers[0].id, "Restored node must keep its private network peer ID");
+          await compose("restart", "app-restored");
+          await compose("up", "-d", "--wait", "--wait-timeout", "90", "app-restored");
+          assert.deepEqual(await identitySnapshot("app-restored"), before, "Restored node must keep the caller identity and node networks after restart");
+          assert.equal(await startedPeerId("app-restored"), peers[0].id, "Restored node must keep its private network peer ID after restart");
+          await compose("stop", "app-restored");
+        }
+        for (const service of services) {
+          const id = await compose("ps", "-a", "-q", service);
           const scan = await run(
             [
               "run",
@@ -339,20 +390,20 @@ export function testTwoNodeCalls({ nat = false } = {}) {
             ],
             { raw: true },
           );
-          assert.equal(scan.status, 0, `Canary storage scan failed for app-${name}: ${scan.stderr.trim().split("\n").slice(-6).join(" | ").slice(0, 800)}`);
+          assert.equal(scan.status, 0, `Canary storage scan failed for ${service}: ${scan.stderr.trim().split("\n").slice(-6).join(" | ").slice(0, 800)}`);
           const counts = JSON.parse(scan.stdout.trim().split("\n").at(-1));
-          assert.equal(counts.control.files, forms.size, `Negative controls were not all planted for app-${name}`);
-          assert.equal(counts.control.matchingFiles, forms.size, `Planted control detected for only ${counts.control.forms.length} of ${forms.size} encodings in app-${name}`);
-          assert.ok(counts.data.files > 0, `No application data was scanned for app-${name}`);
-          assert.equal(counts.data.matchingFiles, 0, `Plaintext canary found in app-${name} application data as ${counts.data.forms.join(", ")}`);
-          const logs = await run(["logs", "--no-color", `app-${name}`]);
+          assert.equal(counts.control.files, forms.size, `Negative controls were not all planted for ${service}`);
+          assert.equal(counts.control.matchingFiles, forms.size, `Planted control detected for only ${counts.control.forms.length} of ${forms.size} encodings in ${service}`);
+          assert.ok(counts.data.files > 0, `No application data was scanned for ${service}`);
+          assert.equal(counts.data.matchingFiles, 0, `Plaintext canary found in ${service} application data as ${counts.data.forms.join(", ")}`);
+          const logs = await run(["logs", "--no-color", service]);
           const logLeaks = matchedForms(Buffer.from(logs.stdout + logs.stderr), forms);
-          assert.deepEqual(logLeaks, [], `Plaintext canary found in app-${name} logs as ${logLeaks.join(", ")}`);
+          assert.deepEqual(logLeaks, [], `Plaintext canary found in ${service} logs as ${logLeaks.join(", ")}`);
         }
       } catch (error) {
         failure = error;
       } finally {
-        const cleanup = await run(["down", "--volumes", "--remove-orphans"], {
+        const cleanup = await run(["--profile", "restore", "down", "--volumes", "--remove-orphans"], {
           cleanup: true,
         });
         if (cleanup.status !== 0)

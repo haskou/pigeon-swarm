@@ -2,8 +2,10 @@
 
 These contracts are implementation boundaries for [ADR-001](ADR-001-private-data.md).
 They are not active API routes yet. `npm run test:privacy` compiles the schemas
-and exercises permitted and rejected examples. That test does not perform
-cryptographic verification, run a mailbox server or prove traffic unlinkability.
+and exercises permitted and rejected examples, then checks the shared vectors:
+the freshness Ed25519 signature, SHA-256 digests and HPKE info and AAD bytes.
+It does not run a mailbox server, perform HPKE seal/open, prove traffic
+unlinkability or check real MLS interoperability.
 
 ## Public-to-gateway boundary
 

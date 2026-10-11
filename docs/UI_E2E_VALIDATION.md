@@ -7,12 +7,14 @@ origin, so the browser exercises the bundled UI and the real node together.
 Requirements: Docker, `PIGEON_TEST_IMAGE` (image digest, as for the other
 integration tests) and `PIGEON_UI_SOURCE`, a checkout of
 `haskou/pigeon-swarm-ui` at `PIGEON_SWARM_UI_SHA` with `yarn install` and
-`yarn playwright install chromium` already run.
+`yarn playwright install chromium firefox` already run.
 
-Specs run (desktop Chromium): login methods, empty members column, remembered
-session unlock, direct-message and profile sync between two identities, and
-declining a ringing call when the callee leaves the page. The UI repository's
-Vite-fixture specs (stale ICE, call recovery) stay in its own CI; the
-external-account specs (visual audit, voice stability) are not run here.
+Specs run: on desktop-chromium, login methods, empty members column,
+direct-message sync and peer banner updates across devices, and declining a
+ringing call when the callee leaves the page. On mobile-chromium and
+desktop-firefox, only login methods runs, because the empty members column spec
+skips itself outside desktop-chromium. The UI repository's Vite-fixture specs
+(stale ICE, call recovery) stay in its own CI; the external-account specs
+(visual audit, voice stability) are not run here.
 
 CI runs this in the `ui-e2e` job of `Validate wrapper`.

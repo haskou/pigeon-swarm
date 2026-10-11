@@ -14,7 +14,7 @@ npm run test:e2e
 ```
 
 `PIGEON_TEST_IMAGE` accepts a published immutable image digest or a local
-`sha256:` image ID. The test prints it with its result so evidence can be tied to
+`sha256:` image ID. The test prints it at startup so evidence can be tied to
 a particular build. `npm run test:calls` remains an alias for existing automation.
 
 The fixture starts two application containers with separate storage, two coturn
@@ -41,8 +41,8 @@ The scenario checks:
   for all signalling requests during a 300 ms participant-replication window.
 - Leaving and rejoining voice, including another call after password login.
 - Removing participants after a normal departure and after a client loses network access and closes without a successful leave request.
-- Remembered-session restoration, three explicit logout/password-login cycles,
-  and exact retained private and community messages.
+- Three explicit logout/password-login cycles, with exact retained private
+  and community messages.
 - A synthetic plaintext canary is sent as a private message and must be displayed in both browsers and after logins. After the run, both nodes are stopped and each data volume is scanned by a one-off container; container logs are checked too. The scan must find no copy of the canary in any encoding defined by `tests/canary-scan.mjs`: raw, hex (lower and upper case), JSON `\uXXXX` escapes, UTF-16LE and UTF-16BE, and base64 and base64url at each of the three byte offsets. A planted control copy of each encoding must be detected.
 - Non-NAT runs also restore from stopped copies: after both nodes stop, `app-a`'s volumes are copied with `scripts/restore-copy.sh` and a third node started from the copies keeps `caller-1`'s identity, its node network list and its private network peer ID, after start and after restart. The canary scan then covers the restored volumes. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md).
 - Fresh channel reads after departures, with no stale participant rows.
@@ -78,9 +78,10 @@ This is automated evidence for application signalling and bidirectional media
 between independent relays on a local Docker network. It does not establish public
 reachability, real home NAT/CGNAT behavior, blocked-UDP fallback, or recovery of an
 active call after a relay restart. It also does not establish every feature or
-security guarantee in issue #34: attachment delivery, concurrent three-node
-mutations, revocation, traffic-analysis resistance and storage migration remain
+security guarantee in issue #34: concurrent three-node mutations, revocation,
+captures of DHT and push traffic, and retention and storage migration remain
 separate acceptance scenarios. The existing single-server media test covers
-UDP/TCP/TLS and new calls after coturn restart. External acceptance remains tracked
-in [issue #24](https://github.com/haskou/pigeon-swarm/issues/24) and
-[issue #29](https://github.com/haskou/pigeon-swarm/issues/29).
+UDP/TCP/TLS media before and after restarting the application container, which
+supervises coturn. External acceptance remains open in
+[issue #29](https://github.com/haskou/pigeon-swarm/issues/29) and in the unchecked
+external criteria of closed [issue #24](https://github.com/haskou/pigeon-swarm/issues/24).

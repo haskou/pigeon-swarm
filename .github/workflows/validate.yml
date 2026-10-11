@@ -97,6 +97,9 @@ jobs:
       - name: Validate canary scan encodings
         run: node --test tests/canary-scan.test.mjs
 
+      - name: Validate restore copy helper
+        run: node --test tests/restore-copy.test.mjs
+
       - name: Verify browser diagnostic redaction
         run: node --test tests/turn-browser-probe.test.mjs
 

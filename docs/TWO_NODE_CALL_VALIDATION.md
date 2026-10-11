@@ -43,6 +43,7 @@ The scenario checks:
 - Remembered-session restoration, three explicit logout/password-login cycles,
   and exact retained private and community messages.
 - A synthetic plaintext canary is sent as a private message and must be displayed in both browsers and after logins. After the run, both nodes are stopped and each data volume is scanned by a one-off container; container logs are checked too. The scan must find no copy of the canary in any encoding defined by `tests/canary-scan.mjs`: raw, hex (lower and upper case), JSON `\uXXXX` escapes, UTF-16LE and UTF-16BE, and base64 and base64url at each of the three byte offsets. A planted control copy of each encoding must be detected.
+- Non-NAT runs also restore from stopped copies: after both nodes stop, `app-a`'s volumes are copied with `scripts/restore-copy.sh` and a third node started from the copies keeps `caller-1`'s identity, its node network list and its private network peer ID, after start and after restart. The canary scan then covers the restored volumes. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md).
 - Fresh channel reads after departures, with no stale participant rows.
 
 The temporary signalling rejection is injected at the HTTP boundary; subsequent

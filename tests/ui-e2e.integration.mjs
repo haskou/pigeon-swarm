@@ -53,11 +53,26 @@ const waitFor = async (check, timeout, description) => {
     try {
       return await check();
     } catch (error) {
-      if (Date.now() > deadline) {
+      if (error.fatal || Date.now() > deadline) {
         throw new Error(`${description}: ${error.message}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
+  }
+};
+
+// Fails at once when the recipient or sender page shows the network error
+// copy, instead of waiting out the sync timeout. The message carries no page
+// text, only the side that failed.
+const failFastOnNetworkError = async (page, side) => {
+  const networkErrors = await page
+    .getByText(/No se pudo contactar con el servidor/)
+    .count();
+
+  if (networkErrors > 0) {
+    const error = new Error(`${side} page shows the network error copy`);
+    error.fatal = true;
+    throw error;
   }
 };
 
@@ -192,6 +207,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     // wait until the recipient has read it.
     await waitFor(
       async () => {
+        await failFastOnNetworkError(bob.page, "recipient");
         const notice = await bob.page
           .getByText(/could not be synced|Conversation key is required/)
           .count();

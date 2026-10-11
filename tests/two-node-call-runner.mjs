@@ -339,6 +339,8 @@ export function testTwoNodeCalls({ nat = false } = {}) {
             `TEST_IP_B=${env.TEST_IP_B}`,
             "-e",
             `PIGEON_TEST_CANARY=${canary}`,
+            "-e",
+            `PIGEON_TEST_NETWORK_ID=${network.id}`,
             "browser",
             "node",
             "/opt/pigeon/tests/two-node-call-browser.mjs",

@@ -39,6 +39,36 @@ const browser = nat ? undefined : await chromium
     throw new Error("Test browser startup failed");
   });
 if (browser) browsers.push(browser);
+// Copy from pigeon-swarm-ui src/shared/presentation/i18n/en.ts (messages.decryptFailed and missingKey).
+// Copy drift only degrades classification to unclassifiedEncrypted; message text is never logged.
+const decryptFailedCopy = "could not be decrypted";
+const missingKeyCopy = "conversation key is missing from the keychain";
+const messageDecryptionState = (page) =>
+  page
+    .evaluate(
+      ({decryptFailedCopy, missingKeyCopy}) => {
+        const items = [...document.querySelectorAll('[data-testid="message-item"]')];
+        const summary = {
+          messageItems: items.length,
+          encrypted: 0,
+          decryptFailed: 0,
+          missingKey: 0,
+          unclassifiedEncrypted: 0,
+        };
+        for (const item of items) {
+          if (!item.querySelector(".whitespace-pre-wrap.break-words.text-white\\/55")) continue;
+          summary.encrypted += 1;
+          const text = item.textContent ?? "";
+          if (text.includes(decryptFailedCopy)) summary.decryptFailed += 1;
+          else if (text.includes(missingKeyCopy)) summary.missingKey += 1;
+          else summary.unclassifiedEncrypted += 1;
+        }
+        return summary;
+      },
+      {decryptFailedCopy, missingKeyCopy},
+    )
+    .catch(() => ({unavailable: true}));
+
 try {
   for (const [index, url] of urls.entries()) {
     const client = nat ? await chromium.connect(`ws://${relayAddresses[index]}:9222/pigeon`) : browser;
@@ -282,6 +312,42 @@ try {
       "Remote identity must be replicated before opening the conversation",
     );
     replicatedIdentityIds.push(identityId);
+  }
+  stage = "keychain replication before cross-node conversation";
+  const networkId = process.env.PIGEON_TEST_NETWORK_ID;
+  assert.ok(networkId, "Private network ID must be provided to check keychain replication");
+  for (const [index, page] of pages.entries()) {
+    const deadline = Date.now() + 60000;
+    let converged = false;
+    while (Date.now() < deadline) {
+      converged = await page
+        .evaluate(
+          async ({nodeUrl, networkId}) => {
+            const response = await fetch(`${nodeUrl}/api/peers/`, {
+              signal: AbortSignal.timeout(5000),
+            });
+            if (!response.ok) return false;
+            const peers = await response.json();
+            const network = peers.networkSynchronization?.networks?.find(
+              (entry) => entry.id === networkId,
+            );
+            return (
+              network?.state === "converged" &&
+              network.connectedPeerIds?.length > 0 &&
+              network.totalStoreCount > 0
+            );
+          },
+          {nodeUrl: urls[index], networkId},
+        )
+        .catch(() => false);
+      if (converged) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    assert.equal(
+      converged,
+      true,
+      `Keychain replication must converge on node ${index + 1} before opening the cross-node conversation`,
+    );
   }
   stage = "cross-node conversation invitation";
   console.log(stage);
@@ -609,6 +675,10 @@ try {
       tracks: peer.getSenders().map(sender => sender.track?.readyState),
     })),
   ).catch(() => [])))));
+  console.log(
+    "Message decryption state:",
+    JSON.stringify(await Promise.all(pages.map(messageDecryptionState))),
+  );
   console.log(
     "Conversation delivery diagnostics:",
     JSON.stringify(deliveryDiagnostics),

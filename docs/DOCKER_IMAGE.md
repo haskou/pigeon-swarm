@@ -79,7 +79,7 @@ Common settings:
 | `CALLS_TURN_URLS` | required for TLS overlay | Explicit advertised TURN URLs, including `turns:hostname:port?transport=tcp` for the configured certificate and TLS listener. |
 | `PUSH_VAPID_PUBLIC_KEY` | empty | Web Push public key. |
 | `PUSH_VAPID_PRIVATE_KEY` | empty | Web Push private key. Keep it secret. |
-| `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers. |
+| `PUSH_VAPID_SUBJECT` | empty | Contact used by browser push providers, such as `mailto:admin@example.com`. Set it when VAPID keys are configured; the empty default has no fallback. |
 | `LOG_LEVEL` | `info` | Application log level. |
 
 Node-to-node transport is also configured by default. The image uses `libp2p-gossipsub://` without requiring anything in `.env`.
@@ -149,9 +149,10 @@ docker compose up -d --force-recreate app
 
 Keep `.env` and the local-storage directory across restarts. Rotating the secret
 invalidates existing temporary credentials and can interrupt calls. Apply the
-override and recreate the app and coturn together as shown above. Other nodes
-must obtain temporary credentials from the relay owner; do not copy this master
-secret between independent installations.
+override by recreating `app` as shown above; bundled coturn runs in that container.
+With the `external-turn` profile, also recreate the `turn` service. Other nodes on
+private networks obtain temporary credentials from the connected relay owner; do not
+copy this master secret between independent installations.
 
 The application image includes coturn 4.11.0, built from a pinned upstream commit
 for the same Debian runtime as Node.js. Its [restricted self-relay handling](COTURN_SELF_RELAY.md)
@@ -212,7 +213,8 @@ docker compose ps app
 ```
 
 The check uses the backend container's issuer secret, verifies authenticated
-allocation over UDP and TCP, and requires wrong-secret and expired credentials
+allocation over UDP and TCP (and TLS when the TLS overlay is enabled), and requires
+wrong-secret and expired credentials
 to receive an authentication rejection. It verifies response integrity and
 releases successful allocations. A failed valid allocation explicitly points
 to a possible backend/coturn secret mismatch. Neither the shared secret nor
@@ -223,7 +225,7 @@ uses the real pinned coturn image with an isolated Node fixture in the shared
 network namespace. It also checks a coturn restart and a deliberately mismatched
 issuer secret. It does not run the complete backend or browser application.
 
-Run an equivalent allocation test from a machine outside the server's LAN to
+Run the external browser probe below from a machine outside the server's LAN to
 verify the public firewall and NAT path. A TCP port probe alone does not verify
 that coturn can allocate and exchange media through its UDP relay range.
 
@@ -289,7 +291,7 @@ Compose file. For the example configuration, the complete port matrix is:
 
 TLS on the client-to-TURN connection still uses UDP relay allocations in this
 configuration. Opening only the TLS port is insufficient for media forwarding.
-The local probe now also authenticates over TLS, checks server trust and the
+The local probe also authenticates over TLS, checks server trust and the
 configured hostname, and rejects invalid/expired TURN credentials over TLS.
 It requires TLS 1.2 or newer and never disables certificate verification.
 For a private CA, install that CA in the diagnostic client's trust store; never
@@ -309,8 +311,11 @@ acceptance remains tracked in #29.
 
 Once the node relay configuration is saved, authenticated calls to
 `GET /api/calls/ice-servers` return the local TURN URLs plus a temporary
-`username` and `credential`. Leaf nodes use records from their currently
-connected relay, provided they share the same TURN secret.
+`username` and `credential`. Locally issued credentials require the private TURN
+secret described above. Leaf nodes use TURN URLs from signed records of a
+currently connected relay. Private-network relays issue their own temporary
+credentials to connected leaves over libp2p, with independent master secrets;
+only v1 shared pools require issuers and coturn to use the same secret.
 
 ### Allocation limits and peer access
 
@@ -322,8 +327,9 @@ allocation returns capacity after coturn processes its expiry. Renewing a
 credential does not reset its user's quota. These limits bound allocations,
 not bandwidth, request rate or account creation.
 
-The peer policy blocks IPv4 private, loopback, link-local, shared CGNAT,
-benchmark and multicast/reserved ranges. It also blocks IPv6 loopback,
+The peer policy blocks IPv4 this-network (`0.0.0.0/8`), private, loopback,
+link-local, shared CGNAT, benchmark and multicast/reserved ranges. It also blocks
+IPv6 loopback,
 unspecified, IPv4-mapped, IPv4-compatible, IPv4-translated, NAT64, discard,
 unique-local, link-local, deprecated site-local and multicast ranges. TURN TCP
 relay allocations and the coturn CLI are disabled. Browsers may still connect
@@ -431,7 +437,7 @@ The example Compose file uses host folders by default:
 ./local_storage
 ```
 
-The image starts as root only long enough to create and assign ownership for `/data/ipfs`, `/data/local_storage`, and `/app/logs`. The application process then runs as the non-root `node` user.
+The image starts as root only long enough to create and assign ownership for `/data/ipfs`, `/data/local_storage`, `/app/logs`, `/run/pigeon`, and `/run/pigeon-turn`. The application process then runs as the non-root `node` user.
 
 Back up both host folders if the node carries data you need to keep. [Backup and restore](BACKUP_RESTORE.md) describes the procedure and its limits. Removing either folder creates a fresh local node state.
 
@@ -447,13 +453,13 @@ For a simple local deployment, no extra ports are required.
 
 Private networks use private IPFS/libp2p runtimes. A node can act as a private relay only for private networks it belongs to, because the relay must know the private network key.
 
-Relay node selection and relay port configuration are owner-managed during node startup instead of being configured through Docker environment variables. The image only keeps `PIGEON_RELAY_DATA_LIMIT_BYTES` as an optional relay data-limit override.
+Relay node selection and relay port configuration are owner-managed through the node relay configuration API (see [TURN For WebRTC Calls](#turn-for-webrtc-calls)) instead of Docker environment variables. The image only keeps `PIGEON_RELAY_DATA_LIMIT_BYTES` as an optional relay data-limit override.
 
 Public networks do not require a relay. They can work without any relay node as long as peers can discover and reach each other through the public peer-to-peer layer.
 
 Private networks should have at least one reachable relay node per private network. Without one, nodes that cannot dial each other directly may join the same private network but fail to exchange IPFS/OrbitDB data reliably. One node can relay all private networks it belongs to, so a deployment does not need a separate relay machine per private network.
 
-If this node is configured as a relay, publish the ports selected during startup and open them in Docker, the firewall, and the router. Reserve at least one TCP port per private network this node will relay. For example, a node expected to relay up to 100 private networks needs a published range with at least 100 ports, such as `4100-4199`.
+If this node is configured as a relay, publish the ports configured through the relay configuration API and open them in Docker, the firewall, and the router. Reserve at least one TCP port per private network this node will relay. For example, a node expected to relay up to 100 private networks needs a published range with at least 100 ports, such as `4100-4199`.
 
 Nodes without relay configuration remain leaf nodes. They can still use another reachable node as relay for shared private networks.
 
@@ -482,7 +488,7 @@ Use a real email address in `PUSH_VAPID_SUBJECT` for production.
 
 The Dockerfile is the only place where the backend and frontend are combined. Local builds require Docker BuildKit/Buildx because the Dockerfile uses build secrets to access private source repositories.
 
-While the source repositories are private, set a GitHub token with read access to both:
+If the source repositories are private, set a GitHub token with read access to both:
 
 - `haskou/pigeon-swarm-node`
 - `haskou/pigeon-swarm-ui`
@@ -497,15 +503,15 @@ GITHUB_TOKEN=github_pat_xxx DOCKER_BUILDKIT=1 docker build \
   .
 ```
 
-The Docker build context intentionally includes only the Dockerfile. Source code is cloned inside the build using the configured repository URLs and refs.
+The `.dockerignore` file allowlists the build context: only the Dockerfile, `docker-entrypoint.sh`, the runtime scripts and peer policy under `scripts/`, and `patches/coturn-self-relay.patch` are sent to the builder. Source code is cloned inside the build using the configured repository URLs and refs.
 
 ## Publishing
 
-The [publish workflow](../.github/workflows/publish-docker.yml) publishes the image when this repository receives a push to `main`.
+The [publish workflow](../.github/workflows/publish-docker.yml) publishes the image on a push to `main`, on the `source-published` `repository_dispatch` event described below, and on manual `workflow_dispatch` runs with optional `node_ref` and `ui_ref` inputs.
 
 The [validation workflow](../.github/workflows/validate.yml) runs on every push and pull request. It validates the Docker Compose example and checks that the public configuration stays simple.
 
-For GitHub Actions, add this repository secret while the source repositories are private:
+For GitHub Actions, add this repository secret if the source repositories are private:
 
 ```text
 SOURCE_REPOSITORIES_TOKEN
@@ -513,7 +519,7 @@ SOURCE_REPOSITORIES_TOKEN
 
 The workflow also accepts `repository_dispatch` with the `source-published` event type. Source repositories can call that event after their own `main` branch changes to request a fresh combined image.
 
-Published images include OCI metadata labels, GitHub Actions cache, SBOM generation, and provenance attestation through Docker Buildx.
+Published images include OCI metadata labels, SBOM generation, and provenance attestation through Docker Buildx. Builds use the GitHub Actions build cache.
 
 ## Source Branches
 

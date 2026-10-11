@@ -67,7 +67,7 @@ document. Each socket first obtains its own single-use realtime ticket with a
 signed request, then connects to `/realtime/v1` and must select the
 `pigeon-realtime.v1` subprotocol. These authenticated WebSockets then receive
 fresh call signals over each adjacent node pair. Assertions include the delivery
-ID, sender, recipient, network, call, unique payload and valid expiry. A
+ID, sender, recipient, call, unique payload and valid expiry. A
 successful HTTP POST or a peer count alone cannot pass the traffic probe. Test
 identities and storage are disposable; cleanup removes only containers and the
 network created by this run.
@@ -103,8 +103,8 @@ late publisher startup 6.3 seconds, repeated link recovery 2.8 and 2.8 seconds,
 cached recovery with 46 rejected outbound attempts 50.4 seconds, and process
 restart recovery 5.9 seconds. These measurements describe that isolated run only.
 
-Cache expiry, replacement, coalesced discovery, bounded retry delays and duplicate
-dial protection are additionally covered by the backend's
+Cache expiry, replacement, coalesced discovery, bounded retry delays and
+fallback-window resets are additionally covered by the backend's
 [relay acceptance suite](https://github.com/haskou/pigeon-swarm-node/blob/main/docs/relay-recovery-acceptance.md).
 This finite topology does not establish resistance to an unbounded malicious
 publisher population.

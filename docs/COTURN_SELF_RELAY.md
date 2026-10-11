@@ -12,7 +12,7 @@ Whitelisting the container address would allow access to unrelated UDP listeners
 
 - The permission exception applies only to the server's own mapped relay address and only while TCP relay allocations are disabled. Built-in zero-address, loopback and multicast checks still run first.
 - The shared port registry records bound UDP sockets separately from reserved ports. A reservation or a failed bind does not authorize a destination.
-- Every UDP relay send checks the exact destination address and port, including Send indications and ChannelData using an existing channel. An IP-only permission cannot authorize an unrelated port.
+- Every UDP relay send to the server's own mapped relay address checks the exact destination address and port, including Send indications and ChannelData using an existing channel. An IP-only permission cannot authorize an unrelated port.
 - The registry lock stays held through the nonblocking send. Closing a relay withdraws its bound state under that lock before closing the socket, preventing a stale check from sending to another service that reuses the port.
 - Other private destinations remain subject to the existing restrictions. Explicit exceptions for separate trusted private peers retain their existing behavior.
 
@@ -20,7 +20,7 @@ This removes the need to whitelist the entire container address for communicatio
 
 ## Validation and maintenance
 
-`npm run test:media` exercises the complete image with a documentation-range public address mapped to its private container interface, without a private-peer whitelist. Two real browsers exchange audio over UDP, TCP and TLS before and after restarting the application.
+`npm run test:media` exercises the complete image with a documentation-range public address mapped to its private container interface, without a private-peer whitelist. Two pages in one headless Chromium browser exchange audio over UDP, TCP and TLS before and after restarting the application.
 
 The same fixture runs `tests/turn-self-relay-probe.mjs` against the bundled binary. It checks retained permissions and channels after a relay port is reused by a different UDP service, an unrelated UDP listener on the container address, concurrent allocation attempts against an occupied relay-range port, other private destinations and rejection of TCP relay allocations.
 

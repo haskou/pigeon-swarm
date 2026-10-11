@@ -7,11 +7,11 @@ import {
   SignedCommunities,
   createActor,
   publishIdentity,
-  requestHeaders,
   signedRequest,
 } from "./signed-pigeon-client.mjs";
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const realtimeProtocol = "pigeon-realtime.v1";
 const check = (condition, message) => {
   if (!condition) throw new Error(message);
 };
@@ -50,18 +50,34 @@ async function eventually(label, operation, timeout = 55000) {
   throw new Error(`Timed out: ${label} (last: ${last})`);
 }
 
-function connect(index, identity) {
-  const url = new URL("ws", nodes[index]);
+// Credentialless realtime (node #412): a single-use ticket from a signed POST
+// travels in Sec-WebSocket-Protocol, never in the URL or query string.
+async function issueTicket(index, identity) {
+  const response = await request(
+    index,
+    identity,
+    "POST",
+    "realtime/v1/tickets",
+    {},
+  );
+  check(
+    typeof response?.ticket === "string" &&
+      /^[A-Za-z0-9_-]{43}$/.test(response.ticket),
+    "Realtime ticket response is invalid",
+  );
+  return response.ticket;
+}
+
+async function connect(index, identity) {
+  const url = new URL("realtime/v1", nodes[index]);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const auth = requestHeaders(identity, "GET", url.pathname, "{}");
-  url.search = new URLSearchParams({
-    identityId: identity.id,
-    timestamp: auth["x-timestamp"],
-    signature: auth["x-signature"],
-  }).toString();
-  const socket = new WebSocket(url);
+  const ticket = await issueTicket(index, identity);
+  const socket = new WebSocket(url, [realtimeProtocol, `ticket.${ticket}`]);
   const state = { socket, messages: [], acknowledged: false, failed: false };
   sockets.push(state);
+  socket.addEventListener("open", () => {
+    state.protocol = socket.protocol;
+  });
   socket.addEventListener("message", ({ data }) => {
     try {
       const message = JSON.parse(data);
@@ -243,7 +259,9 @@ try {
     ),
   );
   stage = "authenticate recipient sockets";
-  const clients = identities.map((identity, index) => connect(index, identity));
+  const clients = await Promise.all(
+    identities.map((identity, index) => connect(index, identity)),
+  );
   await Promise.all(
     clients.map((client, index) =>
       eventually(
@@ -252,6 +270,10 @@ try {
         15000,
       ),
     ),
+  );
+  check(
+    clients.every((client) => client.protocol === realtimeProtocol),
+    "Realtime socket did not select the version subprotocol",
   );
 
   for (let index = 0; index < nodes.length - 1; index++) {

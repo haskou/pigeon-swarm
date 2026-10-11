@@ -63,11 +63,14 @@ checks both the saved key and identity persistence, in addition to connectivity.
 
 Every phase creates a new community, roster and voice channel through signed HTTP
 requests. Every participating node must return the complete expected community
-document. Native authenticated WebSockets then receive fresh call signals over
-each adjacent node pair. Assertions include the delivery ID, sender, recipient,
-network, call, unique payload and valid expiry. A successful HTTP POST or a peer
-count alone cannot pass the traffic probe. Test identities and storage are
-disposable; cleanup removes only containers and the network created by this run.
+document. Each socket first obtains its own single-use realtime ticket with a
+signed request, then connects to `/realtime/v1` and must select the
+`pigeon-realtime.v1` subprotocol. These authenticated WebSockets then receive
+fresh call signals over each adjacent node pair. Assertions include the delivery
+ID, sender, recipient, network, call, unique payload and valid expiry. A
+successful HTTP POST or a peer count alone cannot pass the traffic probe. Test
+identities and storage are disposable; cleanup removes only containers and the
+network created by this run.
 
 Once C has joined, a second probe (`tests/community-convergence-probe.mjs`)
 drives one community across the three nodes with signed operations: a custom

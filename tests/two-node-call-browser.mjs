@@ -698,10 +698,10 @@ try {
       await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
       await page.getByTestId("conversation-list-item").first().click();
     }
-    // Local one-to-one history does not survive logout: the mailbox deletes
-    // envelopes once every reader has acked them, and no backfill exists (see
-    // haskou/pigeon-swarm-ui docs/opaque-mailboxes-client.md, accepted losses).
-    // A new one-to-one message must still reach both devices after re-login.
+    // Same-device one-to-one history is kept sealed under the device root (UI
+    // #336), but a new device gets no backfill (haskou/pigeon-swarm-ui #334; see
+    // docs/opaque-mailboxes-client.md, accepted losses). The check below only
+    // requires a new one-to-one message to reach both devices after re-login.
     await deliver(pages[recovery % 2], `Post-login direct message ${recovery}`);
     for (const page of pages) {
       await page.getByRole("button", { name: "Relay voice test", exact: true }).click();

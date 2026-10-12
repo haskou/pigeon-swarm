@@ -16,8 +16,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Documentation-only changes skip the heavy steps and jobs; light checks always
+  # run. Skipped steps keep their names, so required checks still report.
+  # See .github/actions/classify-changes.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      heavy: ${{ steps.classify.outputs.heavy }}
+    steps:
+      - name: Check out image project
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify changes
+        id: classify
+        uses: ./.github/actions/classify-changes
+
   validate:
     name: Validate Docker wrapper
+    needs: changes
+    if: always()
     runs-on: ubuntu-latest
 
     steps:
@@ -83,12 +104,15 @@ jobs:
         run: node --test tests/release-verification.test.mjs
 
       - name: Verify TURN authentication and restart against real coturn
+        if: needs.changes.outputs.heavy != 'false'
         run: node --test tests/turn-runtime.integration.mjs
 
       - name: Install browser test tooling
+        if: needs.changes.outputs.heavy != 'false'
         run: npm ci --ignore-scripts
 
       - name: Validate private delivery contracts
+        if: needs.changes.outputs.heavy != 'false'
         run: npm run test:privacy
 
       - name: Validate storage benchmark budgets and cleanup
@@ -101,10 +125,11 @@ jobs:
         run: node --test tests/restore-copy.test.mjs
 
       - name: Verify browser diagnostic redaction
+        if: needs.changes.outputs.heavy != 'false'
         run: node --test tests/turn-browser-probe.test.mjs
 
       - name: Build immutable application image from pinned sources
-        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
           SOURCE_REPOSITORIES_TOKEN: ${{ secrets.SOURCE_REPOSITORIES_TOKEN || github.token }}
         run: |
@@ -116,30 +141,31 @@ jobs:
           printf 'PIGEON_TEST_IMAGE=%s\n' "$(cat "$RUNNER_TEMP/pigeon-test-image.id")" >> "$GITHUB_ENV"
 
       - name: Verify backend-issued credentials and bidirectional browser audio
-        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: npm run test:media
 
       - name: Verify automatic relay discovery and recovery
-        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: npm run test:relay
 
       - name: Verify moderation and publishing limits on a real node
-        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: npm run test:moderation
 
       - name: Verify application workflows between independent nodes
-        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           node --test tests/turn-entrypoint.integration.mjs
           npm run test:e2e
 
       - name: Verify application calls across two NAT routers
-        if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: npm run test:e2e:nat
 
   independent-client:
     name: Validate independent client
-    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    needs: changes
+    if: always() && needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - name: Check out image project
@@ -196,7 +222,8 @@ jobs:
 
   ui-e2e:
     name: Validate UI against a real node
-    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    needs: changes
+    if: always() && needs.changes.outputs.heavy != 'false' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - name: Check out image project

@@ -1,0 +1,21 @@
+name: Classify changes
+description: Sets heavy=false when a pull request or push changes only documentation; otherwise heavy=true
+
+outputs:
+  heavy:
+    description: "'false' only when every changed file is documentation; 'true' otherwise"
+    value: ${{ steps.classify.outputs.heavy }}
+
+runs:
+  using: composite
+  steps:
+    - name: Classify changed files
+      id: classify
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+        PUSH_AFTER: ${{ github.sha }}
+      run: bash "$GITHUB_ACTION_PATH/classify.sh"

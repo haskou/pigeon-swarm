@@ -24,24 +24,6 @@ const pages = [];
 const deliveryDiagnostics = [];
 const callDiagnostics = [];
 const browsers = [];
-const legacyCopies = [];
-// Copied from tests/ui-e2e.integration.mjs. A legacy copy is the replicated
-// message path the mailbox replaces; the recipient is denied it while a
-// one-to-one delivery is checked. Frame contents are never logged.
-const isLegacyMessageFrame = (message) => {
-  try {
-    const frame = JSON.parse(message.toString());
-
-    return (
-      frame.type === "domain_event" &&
-      typeof frame.event?.type === "string" &&
-      frame.event.type.startsWith("conversations.v1.message.")
-    );
-  } catch {
-    return false;
-  }
-};
-const legacyMessageReadPath = /\/conversations\/[^/]+\/messages(\/|$)/;
 const browser = nat ? undefined : await chromium
   .launch({
     args: [
@@ -140,36 +122,6 @@ try {
       };
     }, { expectedRelay: relayAddresses[index], nat });
     const page = await context.newPage();
-    const legacy = { withholding: false, withheldFrames: 0, blockedReads: 0 };
-    legacyCopies.push(legacy);
-    if (independentClient) {
-      await page.routeWebSocket(/\/realtime\/v1/, (ws) => {
-        const server = ws.connectToServer();
-
-        ws.onMessage((message) => server.send(message));
-        server.onMessage((message) => {
-          if (legacy.withholding && isLegacyMessageFrame(message)) {
-            legacy.withheldFrames += 1;
-
-            return;
-          }
-
-          ws.send(message);
-        });
-      });
-      await page.route(
-        (url) => legacyMessageReadPath.test(url.pathname),
-        (route) => {
-          if (!legacy.withholding || route.request().method() !== "GET") {
-            return route.fallback();
-          }
-
-          legacy.blockedReads += 1;
-
-          return route.abort("blockedbyclient");
-        },
-      );
-    }
     const callEvents = [];
     callDiagnostics.push(callEvents);
     page.on("console", async message => {
@@ -456,16 +408,14 @@ try {
   const assertTimeline = async (page, messages) => {
     const items = page.getByTestId("message-item");
     for (const message of messages) {
-      await items.getByText(message, { exact: true }).waitFor().catch(error => {
-        if (message === canary) throw new Error("Plaintext canary is not visible in the timeline");
-        throw error;
-      });
+      await items.getByText(message, { exact: true }).waitFor();
       assert.equal(await items.getByText(message, { exact: true }).count(), 1);
     }
     assert.equal(await items.count(), messages.length);
   };
   stage = "bidirectional message decryption";
   const mailboxAppends = [];
+  const legacyMessagePosts = [];
   const mailboxFallbacks = [];
   if (independentClient) {
     pages.forEach((page, index) => {
@@ -474,6 +424,8 @@ try {
         const target = new URL(request.url());
         if (request.method() === "POST" && target.origin === foreignOrigin && /\/mailboxes\/[^/]+\/envelopes$/.test(target.pathname))
           mailboxAppends.push(request);
+        if (request.method() === "POST" && target.origin === new URL(urls[index]).origin && /\/conversations\/[^/]+\/messages$/.test(target.pathname))
+          legacyMessagePosts.push(request);
       });
       page.on("console", (message) => {
         if (message.text().startsWith("Recipient mailbox")) mailboxFallbacks.push(message.text());
@@ -488,20 +440,10 @@ try {
     for (const page of pages)
       await page.getByText(text, { exact: true }).first().waitFor();
   };
-  // One-to-one text must render on the recipient from its mailbox alone, so
-  // the recipient's legacy copy is withheld while each delivery is awaited.
-  const withheldPerDelivery = [];
+  // One-to-one text must render on each page from the mailbox alone. The sender
+  // posts no legacy message, which the check after the deliveries asserts.
   const deliverOneToOne = async (senderIndex, text) => {
-    const recipient = legacyCopies[1 - senderIndex];
-    const withheldBefore = recipient.withheldFrames;
-
-    recipient.withholding = independentClient;
-    try {
-      await deliver(pages[senderIndex], text);
-    } finally {
-      recipient.withholding = false;
-    }
-    withheldPerDelivery.push(recipient.withheldFrames - withheldBefore);
+    await deliver(pages[senderIndex], text);
   };
   await deliverOneToOne(0, "Encrypted message from caller one");
   await deliverOneToOne(1, "Encrypted message from caller two");
@@ -509,7 +451,7 @@ try {
     throw new Error("Plaintext canary message was not delivered and displayed on both pages");
   });
   if (independentClient) {
-    assert.ok(withheldPerDelivery.every((count) => count > 0), `Recipient legacy copies must be withheld for every one-to-one delivery, saw ${withheldPerDelivery.join(",")}`);
+    assert.equal(legacyMessagePosts.length, 0, `One-to-one sends must not POST the legacy message endpoint, saw ${legacyMessagePosts.length}`);
     assert.ok(mailboxAppends.length >= 3, `Expected a cross-node mailbox append per delivered message, saw ${mailboxAppends.length}`);
     assert.deepEqual(mailboxFallbacks, [], "Cross-node appends must not fall back to the connected node");
     for (const request of mailboxAppends) {
@@ -743,7 +685,7 @@ try {
     );
   }
   for (let recovery = 0; recovery < 3; recovery++) {
-    stage = `password login and persisted message decryption ${recovery}`;
+    stage = `password login and new direct message ${recovery}`;
     for (const [index, page] of pages.entries()) {
       await page.getByTestId("own-profile-menu-button").click();
       await page.getByRole("button", { name: "Log out", exact: true }).click();
@@ -755,7 +697,13 @@ try {
         await page.getByTestId("push-notification-dismiss-button").click();
       await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
       await page.getByTestId("conversation-list-item").first().click();
-      await assertTimeline(page, ["Encrypted message from caller one", "Encrypted message from caller two", canary]);
+    }
+    // Local one-to-one history does not survive logout: the mailbox deletes
+    // envelopes once every reader has acked them, and no backfill exists (see
+    // haskou/pigeon-swarm-ui docs/opaque-mailboxes-client.md, accepted losses).
+    // A new one-to-one message must still reach both devices after re-login.
+    await deliver(pages[recovery % 2], `Post-login direct message ${recovery}`);
+    for (const page of pages) {
       await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
       await page.getByRole("button", { name: "# general", exact: true }).click();
       await assertTimeline(page, ["Community message from caller one", "Community message from caller two"]);

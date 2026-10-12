@@ -76,10 +76,30 @@ const failFastOnNetworkError = async (page, side) => {
   }
 };
 
-// Count-only check that a one-to-one message also travels through the
-// recipient mailbox on this node. A failed mailbox append is silent and the
-// legacy copy still delivers, so the specs above cannot show this path. Logs
-// counts only: no message text, ids or envelope bodies.
+// Realtime frames for a message timeline event carry the full message inline,
+// which is the legacy replicated copy the mailbox is replacing. The recipient
+// is denied that copy during the mailbox-only assertion.
+const legacyMessageEventPrefix = "conversations.v1.message.";
+const legacyMessageReadPath = /\/conversations\/[^/]+\/messages(\/|$)/;
+const isLegacyMessageFrame = (message) => {
+  try {
+    const frame = JSON.parse(message.toString());
+
+    return (
+      frame.type === "domain_event" &&
+      typeof frame.event?.type === "string" &&
+      frame.event.type.startsWith(legacyMessageEventPrefix)
+    );
+  } catch {
+    return false;
+  }
+};
+
+// Checks that a one-to-one message also travels through the recipient mailbox
+// on this node, then that the recipient renders a second message with the
+// legacy copy withheld. A failed mailbox append is silent and the legacy copy
+// still delivers, so the specs above cannot show this path. Logs counts only:
+// no message text, ids or envelope bodies.
 const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   const { chromium } = createRequire(join(uiSource, "package.json"))(
     "playwright-core",
@@ -116,7 +136,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       await row.waitFor({ state: "visible" });
       await row.click();
     };
-    const register = async (name, handle) => {
+    const register = async (name, handle, { withholdLegacy = false } = {}) => {
       const context = await browser.newContext({ locale: "en-US" });
       const page = await context.newPage();
       page.setDefaultTimeout(45000);
@@ -167,6 +187,37 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
           counts.acks += 1;
         }
       });
+      const legacy = { withholding: false, withheldFrames: 0, blockedReads: 0 };
+
+      if (withholdLegacy) {
+        await page.routeWebSocket(/\/realtime\/v1/, (ws) => {
+          const server = ws.connectToServer();
+
+          ws.onMessage((message) => server.send(message));
+          server.onMessage((message) => {
+            if (legacy.withholding && isLegacyMessageFrame(message)) {
+              legacy.withheldFrames += 1;
+
+              return;
+            }
+
+            ws.send(message);
+          });
+        });
+        await page.route(
+          (url) => legacyMessageReadPath.test(url.pathname),
+          (route) => {
+            if (!legacy.withholding || route.request().method() !== "GET") {
+              return route.fallback();
+            }
+
+            legacy.blockedReads += 1;
+
+            return route.abort("blockedbyclient");
+          },
+        );
+      }
+
       await page.goto(origin);
       await page.getByTestId("auth-mode-control").locator("button").nth(1).click();
       await page.getByTestId("auth-name-input").fill(name);
@@ -179,10 +230,12 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
         state: "visible",
       });
       await dismissPushPrompt(page);
-      return { page, counts };
+      return { page, counts, legacy };
     };
     const alice = await register(`Mailbox A ${suffix}`, `mailbox-a-${suffix}`);
-    const bob = await register(`Mailbox B ${suffix}`, `mailbox-b-${suffix}`);
+    const bob = await register(`Mailbox B ${suffix}`, `mailbox-b-${suffix}`, {
+      withholdLegacy: true,
+    });
 
     await openSidebar(alice.page);
     await visible(alice.page, "create-conversation-button").click();
@@ -244,9 +297,50 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       90000,
       "direct message was not delivered through the recipient mailbox",
     );
+    // Withhold the legacy copy from the recipient, then send a second message.
+    // With realtime message frames and message reads blocked, the mailbox is the
+    // only path left, so the text must render from the mailbox alone.
+    bob.legacy.withholding = true;
+    const withheldBefore = bob.legacy.withheldFrames;
+    const envelopesBefore = bob.counts.envelopes;
+    const acksBefore = bob.counts.acks;
+    const mailboxOnlyText = `mailbox only ${suffix}`;
+    await alice.page
+      .getByTestId("message-composer-input")
+      .fill(mailboxOnlyText);
+    await alice.page.getByTestId("message-send-button").click();
+    await waitFor(
+      async () => {
+        const rendered = await bob.page
+          .getByTestId("message-item")
+          .filter({ hasText: mailboxOnlyText, visible: true })
+          .count();
+
+        assert.ok(
+          rendered > 0 &&
+            bob.counts.envelopes > envelopesBefore &&
+            bob.counts.acks > acksBefore &&
+            bob.legacy.withheldFrames > withheldBefore,
+          `recipient ${JSON.stringify({
+            rendered: rendered > 0,
+            counts: bob.counts,
+            legacy: bob.legacy,
+          })}`,
+        );
+      },
+      90000,
+      "direct message did not render from the recipient mailbox alone",
+    );
     console.log(
       JSON.stringify({
-        directMailbox: { sender: alice.counts, recipient: bob.counts },
+        directMailbox: {
+          sender: alice.counts,
+          recipient: bob.counts,
+          legacyWithheld: {
+            frames: bob.legacy.withheldFrames,
+            reads: bob.legacy.blockedReads,
+          },
+        },
       }),
     );
   } finally {

@@ -56,7 +56,12 @@ createServer(async (request, response) => {
         })),
       }),
     );
-  } catch {
-    response.writeHead(500).end("Fault control failed");
+  } catch (error) {
+    console.error(
+      `relay-runtime-control error handling ${request.method} ${request.url}:`,
+      error,
+    );
+    const message = error instanceof Error ? error.message : String(error);
+    response.writeHead(500).end(`Fault control failed: ${message}`);
   }
 }).listen(9099, "127.0.0.1");

@@ -19,7 +19,10 @@ skips itself outside desktop-chromium. The UI repository's Vite-fixture specs
 
 After the specs, the same run registers two identities on the image's node,
 sends one direct message and counts mailbox traffic only: the sender's append,
-the recipient's read with envelopes, and the acknowledgement. The specs alone
+the recipient's read with envelopes, and the acknowledgement. It then clears the
+recipient's saved mailbox state, sends a second message with the recipient's
+legacy copy withheld, and requires that message to render from the mailbox
+alone, with envelope and acknowledgement counts increasing. The specs alone
 cannot show this path, because a failed mailbox append is silent while the
 legacy copy still delivers. The check logs counts only, never message text, ids
 or envelope bodies.

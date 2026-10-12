@@ -205,8 +205,14 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       page.on("response", async (response) => {
         const { pathname } = new URL(response.url());
         if (pathname.startsWith("/api/") && response.status() >= 400) {
+          // Record only an error code or the body's key names, never values.
+          const body = await response.json().catch(() => null);
+          const code =
+            [body?.code, body?.error?.code, body?.error?.name].find(
+              (value) => typeof value === "string" && /^[\w.:-]{1,60}$/.test(value),
+            ) ?? `keys:${Object.keys(body ?? {}).join("|")}`;
           tally(
-            `${response.request().method()} ${response.status()} ${pathname.split("/")[2]}`,
+            `${response.request().method()} ${response.status()} ${pathname.split("/")[2]} ${code.slice(0, 100)}`,
           );
         }
         if (!pathname.startsWith("/api/mailboxes/")) return;

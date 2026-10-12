@@ -97,9 +97,10 @@ const isLegacyMessageFrame = (message) => {
 
 // Checks that a one-to-one message also travels through the recipient mailbox
 // on this node, then that the recipient renders a second message with the
-// legacy copy withheld. A failed mailbox append is silent and the legacy copy
-// still delivers, so the specs above cannot show this path. Logs counts only:
-// no message text, ids or envelope bodies.
+// legacy copy withheld, after its saved mailbox state is cleared. A failed
+// mailbox append is silent and the legacy copy still delivers, so the specs
+// above cannot show this path. Logs counts only: no message text, ids or
+// envelope bodies.
 const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   const { chromium } = createRequire(join(uiSource, "package.json"))(
     "playwright-core",
@@ -282,6 +283,25 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       60000,
       "recipient mailbox sync did not start",
     );
+
+    // Forget the recipient's saved mailbox state (read cursor and any stored
+    // token), as a device that lost its local storage would. The next sync pass
+    // creates the state again and derives the read token from the identity key.
+    const clearedMailboxState = await bob.page.evaluate(() => {
+      const keys = Object.keys(localStorage).filter((key) =>
+        key.startsWith("pigeon.direct-mailbox."),
+      );
+
+      for (const key of keys) localStorage.removeItem(key);
+
+      return keys.length;
+    });
+
+    assert.ok(
+      clearedMailboxState > 0,
+      "recipient mailbox state was not saved before the clear",
+    );
+
     await alice.page
       .getByTestId("message-composer-input")
       .fill(`mailbox probe ${suffix}`);
@@ -300,6 +320,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     // Withhold the legacy copy from the recipient, then send a second message.
     // With realtime message frames and message reads blocked, the mailbox is the
     // only path left, so the text must render from the mailbox alone.
+    // The saved mailbox state was cleared above, so this read starts from cursor 0.
     bob.legacy.withholding = true;
     const withheldBefore = bob.legacy.withheldFrames;
     const envelopesBefore = bob.counts.envelopes;
@@ -336,6 +357,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
         directMailbox: {
           sender: alice.counts,
           recipient: bob.counts,
+          recipientStateCleared: clearedMailboxState,
           legacyWithheld: {
             frames: bob.legacy.withheldFrames,
             reads: bob.legacy.blockedReads,

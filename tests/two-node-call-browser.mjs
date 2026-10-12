@@ -388,6 +388,21 @@ try {
     assert.equal(await items.count(), messages.length);
   };
   stage = "bidirectional message decryption";
+  const mailboxAppends = [];
+  const mailboxFallbacks = [];
+  if (independentClient) {
+    pages.forEach((page, index) => {
+      const foreignOrigin = new URL(urls[1 - index]).origin;
+      page.on("request", (request) => {
+        const target = new URL(request.url());
+        if (request.method() === "POST" && target.origin === foreignOrigin && /\/mailboxes\/[^/]+\/envelopes$/.test(target.pathname))
+          mailboxAppends.push(request);
+      });
+      page.on("console", (message) => {
+        if (message.text().startsWith("Recipient mailbox")) mailboxFallbacks.push(message.text());
+      });
+    });
+  }
   const deliver = async (sender, text) => {
     await sender.bringToFront();
     await sender.getByTestId("message-composer-input").fill(text);
@@ -400,6 +415,17 @@ try {
   await deliver(pages[0], canary).catch(() => {
     throw new Error("Plaintext canary message was not delivered and displayed on both pages");
   });
+  if (independentClient) {
+    assert.ok(mailboxAppends.length >= 3, `Expected a cross-node mailbox append per delivered message, saw ${mailboxAppends.length}`);
+    assert.deepEqual(mailboxFallbacks, [], "Cross-node appends must not fall back to the connected node");
+    for (const request of mailboxAppends) {
+      const headers = await request.allHeaders();
+      assert.match(headers.authorization ?? "", /^Bearer \S+$/, "Foreign append must carry only the mailbox capability Bearer");
+      assert.equal(headers.cookie, undefined, "Foreign append must not carry the connected node session cookie");
+      const response = await request.response();
+      assert.ok(response && response.status() >= 200 && response.status() < 300, `Recipient node rejected a foreign mailbox append: ${response?.status() ?? request.failure()?.errorText}`);
+    }
+  }
   console.log(
     "PASS encrypted DM invitation acceptance and bidirectional message decryption",
   );

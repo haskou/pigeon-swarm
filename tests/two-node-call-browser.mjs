@@ -24,6 +24,24 @@ const pages = [];
 const deliveryDiagnostics = [];
 const callDiagnostics = [];
 const browsers = [];
+const legacyCopies = [];
+// Copied from tests/ui-e2e.integration.mjs. A legacy copy is the replicated
+// message path the mailbox replaces; the recipient is denied it while a
+// one-to-one delivery is checked. Frame contents are never logged.
+const isLegacyMessageFrame = (message) => {
+  try {
+    const frame = JSON.parse(message.toString());
+
+    return (
+      frame.type === "domain_event" &&
+      typeof frame.event?.type === "string" &&
+      frame.event.type.startsWith("conversations.v1.message.")
+    );
+  } catch {
+    return false;
+  }
+};
+const legacyMessageReadPath = /\/conversations\/[^/]+\/messages(\/|$)/;
 const browser = nat ? undefined : await chromium
   .launch({
     args: [
@@ -122,6 +140,36 @@ try {
       };
     }, { expectedRelay: relayAddresses[index], nat });
     const page = await context.newPage();
+    const legacy = { withholding: false, withheldFrames: 0, blockedReads: 0 };
+    legacyCopies.push(legacy);
+    if (independentClient) {
+      await page.routeWebSocket(/\/realtime\/v1/, (ws) => {
+        const server = ws.connectToServer();
+
+        ws.onMessage((message) => server.send(message));
+        server.onMessage((message) => {
+          if (legacy.withholding && isLegacyMessageFrame(message)) {
+            legacy.withheldFrames += 1;
+
+            return;
+          }
+
+          ws.send(message);
+        });
+      });
+      await page.route(
+        (url) => legacyMessageReadPath.test(url.pathname),
+        (route) => {
+          if (!legacy.withholding || route.request().method() !== "GET") {
+            return route.fallback();
+          }
+
+          legacy.blockedReads += 1;
+
+          return route.abort("blockedbyclient");
+        },
+      );
+    }
     const callEvents = [];
     callDiagnostics.push(callEvents);
     page.on("console", async message => {
@@ -440,12 +488,28 @@ try {
     for (const page of pages)
       await page.getByText(text, { exact: true }).first().waitFor();
   };
-  await deliver(pages[0], "Encrypted message from caller one");
-  await deliver(pages[1], "Encrypted message from caller two");
-  await deliver(pages[0], canary).catch(() => {
+  // One-to-one text must render on the recipient from its mailbox alone, so
+  // the recipient's legacy copy is withheld while each delivery is awaited.
+  const withheldPerDelivery = [];
+  const deliverOneToOne = async (senderIndex, text) => {
+    const recipient = legacyCopies[1 - senderIndex];
+    const withheldBefore = recipient.withheldFrames;
+
+    recipient.withholding = independentClient;
+    try {
+      await deliver(pages[senderIndex], text);
+    } finally {
+      recipient.withholding = false;
+    }
+    withheldPerDelivery.push(recipient.withheldFrames - withheldBefore);
+  };
+  await deliverOneToOne(0, "Encrypted message from caller one");
+  await deliverOneToOne(1, "Encrypted message from caller two");
+  await deliverOneToOne(0, canary).catch(() => {
     throw new Error("Plaintext canary message was not delivered and displayed on both pages");
   });
   if (independentClient) {
+    assert.ok(withheldPerDelivery.every((count) => count > 0), `Recipient legacy copies must be withheld for every one-to-one delivery, saw ${withheldPerDelivery.join(",")}`);
     assert.ok(mailboxAppends.length >= 3, `Expected a cross-node mailbox append per delivered message, saw ${mailboxAppends.length}`);
     assert.deepEqual(mailboxFallbacks, [], "Cross-node appends must not fall back to the connected node");
     for (const request of mailboxAppends) {

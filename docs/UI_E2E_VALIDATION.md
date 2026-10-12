@@ -44,4 +44,14 @@ read held (`heldReads` 0), so that run did not show the hold delaying any read.
 The check logs counts only, never message text, ids or envelope bodies. Per-action
 counts of the mailbox-only steps are logged under `mailboxActions`.
 
+The forgotten-device spec pairs a second device of an identity through the UI,
+signs that device out and signs back in with its password, and requires the
+second device to list both devices. A device-proof request the second device
+signed is accepted before the removal. The first device then removes the second
+device's access from its manage-devices dialog and must list only itself. The
+second device's fresh device-proof request, sent after the removal and inside
+the node's 30 second clock-skew window, is refused with status 401 and code
+401020, so only the removal can refuse it. The check logs status codes and row
+counts only.
+
 CI runs this in the `ui-e2e` job of `Validate wrapper`.

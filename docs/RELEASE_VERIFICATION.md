@@ -20,8 +20,8 @@ Status meanings:
 
 | Component | Revision |
 | --- | --- |
-| `PIGEON_SWARM_NODE_SHA` | `dc9dd88cd7d06cf1f8dec34567cfa6ce0aefab4b` |
-| `PIGEON_SWARM_UI_SHA` | `cd3d69beb958450da958bf3faf02134ba4f5b3f5` |
+| `PIGEON_SWARM_NODE_SHA` | `06e60b788d80015cf29bca6768cd3c5c2493bb0c` |
+| `PIGEON_SWARM_UI_SHA` | `8426a16b3b570e39ed76f77cd23ecf691e06d55a` |
 
 Both revisions are commits of the public `haskou/pigeon-swarm-node` and
 `haskou/pigeon-swarm-ui` repositories. CI builds the application image from these
@@ -42,7 +42,7 @@ Every CI test step in `validate.yml` appears here exactly once.
 | M06 | Browser probe diagnostic redaction | Probe test against a local HTTP server | None | `Verify browser diagnostic redaction` | The external probe does not print malformed credential response bodies | Automated |
 | M07 | Backend-issued TURN credentials and browser audio, before and after application restart | One application with its own coturn; browser probe per transport | Relay-only ICE; UDP, TCP and TLS listeners with a disposable certificate pinned by the probe; application container restarted between cycles | `Verify backend-issued credentials and bidirectional browser audio` | The probe selects a relay candidate pair for each transport and reports inbound audio, before and after the restart | Automated |
 | M08 | Relay discovery without private bootstrap addresses, isolation of a cold node, recovery and community convergence | Four public DHT bootstrap containers and three application containers; IPv4 only | Public connections dropped for the isolated node; private links closed repeatedly; application restart | `Verify automatic relay discovery and recovery` | Full private relay mesh forms without manual relay addresses; fresh signalling delivered after each interruption; six concurrent community operations, including a delegation revocation racing a kick, each accepted or rejected as expected and converge on every node | Automated |
-| M09 | Moderation and publishing limits | One real node, signed requests | None | `Verify moderation and publishing limits on a real node` | A kick removes the member and is logged; identity publication above the limit returns HTTP 429 with code 429040 | Automated |
+| M09 | Moderation and publishing limits | One real node with the per-source identity admission cap off, signed requests | None | `Verify moderation and publishing limits on a real node` | A kick removes the member and is logged; identity publication above the limit returns HTTP 429 with code 429040 | Automated |
 | M10 | Application workflows between two independent nodes | Two application containers with separate storage, two coturn services (turn-a, turn-b), two Chromium sessions; non-NAT runs also start a third application container (app-restored) from copies of the stopped volumes | Injected 409 participant-replication window of 300 ms; applications restarted one at a time; media restricted to each node's UDP TURN URL | `Verify application workflows between independent nodes` | Invitation acceptance, private messages, community creation and delivery, direct and community calls with inbound audio, leave and rejoin, login cycles, removal after departure and after network loss, and retained messages pass, as listed in [TWO_NODE_CALL_VALIDATION.md](TWO_NODE_CALL_VALIDATION.md). Non-NAT runs also restore from stopped copies: `caller-1` keeps its identity and node network list, and the restored node keeps its private network peer ID, after start and after restart; see [BACKUP_RESTORE.md](BACKUP_RESTORE.md). A synthetic plaintext canary is displayed in both browsers and has no copy in any encoding defined by `tests/canary-scan.mjs` in the stopped data volumes of each node, in the restored node's volumes, or in container logs; a planted control of each encoding is detected. TURN-entrypoint supervision checks also run. | Partial |
 | M11 | Application calls across two NAT routers with a TURN server per node | Two router namespaces on a simulated WAN; Playwright controller | Port-mapped NAT with SNAT, DNAT and hairpin; WAN-to-LAN UDP accepted only from the peer subnet and established flows; relay media range blocked as a preflight negative control | `Verify application calls across two NAT routers` | The workflow of M10 runs across the routers; the UDP preflight succeeds when the media range is open and fails when blocked; inbound audio increases; router counters show UDP from the WAN | Partial |
 | M12 | Independent client trust boundary and update rollback | Client built independently; explicitly fake backend fixtures over HTTPS | None | `Verify browser trust boundary and update rollback` | Same-origin update and rollback fixtures stay fresh and the trust boundary holds, against fixtures only; real-node behavior is covered by M13 | Automated |
@@ -84,7 +84,7 @@ private addresses.
 ## Residual metadata
 
 From [data inventory](privacy/DATA-INVENTORY.md), which is a code snapshot at
-backend `4f43437`. The pinned backend (`df1b139`) has not been re-inventoried.
+backend `4f43437`. The pinned backend (`06e60b78`) has not been re-inventoried.
 
 - Replicated document metadata is visible to replica operators even though
   payloads are encrypted. It includes actors, conversation and message
@@ -129,8 +129,8 @@ The source repositories are public. The Dockerfile needs no token for these pins
 
 ```sh
 docker build --target production \
-  --build-arg PIGEON_SWARM_NODE_SHA=dc9dd88cd7d06cf1f8dec34567cfa6ce0aefab4b \
-  --build-arg PIGEON_SWARM_UI_SHA=cd3d69beb958450da958bf3faf02134ba4f5b3f5 \
+  --build-arg PIGEON_SWARM_NODE_SHA=06e60b788d80015cf29bca6768cd3c5c2493bb0c \
+  --build-arg PIGEON_SWARM_UI_SHA=8426a16b3b570e39ed76f77cd23ecf691e06d55a \
   --iidfile pigeon-test-image.id .
 export PIGEON_TEST_IMAGE="$(cat pigeon-test-image.id)"
 npm ci --ignore-scripts

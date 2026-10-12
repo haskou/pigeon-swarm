@@ -24,7 +24,13 @@ recipient's saved mailbox state, sends a second message with the recipient's
 legacy copy withheld, and requires that message to render from the mailbox
 alone, with envelope and acknowledgement counts increasing. The specs alone
 cannot show this path, because a failed mailbox append is silent while the
-legacy copy still delivers.
+legacy copy still delivers. With the legacy copy still withheld, the sender
+then replies to and reacts to that message, and edits and deletes its own
+mailbox-only message, since the UI lets only a message's author edit or delete
+it. Each action must reach the recipient from the mailbox alone, with envelope,
+acknowledgement and withheld-frame counts increasing. The server's POST and PUT
+responses must echo `replyToMessageId` and `targetMessageId`, so the mailbox
+record is built from the ids the server recorded.
 
 It then pairs a second device of the recipient's identity through the UI and
 sends a third message. The second device's envelope reads are held until the
@@ -35,6 +41,7 @@ are logged by token class. In a passing CI run the second device made two reads,
 both with device reader tokens, and two acknowledgements, one with a device reader
 token and one with the inbox root token (the root mirror). The hold opened with no
 read held (`heldReads` 0), so that run did not show the hold delaying any read.
-The check logs counts only, never message text, ids or envelope bodies.
+The check logs counts only, never message text, ids or envelope bodies. Per-action
+counts of the mailbox-only steps are logged under `mailboxActions`.
 
 CI runs this in the `ui-e2e` job of `Validate wrapper`.

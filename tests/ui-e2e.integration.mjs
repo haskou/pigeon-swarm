@@ -102,10 +102,13 @@ const isLegacyMessageFrame = (message) => {
 // on this node, then that the recipient renders a second message with the
 // legacy copy withheld, after its saved mailbox state is cleared. A failed
 // mailbox append is silent and the legacy copy still delivers, so the specs
-// above cannot show this path. A second device of the recipient's identity,
-// paired in through the UI, must render a third message only after the first
-// device has acked it. Logs counts only: no message text, ids or envelope
-// bodies.
+// above cannot show this path. With the legacy copy still withheld, the sender
+// then replies to, reacts to, edits and deletes messages, and each must reach
+// the recipient from the mailbox alone. The server must echo replyToMessageId
+// and targetMessageId in the responses those records are built from. A second
+// device of the recipient's identity, paired in through the UI, must render a
+// third message only after the first device has acked it. Logs counts only: no
+// message text, ids or envelope bodies.
 const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   const { chromium } = createRequire(join(uiSource, "package.json"))(
     "playwright-core",
@@ -533,6 +536,157 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       90000,
       "direct message did not render from the recipient mailbox alone",
     );
+    // Mailbox-only actions. Bob's legacy copies stay withheld from here on, so
+    // each action below must reach him through the mailbox alone. Only a
+    // message's author can edit or delete it, so Alice replies to and reacts to
+    // Bob's message, then edits and deletes her own. Each action waits for Bob
+    // to render it, and for his envelope, ack and withheld-frame counts to move.
+    const actions = {};
+    const bobSnapshot = () => ({
+      envelopes: bob.counts.envelopes,
+      acks: bob.counts.acks,
+      withheld: bob.legacy.withheldFrames,
+    });
+    const bobStep = async (name, before, achieved) => {
+      await waitFor(
+        async () => {
+          const done = await achieved();
+
+          assert.ok(
+            done &&
+              bob.counts.envelopes > before.envelopes &&
+              bob.counts.acks > before.acks &&
+              bob.legacy.withheldFrames > before.withheld,
+            `recipient ${name} ${JSON.stringify({
+              done,
+              counts: bob.counts,
+              legacy: bob.legacy,
+            })}`,
+          );
+        },
+        90000,
+        `${name} did not render from the recipient mailbox alone`,
+      );
+      actions[name] = {
+        envelopes: bob.counts.envelopes - before.envelopes,
+        acks: bob.counts.acks - before.acks,
+        withheldFrames: bob.legacy.withheldFrames - before.withheld,
+      };
+    };
+    const messageItem = (page, text) =>
+      page.getByTestId("message-item").filter({ hasText: text, visible: true });
+    const messageId = (page, text) =>
+      messageItem(page, text).first().getAttribute("data-message-id");
+    const openMessageMenu = async (page, text) => {
+      await messageItem(page, text)
+        .first()
+        .getByTestId("message-bubble")
+        .click({ button: "right" });
+    };
+    const menuAction = (page, label) =>
+      page.getByRole("button", { name: label, exact: true }).click();
+
+    const bobTargetText = `bob target ${suffix}`;
+
+    await bob.page.getByTestId("message-composer-input").fill(bobTargetText);
+    await bob.page.getByTestId("message-send-button").click();
+    await waitFor(
+      async () =>
+        assert.ok(
+          (await messageItem(alice.page, bobTargetText).count()) > 0,
+          "sender did not render the recipient's message",
+        ),
+      90000,
+      "recipient's message did not reach the sender",
+    );
+    const bobTargetId = await messageId(alice.page, bobTargetText);
+
+    assert.ok(bobTargetId, "sender's view of the recipient's message has no id");
+
+    const replyText = `reply ${suffix}`;
+    const replyBefore = bobSnapshot();
+
+    await openMessageMenu(alice.page, bobTargetText);
+    await menuAction(alice.page, "Reply");
+    await alice.page.getByTestId("message-composer-input").fill(replyText);
+    const [replyResponse] = await Promise.all([
+      alice.page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname.endsWith("/messages"),
+      ),
+      alice.page.getByTestId("message-send-button").click(),
+    ]);
+    assert.equal(
+      (await replyResponse.json()).replyToMessageId,
+      bobTargetId,
+      "server response did not echo replyToMessageId",
+    );
+    await bobStep("reply", replyBefore, async () =>
+      (await messageItem(bob.page, replyText)
+        .filter({ hasText: bobTargetText })
+        .count()) > 0,
+    );
+
+    const reactionBefore = bobSnapshot();
+
+    await openMessageMenu(alice.page, bobTargetText);
+    const addReaction = alice.page
+      .getByRole("button", { name: /^Add reaction /u })
+      .first();
+    const reactionLabel = await addReaction.getAttribute("aria-label");
+    const emoji = reactionLabel?.replace("Add reaction ", "");
+
+    assert.ok(emoji, "no quick reaction offered on the recipient's message");
+    await addReaction.click();
+    await bobStep("reaction", reactionBefore, async () =>
+      (await messageItem(bob.page, bobTargetText)
+        .first()
+        .getByRole("button", { name: `${emoji} 1`, exact: true })
+        .count()) > 0,
+    );
+
+    const editedText = `edited ${suffix}`;
+    const mailboxOnlyId = await messageId(alice.page, mailboxOnlyText);
+
+    assert.ok(
+      mailboxOnlyId,
+      "sender's view of the mailbox-only message has no id",
+    );
+
+    const editBefore = bobSnapshot();
+
+    await openMessageMenu(alice.page, mailboxOnlyText);
+    await menuAction(alice.page, "Edit");
+    await alice.page.getByTestId("message-composer-input").fill(editedText);
+    const [editResponse] = await Promise.all([
+      alice.page.waitForResponse(
+        (response) =>
+          response.request().method() === "PUT" &&
+          new URL(response.url()).pathname.endsWith(
+            `/messages/${encodeURIComponent(mailboxOnlyId)}`,
+          ),
+      ),
+      alice.page.getByTestId("message-send-button").click(),
+    ]);
+    assert.equal(
+      (await editResponse.json()).targetMessageId,
+      mailboxOnlyId,
+      "server response did not echo targetMessageId",
+    );
+    await bobStep("edit", editBefore, async () =>
+      (await messageItem(bob.page, editedText).count()) > 0 &&
+      (await messageItem(bob.page, mailboxOnlyText).count()) === 0,
+    );
+
+    const deleteBefore = bobSnapshot();
+
+    await openMessageMenu(alice.page, replyText);
+    await menuAction(alice.page, "Delete");
+    await bobStep("delete", deleteBefore, async () =>
+      (await messageItem(bob.page, replyText).count()) === 0,
+    );
+
     // A second device of the recipient's identity pairs in from device A and
     // reads the same inbox with its own reader. The next message must reach it
     // from the mailbox alone, and only after device A has acked that message.
@@ -692,6 +846,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       JSON.stringify({
         directMailbox: {
           sender: alice.counts,
+          mailboxActions: actions,
           recipient: bob.counts,
           recipientStateCleared: clearedMailboxState,
           legacyWithheld: {

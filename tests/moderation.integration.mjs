@@ -73,6 +73,11 @@ test(
         `CALLS_TURN_SHARED_SECRET=${randomBytes(32).toString("hex")}`,
         "-e",
         "PIGEON_PUBLIC_BOOTSTRAP_ENABLED=false",
+        // The per-source identity admission cap (default 30 a minute) is off: this
+        // fixture creates many identities from one address. The node's own API
+        // tests cover the cap.
+        "-e",
+        "IDENTITIES_SOURCE_ADMISSION_RATE_LIMIT_PER_MINUTE=0",
         image,
       ]);
       const env = [

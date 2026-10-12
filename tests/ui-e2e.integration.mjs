@@ -157,6 +157,13 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     // by a device, "unknown" for anything else.
     const openPage = async ({ withholdLegacy = false } = {}) => {
       const context = await browser.newContext({ locale: "en-US" });
+      // The app falls back to Spanish unless English is stored explicitly; the
+      // probe's locators are English, so seed the stored language per context.
+      await context.addInitScript(() => {
+        if (!location.protocol.startsWith("http")) return;
+        localStorage.setItem("pigeon-swarm-language-v2", "en");
+        localStorage.setItem("pigeon-swarm-language-explicit-v3", "true");
+      });
       const page = await context.newPage();
       page.setDefaultTimeout(45000);
       const counts = {

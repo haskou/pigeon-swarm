@@ -98,6 +98,94 @@ const isLegacyMessageFrame = (message) => {
   }
 };
 
+const visible = (page, testId) =>
+  page.getByTestId(testId).filter({ visible: true }).first();
+const dismissPushPrompt = async (page) => {
+  const dismiss = visible(page, "push-notification-dismiss-button");
+
+  if ((await dismiss.count()) > 0) await dismiss.click();
+};
+const openSidebar = async (page) => {
+  if ((await visible(page, "create-conversation-button").count()) > 0) {
+    return;
+  }
+
+  await visible(page, "workspace-sidebar-open-button").click();
+  await visible(page, "create-conversation-button").waitFor({
+    state: "visible",
+  });
+};
+// Pairs a new device of the identity from a signed-in device, through the
+// same UI steps a user takes, then waits for the new device's workspace.
+const pairDevice = async (origin, password, authorized, handle, fresh) => {
+  await openSidebar(authorized);
+  await visible(authorized, "own-profile-menu-button").click();
+  await authorized.getByTestId("edit-profile-button").click();
+  await authorized.getByRole("button", { name: "Security" }).click();
+  await authorized.getByTestId("profile-pair-device").click();
+
+  const invitation = await authorized
+    .getByTestId("device-pairing-invitation-output")
+    .inputValue();
+
+  assert.match(invitation, /^\S+$/);
+  await fresh.goto(origin);
+  await fresh.getByTestId("auth-identity-input").fill(`@${handle}`);
+  await fresh
+    .getByTestId("auth-login-method-control")
+    .getByRole("button", { name: "New device" })
+    .click();
+  await fresh
+    .getByTestId("auth-device-pairing-invitation-input")
+    .fill(invitation);
+  await fresh.getByTestId("auth-device-pairing-prepare").click();
+
+  const request = await fresh
+    .getByTestId("auth-device-pairing-request-output")
+    .inputValue();
+  const code = await fresh
+    .getByTestId("auth-device-pairing-verification-code")
+    .innerText();
+
+  await authorized.getByTestId("device-pairing-request-input").fill(request);
+  await authorized.getByTestId("device-pairing-submit").click();
+  await waitFor(
+    async () => {
+      const shown = await authorized
+        .getByTestId("device-pairing-verification-code")
+        .innerText();
+
+      assert.equal(shown, code);
+    },
+    45000,
+    "pairing verification codes differ",
+  );
+  await authorized.getByTestId("device-pairing-submit").click();
+
+  const completionOutput = authorized.getByTestId(
+    "device-pairing-completion-output",
+  );
+
+  await completionOutput.waitFor({ state: "visible" });
+
+  const completion = await completionOutput.inputValue();
+
+  await fresh
+    .getByTestId("auth-device-pairing-completion-input")
+    .fill(completion);
+  await fresh.getByTestId("auth-password-input").fill(password);
+  await fresh.getByTestId("auth-password-confirmation-input").fill(password);
+  await fresh.getByTestId("auth-submit-button").click();
+  await visible(fresh, "create-conversation-button").waitFor({
+    state: "visible",
+  });
+  await dismissPushPrompt(fresh);
+  await authorized
+    .getByRole("button", { name: "Close dialog" })
+    .last()
+    .click();
+};
+
 // Checks that a one-to-one message also travels through the recipient mailbox
 // on this node, then that the recipient renders a second message with the
 // legacy copy withheld, after its saved mailbox state is cleared. A failed
@@ -119,23 +207,6 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   try {
     const suffix = randomBytes(3).toString("hex");
     const password = `Disposable-mailbox-test-password1!${suffix}`;
-    const visible = (page, testId) =>
-      page.getByTestId(testId).filter({ visible: true }).first();
-    const dismissPushPrompt = async (page) => {
-      const dismiss = visible(page, "push-notification-dismiss-button");
-
-      if ((await dismiss.count()) > 0) await dismiss.click();
-    };
-    const openSidebar = async (page) => {
-      if ((await visible(page, "create-conversation-button").count()) > 0) {
-        return;
-      }
-
-      await visible(page, "workspace-sidebar-open-button").click();
-      await visible(page, "create-conversation-button").waitFor({
-        state: "visible",
-      });
-    };
     const selectConversation = async (page, title) => {
       await openSidebar(page);
       const row = page
@@ -349,76 +420,6 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
         });
       await dismissPushPrompt(page);
       return opened;
-    };
-    // Pairs a new device of the identity from a signed-in device, through the
-    // same UI steps a user takes, then waits for the new device's workspace.
-    const pairDevice = async (authorized, handle, fresh) => {
-      await openSidebar(authorized);
-      await visible(authorized, "own-profile-menu-button").click();
-      await authorized.getByTestId("edit-profile-button").click();
-      await authorized.getByRole("button", { name: "Security" }).click();
-      await authorized.getByTestId("profile-pair-device").click();
-
-      const invitation = await authorized
-        .getByTestId("device-pairing-invitation-output")
-        .inputValue();
-
-      assert.match(invitation, /^\S+$/);
-      await fresh.goto(origin);
-      await fresh.getByTestId("auth-identity-input").fill(`@${handle}`);
-      await fresh
-        .getByTestId("auth-login-method-control")
-        .getByRole("button", { name: "New device" })
-        .click();
-      await fresh
-        .getByTestId("auth-device-pairing-invitation-input")
-        .fill(invitation);
-      await fresh.getByTestId("auth-device-pairing-prepare").click();
-
-      const request = await fresh
-        .getByTestId("auth-device-pairing-request-output")
-        .inputValue();
-      const code = await fresh
-        .getByTestId("auth-device-pairing-verification-code")
-        .innerText();
-
-      await authorized.getByTestId("device-pairing-request-input").fill(request);
-      await authorized.getByTestId("device-pairing-submit").click();
-      await waitFor(
-        async () => {
-          const shown = await authorized
-            .getByTestId("device-pairing-verification-code")
-            .innerText();
-
-          assert.equal(shown, code);
-        },
-        45000,
-        "pairing verification codes differ",
-      );
-      await authorized.getByTestId("device-pairing-submit").click();
-
-      const completionOutput = authorized.getByTestId(
-        "device-pairing-completion-output",
-      );
-
-      await completionOutput.waitFor({ state: "visible" });
-
-      const completion = await completionOutput.inputValue();
-
-      await fresh
-        .getByTestId("auth-device-pairing-completion-input")
-        .fill(completion);
-      await fresh.getByTestId("auth-password-input").fill(password);
-      await fresh.getByTestId("auth-password-confirmation-input").fill(password);
-      await fresh.getByTestId("auth-submit-button").click();
-      await visible(fresh, "create-conversation-button").waitFor({
-        state: "visible",
-      });
-      await dismissPushPrompt(fresh);
-      await authorized
-        .getByRole("button", { name: "Close dialog" })
-        .last()
-        .click();
     };
     const alice = await register(`Mailbox A ${suffix}`, `mailbox-a-${suffix}`);
     const bob = await register(`Mailbox B ${suffix}`, `mailbox-b-${suffix}`, {
@@ -695,7 +696,13 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     // from the mailbox alone, and only after device A has acked that message.
     const device = await openPage({ withholdLegacy: true });
 
-    await pairDevice(bob.page, `mailbox-b-${suffix}`, device.page);
+    await pairDevice(
+      origin,
+      password,
+      bob.page,
+      `mailbox-b-${suffix}`,
+      device.page,
+    );
     await selectConversation(device.page, `Mailbox A ${suffix}`);
     await waitFor(
       () =>
@@ -896,61 +903,249 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   }
 };
 
+const assertTestInputs = () => {
+  assert.match(
+    image || "",
+    /^(?:ghcr\.io\/haskou\/pigeon-swarm@)?sha256:[a-f0-9]{64}$/,
+  );
+  assert.ok(uiSource, "PIGEON_UI_SOURCE must point to the UI checkout");
+};
+
+// Starts the application image with an external TURN relay, registers a
+// network on it and waits until the UI is served. Returns the network.
+const startNode = async (name) => {
+  const network = {
+    id: randomUUID(),
+    name: "UI acceptance",
+    key: generateKeyPairSync("ed25519")
+      .privateKey.export({ format: "pem", type: "pkcs8" })
+      .toString(),
+  };
+
+  await run("docker", [
+    "run",
+    "-d",
+    "--name",
+    name,
+    "-p",
+    "127.0.0.1:8080:8080",
+    "-e",
+    "PIGEON_TURN_MODE=external",
+    "-e",
+    `CALLS_TURN_SHARED_SECRET=${randomBytes(32).toString("hex")}`,
+    "-e",
+    "PIGEON_PUBLIC_BOOTSTRAP_ENABLED=false",
+    image,
+  ]);
+  await waitFor(
+    async () => {
+      const response = await fetch(`${origin}/api/node/`);
+      assert.ok(response.ok, `node status ${response.status}`);
+    },
+    120000,
+    "node did not become ready",
+  );
+  const registered = await fetch(`${origin}/api/node/networks/`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(network),
+  });
+
+  assert.ok(registered.ok, `network registration ${registered.status}`);
+  await waitFor(
+    async () => {
+      const response = await fetch(`${origin}/`);
+      assert.ok(response.ok, `UI status ${response.status}`);
+    },
+    60000,
+    "UI is not served by the image",
+  );
+
+  return network;
+};
+
+// Creates an identity on the first device through the UI.
+const registerIdentity = async (page, origin, { name, handle, password }) => {
+  await page.goto(origin);
+  await page.getByTestId("auth-mode-control").locator("button").nth(1).click();
+  await page.getByTestId("auth-name-input").fill(name);
+  await page.getByTestId("auth-handle-input").fill(handle);
+  await page.getByTestId("auth-password-input").fill(password);
+  await page.getByTestId("auth-password-confirmation-input").fill(password);
+  const recoveryKey = await page
+    .getByTestId("auth-recovery-key-output")
+    .inputValue();
+  await page.getByTestId("auth-recovery-key-confirm").click();
+  await page.getByTestId("auth-submit-button").click();
+  await visible(page, "create-conversation-button").waitFor({
+    state: "visible",
+  });
+  await dismissPushPrompt(page);
+  return recoveryKey;
+};
+
+// Forgetting a device runs in that device's own profile menu. The device
+// signs its requests with its credential, so the node must keep accepting a
+// device-proof request the device signed before forgetting, and must refuse
+// the identical request once the credential is revoked. The first device must
+// still list itself. Logs hold status codes and counts only: no headers.
+const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
+  const { chromium } = createRequire(join(uiSource, "package.json"))(
+    "playwright-core",
+  );
+  const browser = await chromium.launch({ headless: true });
+
+  try {
+    const suffix = randomBytes(3).toString("hex");
+    const password = `Disposable-forget-test-password1!${suffix}`;
+    const handle = `forget-a-${suffix}`;
+    // Each page records the device-proof headers of its device-list requests,
+    // the only signed requests this assertion replays.
+    const openPage = async () => {
+      const context = await browser.newContext({ locale: "en-US" });
+
+      // The app falls back to Spanish unless English is stored explicitly.
+      await context.addInitScript(() => {
+        if (!location.protocol.startsWith("http")) return;
+        localStorage.setItem("pigeon-swarm-language-v2", "en");
+        localStorage.setItem("pigeon-swarm-language-explicit-v3", "true");
+      });
+      const page = await context.newPage();
+      const proofs = [];
+
+      page.setDefaultTimeout(45000);
+      // Forgetting asks for confirmation through a native dialog.
+      page.on("dialog", (dialog) => dialog.accept());
+      page.on("request", (request) => {
+        const headers = request.headers();
+
+        if (
+          request.method() === "GET" &&
+          headers["x-device-signature"] !== undefined &&
+          /^\/api\/identity-devices\/[^/]+\/devices$/.test(
+            new URL(request.url()).pathname,
+          )
+        ) {
+          proofs.push({
+            url: request.url(),
+            headers: Object.fromEntries(
+              Object.entries(headers).filter(([key]) => key.startsWith("x-")),
+            ),
+          });
+        }
+      });
+
+      return { page, proofs };
+    };
+    const openManageDevices = async (page) => {
+      await openSidebar(page);
+      await visible(page, "own-profile-menu-button").click();
+      await page.getByTestId("edit-profile-button").click();
+      await page.getByRole("button", { name: "Security" }).click();
+      await page.getByTestId("profile-manage-devices").click();
+    };
+    const expectDeviceRows = (page, expected, description) =>
+      waitFor(
+        async () => {
+          assert.equal(await page.getByTestId("device-row").count(), expected);
+        },
+        45000,
+        description,
+      );
+    const replay = async (proof) => {
+      const response = await fetch(proof.url, { headers: proof.headers });
+      const body = await response.json().catch(() => ({}));
+
+      return { status: response.status, code: body.code };
+    };
+    const first = await openPage();
+    const second = await openPage();
+
+    const recoveryKey = await registerIdentity(first.page, origin, {
+      name: `Forget A ${suffix}`,
+      handle,
+      password,
+    });
+
+    // The second device signs in as a new device with the recovery key and
+    // password, the same steps the UI's own login spec takes on a new browser.
+    await second.page.goto(origin);
+    await second.page.getByTestId("auth-identity-input").fill(`@${handle}`);
+    await second.page
+      .getByTestId("auth-login-method-control")
+      .getByRole("button", { name: "Recovery key" })
+      .click();
+    await second.page.getByTestId("auth-recovery-key-input").fill(recoveryKey);
+    await second.page.getByTestId("auth-password-input").fill(password);
+    await second.page
+      .getByTestId("auth-password-confirmation-input")
+      .fill(password);
+    await second.page.getByTestId("auth-submit-button").click();
+    await visible(second.page, "create-conversation-button").waitFor({
+      state: "visible",
+    });
+    await dismissPushPrompt(second.page);
+
+    await openManageDevices(second.page);
+    await expectDeviceRows(
+      second.page,
+      2,
+      "second device does not list both devices",
+    );
+    assert.ok(second.proofs.length > 0, "no device-proof request was recorded");
+    const signed = second.proofs.at(-1);
+    const accepted = await replay(signed);
+
+    assert.equal(
+      accepted.status,
+      200,
+      `device-proof request before forgetting: status ${accepted.status}`,
+    );
+    await second.page
+      .getByRole("button", { name: "Close dialog" })
+      .last()
+      .click();
+
+    await openSidebar(second.page);
+    await visible(second.page, "own-profile-menu-button").click();
+    await visible(second.page, "forget-device-button").click();
+    await second.page
+      .getByTestId("auth-identity-input")
+      .waitFor({ state: "visible" });
+
+    const refused = await replay(signed);
+
+    assert.equal(
+      refused.status,
+      401,
+      `device-proof request after forgetting: status ${refused.status}`,
+    );
+    assert.equal(
+      refused.code,
+      401020,
+      `device-proof request after forgetting: code ${refused.code}`,
+    );
+
+    await openManageDevices(first.page);
+    await expectDeviceRows(
+      first.page,
+      1,
+      "first device does not list one device after the forget",
+    );
+  } finally {
+    await browser.close();
+  }
+};
+
 test(
   "UI flows work against a real node served by the application image",
   { timeout: 1800000 },
   async () => {
-    assert.match(
-      image || "",
-      /^(?:ghcr\.io\/haskou\/pigeon-swarm@)?sha256:[a-f0-9]{64}$/,
-    );
-    assert.ok(uiSource, "PIGEON_UI_SOURCE must point to the UI checkout");
+    assertTestInputs();
     const name = `pigeon-ui-e2e-${randomBytes(5).toString("hex")}`;
-    const network = {
-      id: randomUUID(),
-      name: "UI acceptance",
-      key: generateKeyPairSync("ed25519")
-        .privateKey.export({ format: "pem", type: "pkcs8" })
-        .toString(),
-    };
+
     try {
-      await run("docker", [
-        "run",
-        "-d",
-        "--name",
-        name,
-        "-p",
-        "127.0.0.1:8080:8080",
-        "-e",
-        "PIGEON_TURN_MODE=external",
-        "-e",
-        `CALLS_TURN_SHARED_SECRET=${randomBytes(32).toString("hex")}`,
-        "-e",
-        "PIGEON_PUBLIC_BOOTSTRAP_ENABLED=false",
-        image,
-      ]);
-      await waitFor(
-        async () => {
-          const response = await fetch(`${origin}/api/node/`);
-          assert.ok(response.ok, `node status ${response.status}`);
-        },
-        120000,
-        "node did not become ready",
-      );
-      const registered = await fetch(`${origin}/api/node/networks/`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(network),
-      });
-      assert.ok(registered.ok, `network registration ${registered.status}`);
-      await waitFor(
-        async () => {
-          const response = await fetch(`${origin}/`);
-          assert.ok(response.ok, `UI status ${response.status}`);
-        },
-        60000,
-        "UI is not served by the image",
-      );
+      const network = await startNode(name);
       const playwright = (projects, files) =>
         run(
           "yarn",
@@ -970,9 +1165,29 @@ test(
             },
           },
         );
+
       await playwright(["desktop-chromium"], specs);
       await playwright(crossEngineProjects, crossEngineSpecs);
       await assertDirectMessageMailboxDelivery(uiSource, origin);
+    } catch (error) {
+      await run("docker", ["logs", "--tail", "200", name]).catch(() => {});
+      throw error;
+    } finally {
+      await run("docker", ["rm", "-fv", name]).catch(() => {});
+    }
+  },
+);
+
+test(
+  "a forgotten device is refused by the node and a second device signs in",
+  { timeout: 900000 },
+  async () => {
+    assertTestInputs();
+    const name = `pigeon-forget-e2e-${randomBytes(5).toString("hex")}`;
+
+    try {
+      await startNode(name);
+      await assertDeviceForgetRevokesCredential(uiSource, origin);
     } catch (error) {
       await run("docker", ["logs", "--tail", "200", name]).catch(() => {});
       throw error;

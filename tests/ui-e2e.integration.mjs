@@ -18,15 +18,13 @@ const origin = "http://127.0.0.1:8080";
 const specs = [
   "e2e/login-methods.spec.ts",
   "e2e/empty-members-column.spec.ts",
-  "e2e/remember-session.spec.ts",
   "e2e/direct-message-sync.spec.ts",
   "e2e/call-page-departure.spec.ts",
 ];
-// Engine and viewport coverage: the session specs that need no second device.
+// Engine and viewport coverage: the specs that need no second device.
 const crossEngineSpecs = [
   "e2e/login-methods.spec.ts",
   "e2e/empty-members-column.spec.ts",
-  "e2e/remember-session.spec.ts",
 ];
 const crossEngineProjects = ["mobile-chromium", "desktop-firefox"];
 

@@ -509,7 +509,7 @@ The `.dockerignore` file allowlists the build context: only the Dockerfile, `doc
 
 The [publish workflow](../.github/workflows/publish-docker.yml) publishes the image on a push to `main`, on the `source-published` `repository_dispatch` event described below, and on manual `workflow_dispatch` runs with optional `node_ref` and `ui_ref` inputs.
 
-The [validation workflow](../.github/workflows/validate.yml) runs on every push and pull request. It validates the Docker Compose example and checks that the public configuration stays simple.
+The [validation workflow](../.github/workflows/validate.yml) runs on every push and pull request. It validates the Docker Compose example and checks that the public configuration stays simple. A change that only touches Markdown outside `.github/`, or images under `docs/`, skips the heavy checks (browser, coturn, production image, multi-node and independent-client jobs); the light checks always run.
 
 For GitHub Actions, add this repository secret if the source repositories are private:
 

@@ -984,11 +984,11 @@ const registerIdentity = async (page, origin, { name, handle, password }) => {
   return recoveryKey;
 };
 
-// Forgetting a device runs in that device's own profile menu. The device
-// signs its requests with its credential, so the node must keep accepting a
-// device-proof request the device signed before forgetting, and must refuse
-// the identical request once the credential is revoked. The first device must
-// still list itself. Logs hold status codes and counts only: no headers.
+// Removing a device's access runs in another device's manage-devices dialog.
+// The removed device signs requests with its credential, so the node must
+// accept a device-proof request it signed before the removal and refuse a fresh
+// one after it. The first device must then list only itself. Logs hold status
+// codes and counts only: no headers.
 const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
   const { chromium } = createRequire(join(uiSource, "package.json"))(
     "playwright-core",
@@ -1061,6 +1061,17 @@ const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
         45000,
         description,
       );
+    // Closes the innermost dialog carrying the marker. The device dialog renders
+    // inside the profile editor overlay, so the last scrim is the one to close.
+    const closeDialog = async (page, markerTestId) => {
+      await page
+        .locator(".app-overlay-scrim", { has: page.getByTestId(markerTestId) })
+        .last()
+        .locator(".ui-dialog-header")
+        .getByRole("button", { name: "Close dialog" })
+        .click();
+      await page.getByTestId(markerTestId).waitFor({ state: "detached" });
+    };
     const replay = async (proof) => {
       const response = await fetch(proof.url, { headers: proof.headers });
       const body = await response.json().catch(() => ({}));
@@ -1096,35 +1107,53 @@ const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
       "second device does not list both devices",
     );
     assert.ok(second.proofs.length > 0, "no device-proof request was recorded");
-    const signed = second.proofs.at(-1);
-    const accepted = await replay(signed);
+    const accepted = await replay(second.proofs.at(-1));
 
     assert.equal(
       accepted.status,
       200,
       `device-proof request before forgetting: status ${accepted.status}`,
     );
-    await second.page
-      .getByRole("button", { name: "Close dialog" })
-      .last()
-      .click();
-    await second.page.getByTestId("device-list").waitFor({ state: "detached" });
-    await second.page
-      .getByRole("button", { name: "Close dialog" })
-      .last()
-      .click();
-    await second.page
-      .getByTestId("profile-save-button")
-      .waitFor({ state: "detached" });
+    await closeDialog(second.page, "device-list");
+    await closeDialog(second.page, "profile-save-button");
 
-    await openSidebar(second.page);
-    await visible(second.page, "own-profile-menu-button").click();
-    await visible(second.page, "forget-device-button").click();
-    await second.page
-      .getByTestId("auth-identity-input")
-      .waitFor({ state: "visible" });
+    await openManageDevices(first.page);
+    await expectDeviceRows(
+      first.page,
+      2,
+      "first device does not list both devices",
+    );
+    await first.page.getByTestId("device-revoke-open").click();
+    await first.page.getByTestId("device-revoke-confirm").click();
+    await expectDeviceRows(
+      first.page,
+      1,
+      "first device does not list one device after forgetting the second",
+    );
 
-    const refused = await replay(signed);
+    // The node also refuses a signed proof once it is older than its 30 s
+    // clock-skew window, so the refused request must be a fresh proof sent by
+    // the second device after the revocation. Only the revocation can refuse it.
+    const proofsBeforeRefusal = second.proofs.length;
+
+    await openManageDevices(second.page);
+    await waitFor(
+      () => {
+        assert.ok(second.proofs.length > proofsBeforeRefusal);
+      },
+      45000,
+      "second device sent no device-proof request after the revocation",
+    );
+    const refusedProof = second.proofs.at(-1);
+    const ageMs = Math.abs(
+      Date.now() - Number(refusedProof.headers["x-timestamp"]),
+    );
+
+    assert.ok(
+      ageMs < 30000,
+      `refused device-proof request is ${ageMs} ms old, outside the 30 s window`,
+    );
+    const refused = await replay(refusedProof);
 
     assert.equal(
       refused.status,
@@ -1135,13 +1164,6 @@ const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
       refused.code,
       401020,
       `device-proof request after forgetting: code ${refused.code}`,
-    );
-
-    await openManageDevices(first.page);
-    await expectDeviceRows(
-      first.page,
-      1,
-      "first device does not list one device after the forget",
     );
   } finally {
     await browser.close();

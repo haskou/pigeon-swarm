@@ -46,9 +46,12 @@ counts of the mailbox-only steps are logged under `mailboxActions`.
 
 The forgotten-device spec pairs a second device of an identity through the UI,
 signs that device out and signs back in with its password, and requires the
-second device to list both devices. A device-proof request signed by the second
-device is accepted before forgetting and refused with status 401 after the first
-device forgets it, and the second device still signs in afterwards. The check
-logs status codes and row counts only.
+second device to list both devices. A device-proof request the second device
+signed is accepted before the removal. The first device then removes the second
+device's access from its manage-devices dialog and must list only itself. The
+second device's fresh device-proof request, sent after the removal and inside
+the node's 30 second clock-skew window, is refused with status 401 and code
+401020, so only the removal can refuse it. The check logs status codes and row
+counts only.
 
 CI runs this in the `ui-e2e` job of `Validate wrapper`.

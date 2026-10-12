@@ -349,6 +349,35 @@ try {
       `Keychain replication must converge on node ${index + 1} before opening the cross-node conversation`,
     );
   }
+  const ownInboxCreated = independentClient
+    ? pages.map((page, index) => {
+        const ownOrigin = new URL(urls[index]).origin;
+        const created = page
+          .waitForResponse(
+            (response) => {
+              const target = new URL(response.url());
+              return (
+                response.request().method() === "PUT" &&
+                target.origin === ownOrigin &&
+                /\/mailboxes\/[^/]+$/.test(target.pathname) &&
+                response.status() >= 200 &&
+                response.status() < 300
+              );
+            },
+            { timeout: 120000 },
+          )
+          .then(
+            () => undefined,
+            (error) => {
+              throw new Error(
+                `Recipient inbox was not created on its home node: ${error.message}`,
+              );
+            },
+          );
+        created.catch(() => {});
+        return created;
+      })
+    : [];
   stage = "cross-node conversation invitation";
   console.log(stage);
   await pages[0].getByTestId("create-conversation-button").first().click();
@@ -403,6 +432,7 @@ try {
       });
     });
   }
+  if (independentClient) await Promise.all(ownInboxCreated);
   const deliver = async (sender, text) => {
     await sender.bringToFront();
     await sender.getByTestId("message-composer-input").fill(text);

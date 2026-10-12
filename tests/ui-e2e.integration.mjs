@@ -107,8 +107,9 @@ const isLegacyMessageFrame = (message) => {
 // the recipient from the mailbox alone. The server must echo replyToMessageId
 // and targetMessageId in the responses those records are built from. A second
 // device of the recipient's identity, paired in through the UI, must render a
-// third message only after the first device has acked it. Logs counts only: no
-// message text, ids or envelope bodies.
+// third message only after the first device has acked it. No mailbox POST may
+// fail on any of the three devices. Logs counts only: no message text, ids or
+// envelope bodies.
 const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   const { chromium } = createRequire(join(uiSource, "package.json"))(
     "playwright-core",
@@ -198,7 +199,9 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       };
       page.on("requestfailed", (request) => {
         if (new URL(request.url()).pathname.startsWith("/api/mailboxes/")) {
-          tally(`${request.method()} failed`);
+          tally(
+            `${request.method()} failed ${request.failure()?.errorText ?? "unknown"}`,
+          );
         }
       });
       page.on("pageerror", (error) => tally(`pageerror ${error.name}`));
@@ -841,6 +844,28 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     assert.ok(
       ackTokens.device > 0,
       `second device acks ${JSON.stringify(ackTokens)}`,
+    );
+    // A mailbox POST that Chromium reports as failed is a regression, whatever
+    // the error text: an acked 204 that the page cancels shows up as
+    // net::ERR_ABORTED. Failed reads (GET) stay in the logged counts only.
+    const failedPosts = (counts) =>
+      Object.entries(counts.seen)
+        .filter(([key]) => key.startsWith("POST failed "))
+        .reduce((total, [, count]) => total + count, 0);
+    const postFailures = {
+      sender: failedPosts(alice.counts),
+      recipient: failedPosts(bob.counts),
+      secondDevice: failedPosts(device.counts),
+    };
+
+    assert.deepEqual(
+      postFailures,
+      { sender: 0, recipient: 0, secondDevice: 0 },
+      `mailbox POST requests failed ${JSON.stringify({
+        sender: alice.counts.seen,
+        recipient: bob.counts.seen,
+        secondDevice: device.counts.seen,
+      })}`,
     );
     console.log(
       JSON.stringify({

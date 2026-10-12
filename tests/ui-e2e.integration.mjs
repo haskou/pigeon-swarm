@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import test from "node:test";
 
 const image = process.env.PIGEON_TEST_IMAGE;
@@ -51,11 +53,204 @@ const waitFor = async (check, timeout, description) => {
     try {
       return await check();
     } catch (error) {
-      if (Date.now() > deadline) {
+      if (error.fatal || Date.now() > deadline) {
         throw new Error(`${description}: ${error.message}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
+  }
+};
+
+// Fails at once when the recipient or sender page shows the network error
+// copy, instead of waiting out the sync timeout. The message carries no page
+// text, only the side that failed.
+const failFastOnNetworkError = async (page, side) => {
+  const networkErrors = await page
+    .getByText(/No se pudo contactar con el servidor/)
+    .count();
+
+  if (networkErrors > 0) {
+    const error = new Error(`${side} page shows the network error copy`);
+    error.fatal = true;
+    throw error;
+  }
+};
+
+// Count-only check that a one-to-one message also travels through the
+// recipient mailbox on this node. A failed mailbox append is silent and the
+// legacy copy still delivers, so the specs above cannot show this path. Logs
+// counts only: no message text, ids or envelope bodies.
+const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
+  const { chromium } = createRequire(join(uiSource, "package.json"))(
+    "playwright-core",
+  );
+  const browser = await chromium.launch({ headless: true });
+
+  try {
+    const suffix = randomBytes(3).toString("hex");
+    const password = `Disposable-mailbox-test-password1!${suffix}`;
+    const visible = (page, testId) =>
+      page.getByTestId(testId).filter({ visible: true }).first();
+    const dismissPushPrompt = async (page) => {
+      const dismiss = visible(page, "push-notification-dismiss-button");
+
+      if ((await dismiss.count()) > 0) await dismiss.click();
+    };
+    const openSidebar = async (page) => {
+      if ((await visible(page, "create-conversation-button").count()) > 0) {
+        return;
+      }
+
+      await visible(page, "workspace-sidebar-open-button").click();
+      await visible(page, "create-conversation-button").waitFor({
+        state: "visible",
+      });
+    };
+    const selectConversation = async (page, title) => {
+      await openSidebar(page);
+      const row = page
+        .getByTestId("conversation-list-item")
+        .filter({ hasText: title })
+        .first();
+
+      await row.waitFor({ state: "visible" });
+      await row.click();
+    };
+    const register = async (name, handle) => {
+      const context = await browser.newContext({ locale: "en-US" });
+      const page = await context.newPage();
+      page.setDefaultTimeout(45000);
+      const counts = {
+        inboxes: 0,
+        appends: 0,
+        reads: 0,
+        envelopes: 0,
+        acks: 0,
+        seen: {},
+      };
+      const tally = (key) => {
+        counts.seen[key] = (counts.seen[key] ?? 0) + 1;
+      };
+      page.on("requestfailed", (request) => {
+        if (new URL(request.url()).pathname.startsWith("/api/mailboxes/")) {
+          tally(`${request.method()} failed`);
+        }
+      });
+      page.on("response", async (response) => {
+        const { pathname } = new URL(response.url());
+        if (!pathname.startsWith("/api/mailboxes/")) return;
+        const method = response.request().method();
+        tally(`${method} ${response.status()}`);
+        if (method === "PUT" && response.ok()) {
+          counts.inboxes += 1;
+        } else if (
+          method === "POST" &&
+          pathname.endsWith("/envelopes") &&
+          response.ok()
+        ) {
+          counts.appends += 1;
+        } else if (
+          method === "GET" &&
+          pathname.endsWith("/envelopes") &&
+          response.status() === 200
+        ) {
+          const body = await response.json().catch(() => ({}));
+          counts.reads += 1;
+          counts.envelopes += Array.isArray(body.envelopes)
+            ? body.envelopes.length
+            : 0;
+        } else if (
+          method === "POST" &&
+          pathname.endsWith("/ack") &&
+          response.status() === 204
+        ) {
+          counts.acks += 1;
+        }
+      });
+      await page.goto(origin);
+      await page.getByTestId("auth-mode-control").locator("button").nth(1).click();
+      await page.getByTestId("auth-name-input").fill(name);
+      await page.getByTestId("auth-handle-input").fill(handle);
+      await page.getByTestId("auth-password-input").fill(password);
+      await page.getByTestId("auth-password-confirmation-input").fill(password);
+      await page.getByTestId("auth-recovery-key-confirm").click();
+      await page.getByTestId("auth-submit-button").click();
+      await visible(page, "create-conversation-button").waitFor({
+        state: "visible",
+      });
+      await dismissPushPrompt(page);
+      return { page, counts };
+    };
+    const alice = await register(`Mailbox A ${suffix}`, `mailbox-a-${suffix}`);
+    const bob = await register(`Mailbox B ${suffix}`, `mailbox-b-${suffix}`);
+
+    await openSidebar(alice.page);
+    await visible(alice.page, "create-conversation-button").click();
+    await alice.page
+      .getByTestId("create-conversation-recipient-input")
+      .fill(`@mailbox-b-${suffix}`);
+    await alice.page.getByTestId("create-conversation-submit-button").click();
+    await alice.page
+      .getByTestId("create-conversation-recipient-input")
+      .waitFor({ state: "hidden" });
+    await dismissPushPrompt(alice.page);
+
+    await openSidebar(bob.page);
+    await visible(bob.page, "notifications-open-button").click();
+    await visible(bob.page, "notification-accept-button").click();
+    await dismissPushPrompt(bob.page);
+
+    await selectConversation(alice.page, `Mailbox B ${suffix}`);
+    await selectConversation(bob.page, `Mailbox A ${suffix}`);
+    // The recipient's sync starts with the active conversation and creates the
+    // inbox on its first pass. A send before that is refused by the node, so
+    // wait until the recipient has read it.
+    await waitFor(
+      async () => {
+        await failFastOnNetworkError(bob.page, "recipient");
+        const notice = await bob.page
+          .getByText(/could not be synced|Conversation key is required/)
+          .count();
+        const composer = await bob.page
+          .getByTestId("message-composer-input")
+          .isEnabled({ timeout: 2000 })
+          .catch(() => false);
+
+        assert.ok(
+          bob.counts.reads > 0,
+          `recipient inbox not read; ${JSON.stringify({
+            bob: bob.counts.seen,
+            alice: alice.counts.seen,
+            syncNotice: notice > 0,
+            composerEnabled: composer,
+          })}`,
+        );
+      },
+      60000,
+      "recipient mailbox sync did not start",
+    );
+    await alice.page
+      .getByTestId("message-composer-input")
+      .fill(`mailbox probe ${suffix}`);
+    await alice.page.getByTestId("message-send-button").click();
+    await waitFor(
+      () =>
+        assert.ok(
+          alice.counts.appends > 0 &&
+            bob.counts.envelopes > 0 &&
+            bob.counts.acks > 0,
+          `sender ${JSON.stringify(alice.counts)}, recipient ${JSON.stringify(bob.counts)}`,
+        ),
+      90000,
+      "direct message was not delivered through the recipient mailbox",
+    );
+    console.log(
+      JSON.stringify({
+        directMailbox: { sender: alice.counts, recipient: bob.counts },
+      }),
+    );
+  } finally {
+    await browser.close();
   }
 };
 
@@ -135,6 +330,7 @@ test(
         );
       await playwright(["desktop-chromium"], specs);
       await playwright(crossEngineProjects, crossEngineSpecs);
+      await assertDirectMessageMailboxDelivery(uiSource, origin);
     } catch (error) {
       await run("docker", ["logs", "--tail", "200", name]).catch(() => {});
       throw error;

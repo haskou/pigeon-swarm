@@ -17,4 +17,11 @@ skips itself outside desktop-chromium. The UI repository's Vite-fixture specs
 (stale ICE, call recovery) stay in its own CI; the external-account specs
 (visual audit, voice stability) are not run here.
 
+After the specs, the same run registers two identities on the image's node,
+sends one direct message and counts mailbox traffic only: the sender's append,
+the recipient's read with envelopes, and the acknowledgement. The specs alone
+cannot show this path, because a failed mailbox append is silent while the
+legacy copy still delivers. The check logs counts only, never message text, ids
+or envelope bodies.
+
 CI runs this in the `ui-e2e` job of `Validate wrapper`.

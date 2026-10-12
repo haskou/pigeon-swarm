@@ -20,8 +20,8 @@ Status meanings:
 
 | Component | Revision |
 | --- | --- |
-| `PIGEON_SWARM_NODE_SHA` | `7bbcd82b932fdefbab4d571e72302587224186de` |
-| `PIGEON_SWARM_UI_SHA` | `28ea4ec016b3825392e40cda64e4952bfc19ca9d` |
+| `PIGEON_SWARM_NODE_SHA` | `5b586a6cac2d32a4fdae9e8426e1bfa48c04ae74` |
+| `PIGEON_SWARM_UI_SHA` | `1a2650a06df50eb931be1cb39f1873fd0e198359` |
 
 Both revisions are commits of the public `haskou/pigeon-swarm-node` and
 `haskou/pigeon-swarm-ui` repositories. CI builds the application image from these
@@ -84,7 +84,7 @@ private addresses.
 ## Residual metadata
 
 From [data inventory](privacy/DATA-INVENTORY.md), which is a code snapshot at
-backend `4f43437`. The pinned backend (`7bbcd82`) has not been re-inventoried.
+backend `4f43437`. The pinned backend (`df1b139`) has not been re-inventoried.
 
 - Replicated document metadata is visible to replica operators even though
   payloads are encrypted. It includes actors, conversation and message
@@ -129,8 +129,8 @@ The source repositories are public. The Dockerfile needs no token for these pins
 
 ```sh
 docker build --target production \
-  --build-arg PIGEON_SWARM_NODE_SHA=7bbcd82b932fdefbab4d571e72302587224186de \
-  --build-arg PIGEON_SWARM_UI_SHA=28ea4ec016b3825392e40cda64e4952bfc19ca9d \
+  --build-arg PIGEON_SWARM_NODE_SHA=5b586a6cac2d32a4fdae9e8426e1bfa48c04ae74 \
+  --build-arg PIGEON_SWARM_UI_SHA=1a2650a06df50eb931be1cb39f1873fd0e198359 \
   --iidfile pigeon-test-image.id .
 export PIGEON_TEST_IMAGE="$(cat pigeon-test-image.id)"
 npm ci --ignore-scripts

@@ -1044,6 +1044,15 @@ const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
       await page.getByRole("button", { name: "Security" }).click();
       await page.getByTestId("profile-manage-devices").click();
     };
+    const logOut = async (page) => {
+      await openSidebar(page);
+      await visible(page, "own-profile-menu-button").click();
+      await page
+        .getByRole("button", { name: "Log out" })
+        .filter({ visible: true })
+        .first()
+        .click();
+    };
     const expectDeviceRows = (page, expected, description) =>
       waitFor(
         async () => {
@@ -1061,25 +1070,19 @@ const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
     const first = await openPage();
     const second = await openPage();
 
-    const recoveryKey = await registerIdentity(first.page, origin, {
+    await registerIdentity(first.page, origin, {
       name: `Forget A ${suffix}`,
       handle,
       password,
     });
 
-    // The second device signs in as a new device with the recovery key and
-    // password, the same steps the UI's own login spec takes on a new browser.
-    await second.page.goto(origin);
+    // The second device is a paired device of the identity. It signs out and
+    // signs back in with the password: the path reported as failing for paired
+    // devices.
+    await pairDevice(origin, password, first.page, handle, second.page);
+    await logOut(second.page);
     await second.page.getByTestId("auth-identity-input").fill(`@${handle}`);
-    await second.page
-      .getByTestId("auth-login-method-control")
-      .getByRole("button", { name: "Recovery key" })
-      .click();
-    await second.page.getByTestId("auth-recovery-key-input").fill(recoveryKey);
     await second.page.getByTestId("auth-password-input").fill(password);
-    await second.page
-      .getByTestId("auth-password-confirmation-input")
-      .fill(password);
     await second.page.getByTestId("auth-submit-button").click();
     await visible(second.page, "create-conversation-button").waitFor({
       state: "visible",
@@ -1105,6 +1108,14 @@ const assertDeviceForgetRevokesCredential = async (uiSource, origin) => {
       .getByRole("button", { name: "Close dialog" })
       .last()
       .click();
+    await second.page.getByTestId("device-list").waitFor({ state: "detached" });
+    await second.page
+      .getByRole("button", { name: "Close dialog" })
+      .last()
+      .click();
+    await second.page
+      .getByTestId("profile-save-button")
+      .waitFor({ state: "detached" });
 
     await openSidebar(second.page);
     await visible(second.page, "own-profile-menu-button").click();

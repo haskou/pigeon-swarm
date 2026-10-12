@@ -193,8 +193,17 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
           tally(`${request.method()} failed`);
         }
       });
+      page.on("pageerror", (error) => tally(`pageerror ${error.name}`));
+      page.on("console", (message) => {
+        if (message.type() === "error") tally("console error");
+      });
       page.on("response", async (response) => {
         const { pathname } = new URL(response.url());
+        if (pathname.startsWith("/api/") && response.status() >= 400) {
+          tally(
+            `${response.request().method()} ${response.status()} ${pathname.split("/")[2]}`,
+          );
+        }
         if (!pathname.startsWith("/api/mailboxes/")) return;
         const request = response.request();
         const method = request.method();
@@ -305,9 +314,22 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       await page.getByTestId("auth-password-confirmation-input").fill(password);
       await page.getByTestId("auth-recovery-key-confirm").click();
       await page.getByTestId("auth-submit-button").click();
-      await visible(page, "create-conversation-button").waitFor({
-        state: "visible",
-      });
+      await visible(page, "create-conversation-button")
+        .waitFor({ state: "visible" })
+        .catch(async (error) => {
+          const shown = await page
+            .locator("[data-testid]:visible")
+            .evaluateAll((nodes) =>
+              nodes.map((node) => node.dataset.testid).slice(0, 50),
+            );
+          const alerts = await page
+            .locator('[role="alert"]:visible')
+            .allInnerTexts();
+
+          throw new Error(
+            `${error.message.split("\n")[0]}; visible ${JSON.stringify(shown)}; alerts ${JSON.stringify(alerts.map((text) => text.slice(0, 160)))}; seen ${JSON.stringify(opened.counts.seen)}`,
+          );
+        });
       await dismissPushPrompt(page);
       return opened;
     };

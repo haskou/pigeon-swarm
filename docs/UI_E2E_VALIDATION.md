@@ -24,7 +24,17 @@ recipient's saved mailbox state, sends a second message with the recipient's
 legacy copy withheld, and requires that message to render from the mailbox
 alone, with envelope and acknowledgement counts increasing. The specs alone
 cannot show this path, because a failed mailbox append is silent while the
-legacy copy still delivers. The check logs counts only, never message text, ids
-or envelope bodies.
+legacy copy still delivers.
+
+It then pairs a second device of the recipient's identity through the UI and
+sends a third message. The second device's envelope reads are held until the
+first device's device reader acknowledges that message, and the second device
+must then render it from the mailbox alone. Every mailbox read by the second
+device must use a device reader token, not the inbox root token. Acknowledgements
+are logged by token class. In a passing CI run the second device made two reads,
+both with device reader tokens, and two acknowledgements, one with a device reader
+token and one with the inbox root token (the root mirror). The hold opened with no
+read held (`heldReads` 0), so that run did not show the hold delaying any read.
+The check logs counts only, never message text, ids or envelope bodies.
 
 CI runs this in the `ui-e2e` job of `Validate wrapper`.

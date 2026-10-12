@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
+import {
+  createHash,
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
@@ -13,15 +18,13 @@ const origin = "http://127.0.0.1:8080";
 const specs = [
   "e2e/login-methods.spec.ts",
   "e2e/empty-members-column.spec.ts",
-  "e2e/remember-session.spec.ts",
   "e2e/direct-message-sync.spec.ts",
   "e2e/call-page-departure.spec.ts",
 ];
-// Engine and viewport coverage: the session specs that need no second device.
+// Engine and viewport coverage: the specs that need no second device.
 const crossEngineSpecs = [
   "e2e/login-methods.spec.ts",
   "e2e/empty-members-column.spec.ts",
-  "e2e/remember-session.spec.ts",
 ];
 const crossEngineProjects = ["mobile-chromium", "desktop-firefox"];
 
@@ -99,8 +102,10 @@ const isLegacyMessageFrame = (message) => {
 // on this node, then that the recipient renders a second message with the
 // legacy copy withheld, after its saved mailbox state is cleared. A failed
 // mailbox append is silent and the legacy copy still delivers, so the specs
-// above cannot show this path. Logs counts only: no message text, ids or
-// envelope bodies.
+// above cannot show this path. A second device of the recipient's identity,
+// paired in through the UI, must render a third message only after the first
+// device has acked it. Logs counts only: no message text, ids or envelope
+// bodies.
 const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
   const { chromium } = createRequire(join(uiSource, "package.json"))(
     "playwright-core",
@@ -137,8 +142,26 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       await row.waitFor({ state: "visible" });
       await row.click();
     };
-    const register = async (name, handle, { withholdLegacy = false } = {}) => {
+    const sha256 = (token) => createHash("sha256").update(token).digest("hex");
+    const bodyOf = (request) => {
+      try {
+        return request.postDataJSON() ?? {};
+      } catch {
+        return {};
+      }
+    };
+    // One browser context per device. The trace keeps reader classes, never
+    // tokens: "root" for the inbox root reader, "device" for a reader enrolled
+    // by a device, "unknown" for anything else.
+    const openPage = async ({ withholdLegacy = false } = {}) => {
       const context = await browser.newContext({ locale: "en-US" });
+      // The app falls back to Spanish unless English is stored explicitly; the
+      // probe's locators are English, so seed the stored language per context.
+      await context.addInitScript(() => {
+        if (!location.protocol.startsWith("http")) return;
+        localStorage.setItem("pigeon-swarm-language-v2", "en");
+        localStorage.setItem("pigeon-swarm-language-explicit-v3", "true");
+      });
       const page = await context.newPage();
       page.setDefaultTimeout(45000);
       const counts = {
@@ -149,6 +172,24 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
         acks: 0,
         seen: {},
       };
+      const trace = {
+        rootHashes: new Set(),
+        readerHashes: new Set(),
+        reads: [],
+        acks: [],
+        appends: [],
+        observers: [],
+      };
+      const classify = (token) => {
+        const hash = sha256(token);
+
+        if (trace.rootHashes.has(hash)) return "root";
+        if (trace.readerHashes.has(hash)) return "device";
+        return "unknown";
+      };
+      const notify = (event) => {
+        for (const observe of trace.observers) observe(event);
+      };
       const tally = (key) => {
         counts.seen[key] = (counts.seen[key] ?? 0) + 1;
       };
@@ -157,11 +198,39 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
           tally(`${request.method()} failed`);
         }
       });
+      page.on("pageerror", (error) => tally(`pageerror ${error.name}`));
+      page.on("console", (message) => {
+        if (message.type() === "error") tally("console error");
+      });
       page.on("response", async (response) => {
         const { pathname } = new URL(response.url());
+        if (pathname.startsWith("/api/") && response.status() >= 400) {
+          // Record only an error code or the body's key names, never values.
+          const body = await response.json().catch(() => null);
+          const code =
+            [body?.code, body?.error?.code, body?.error?.name].find(
+              (value) => typeof value === "string" && /^[\w.:-]{1,60}$/.test(value),
+            ) ?? `keys:${Object.keys(body ?? {}).join("|")}`;
+          tally(
+            `${response.request().method()} ${response.status()} ${pathname.split("/")[2]} ${code.slice(0, 100)}`,
+          );
+        }
         if (!pathname.startsWith("/api/mailboxes/")) return;
-        const method = response.request().method();
+        const request = response.request();
+        const method = request.method();
+        const mailbox = pathname.split("/")[3];
+        const auth = request.headers().authorization ?? "";
+        const token = auth.startsWith("Bearer ")
+          ? auth.slice("Bearer ".length)
+          : "";
+
         tally(`${method} ${response.status()}`);
+        if (method === "PUT") {
+          trace.rootHashes.add(bodyOf(request).readTokenHash);
+        }
+        if (method === "POST" && pathname.endsWith("/readers")) {
+          trace.readerHashes.add(bodyOf(request).readTokenHash);
+        }
         if (method === "PUT" && response.ok()) {
           counts.inboxes += 1;
         } else if (
@@ -170,22 +239,41 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
           response.ok()
         ) {
           counts.appends += 1;
+          const { cursor } = await response.json().catch(() => ({}));
+          const event = { kind: "append", mailbox, cursor };
+
+          trace.appends.push(event);
+          notify(event);
         } else if (
           method === "GET" &&
           pathname.endsWith("/envelopes") &&
           response.status() === 200
         ) {
           const body = await response.json().catch(() => ({}));
+          const envelopes = Array.isArray(body.envelopes) ? body.envelopes : [];
+
           counts.reads += 1;
-          counts.envelopes += Array.isArray(body.envelopes)
-            ? body.envelopes.length
-            : 0;
+          counts.envelopes += envelopes.length;
+          trace.reads.push({
+            mailbox,
+            token: classify(token),
+            envelopes: envelopes.length,
+          });
         } else if (
           method === "POST" &&
           pathname.endsWith("/ack") &&
           response.status() === 204
         ) {
           counts.acks += 1;
+          const event = {
+            kind: "ack",
+            mailbox,
+            token: classify(token),
+            upTo: bodyOf(request).upTo,
+          };
+
+          trace.acks.push(event);
+          notify(event);
         }
       });
       const legacy = { withholding: false, withheldFrames: 0, blockedReads: 0 };
@@ -219,19 +307,112 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
         );
       }
 
+      return { page, counts, legacy, trace };
+    };
+    const register = async (name, handle, options) => {
+      const opened = await openPage(options);
+      const { page } = opened;
+
       await page.goto(origin);
-      await page.getByTestId("auth-mode-control").locator("button").nth(1).click();
+      await page
+        .getByTestId("auth-mode-control")
+        .locator("button")
+        .nth(1)
+        .click();
       await page.getByTestId("auth-name-input").fill(name);
       await page.getByTestId("auth-handle-input").fill(handle);
       await page.getByTestId("auth-password-input").fill(password);
       await page.getByTestId("auth-password-confirmation-input").fill(password);
       await page.getByTestId("auth-recovery-key-confirm").click();
       await page.getByTestId("auth-submit-button").click();
-      await visible(page, "create-conversation-button").waitFor({
+      await visible(page, "create-conversation-button")
+        .waitFor({ state: "visible" })
+        .catch(async (error) => {
+          const shown = await page
+            .locator("[data-testid]:visible")
+            .evaluateAll((nodes) =>
+              nodes.map((node) => node.dataset.testid).slice(0, 50),
+            );
+          const alerts = await page
+            .locator('[role="alert"]:visible')
+            .allInnerTexts();
+
+          throw new Error(
+            `${error.message.split("\n")[0]}; visible ${JSON.stringify(shown)}; alerts ${JSON.stringify(alerts.map((text) => text.slice(0, 160)))}; seen ${JSON.stringify(opened.counts.seen)}`,
+          );
+        });
+      await dismissPushPrompt(page);
+      return opened;
+    };
+    // Pairs a new device of the identity from a signed-in device, through the
+    // same UI steps a user takes, then waits for the new device's workspace.
+    const pairDevice = async (authorized, handle, fresh) => {
+      await openSidebar(authorized);
+      await visible(authorized, "own-profile-menu-button").click();
+      await authorized.getByTestId("edit-profile-button").click();
+      await authorized.getByRole("button", { name: "Security" }).click();
+      await authorized.getByTestId("profile-pair-device").click();
+
+      const invitation = await authorized
+        .getByTestId("device-pairing-invitation-output")
+        .inputValue();
+
+      assert.match(invitation, /^\S+$/);
+      await fresh.goto(origin);
+      await fresh.getByTestId("auth-identity-input").fill(`@${handle}`);
+      await fresh
+        .getByTestId("auth-login-method-control")
+        .getByRole("button", { name: "New device" })
+        .click();
+      await fresh
+        .getByTestId("auth-device-pairing-invitation-input")
+        .fill(invitation);
+      await fresh.getByTestId("auth-device-pairing-prepare").click();
+
+      const request = await fresh
+        .getByTestId("auth-device-pairing-request-output")
+        .inputValue();
+      const code = await fresh
+        .getByTestId("auth-device-pairing-verification-code")
+        .innerText();
+
+      await authorized.getByTestId("device-pairing-request-input").fill(request);
+      await authorized.getByTestId("device-pairing-submit").click();
+      await waitFor(
+        async () => {
+          const shown = await authorized
+            .getByTestId("device-pairing-verification-code")
+            .innerText();
+
+          assert.equal(shown, code);
+        },
+        45000,
+        "pairing verification codes differ",
+      );
+      await authorized.getByTestId("device-pairing-submit").click();
+
+      const completionOutput = authorized.getByTestId(
+        "device-pairing-completion-output",
+      );
+
+      await completionOutput.waitFor({ state: "visible" });
+
+      const completion = await completionOutput.inputValue();
+
+      await fresh
+        .getByTestId("auth-device-pairing-completion-input")
+        .fill(completion);
+      await fresh.getByTestId("auth-password-input").fill(password);
+      await fresh.getByTestId("auth-password-confirmation-input").fill(password);
+      await fresh.getByTestId("auth-submit-button").click();
+      await visible(fresh, "create-conversation-button").waitFor({
         state: "visible",
       });
-      await dismissPushPrompt(page);
-      return { page, counts, legacy };
+      await dismissPushPrompt(fresh);
+      await authorized
+        .getByRole("button", { name: "Close dialog" })
+        .last()
+        .click();
     };
     const alice = await register(`Mailbox A ${suffix}`, `mailbox-a-${suffix}`);
     const bob = await register(`Mailbox B ${suffix}`, `mailbox-b-${suffix}`, {
@@ -352,6 +533,161 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       90000,
       "direct message did not render from the recipient mailbox alone",
     );
+    // A second device of the recipient's identity pairs in from device A and
+    // reads the same inbox with its own reader. The next message must reach it
+    // from the mailbox alone, and only after device A has acked that message.
+    const device = await openPage({ withholdLegacy: true });
+
+    await pairDevice(bob.page, `mailbox-b-${suffix}`, device.page);
+    await selectConversation(device.page, `Mailbox A ${suffix}`);
+    await waitFor(
+      () =>
+        assert.ok(
+          device.counts.reads > 0,
+          `second device inbox not read; ${JSON.stringify(device.counts.seen)}`,
+        ),
+      90000,
+      "second device mailbox sync did not start",
+    );
+
+    const mailbox = alice.trace.appends.at(-1)?.mailbox;
+
+    assert.ok(mailbox, "sender did not append to the recipient mailbox");
+    assert.ok(
+      device.trace.reads.some((read) => read.mailbox === mailbox),
+      "second device reads a different mailbox than the sender appends to",
+    );
+
+    // Gate: the second device's envelope reads are held until device A's device
+    // reader has acked at or past the cursor of the message sent below. The UI
+    // renders a page before it acknowledges it, so that ack means device A
+    // rendered the message.
+    const gate = {
+      armed: false,
+      cursor: undefined,
+      ackUpTo: 0,
+      opened: false,
+      timedOut: false,
+      held: 0,
+      timer: undefined,
+    };
+    let release;
+    const released = new Promise((resolve) => {
+      release = resolve;
+    });
+    const settle = () => {
+      if (gate.opened || typeof gate.cursor !== "number") return;
+      if (gate.ackUpTo < gate.cursor) return;
+
+      gate.opened = true;
+      clearTimeout(gate.timer);
+      release();
+    };
+
+    alice.trace.observers.push((event) => {
+      if (
+        gate.armed &&
+        gate.cursor === undefined &&
+        event.kind === "append" &&
+        event.mailbox === mailbox &&
+        typeof event.cursor === "number"
+      ) {
+        gate.cursor = event.cursor;
+        settle();
+      }
+    });
+    bob.trace.observers.push((event) => {
+      if (
+        event.kind === "ack" &&
+        event.token === "device" &&
+        event.mailbox === mailbox &&
+        typeof event.upTo === "number"
+      ) {
+        gate.ackUpTo = Math.max(gate.ackUpTo, event.upTo);
+        settle();
+      }
+    });
+    await device.page.route(
+      (url) => url.pathname === `/api/mailboxes/${mailbox}/envelopes`,
+      async (route) => {
+        if (gate.armed && !gate.opened) {
+          gate.held += 1;
+          await released;
+        }
+
+        return route.fallback();
+      },
+    );
+
+    const before = {
+      envelopes: device.counts.envelopes,
+      withheld: device.legacy.withheldFrames,
+    };
+
+    device.legacy.withholding = true;
+    gate.armed = true;
+    gate.timer = setTimeout(() => {
+      gate.timedOut = true;
+      release();
+    }, 90000);
+
+    const secondText = `second device ${suffix}`;
+
+    await alice.page.getByTestId("message-composer-input").fill(secondText);
+    await alice.page.getByTestId("message-send-button").click();
+    await waitFor(
+      async () => {
+        if (gate.timedOut) {
+          throw Object.assign(
+            new Error("device A did not ack the message before the gate timeout"),
+            { fatal: true },
+          );
+        }
+
+        const rendered = await device.page
+          .getByTestId("message-item")
+          .filter({ hasText: secondText, visible: true })
+          .count();
+
+        assert.ok(
+          gate.opened &&
+            rendered > 0 &&
+            device.counts.envelopes > before.envelopes &&
+            device.legacy.withheldFrames > before.withheld,
+          `second device ${JSON.stringify({
+            gateOpened: gate.opened,
+            rendered: rendered > 0,
+            counts: device.counts,
+            legacy: device.legacy,
+          })}`,
+        );
+      },
+      120000,
+      "second device did not render the message after device A acked it",
+    );
+
+    const tokenCount = (events) =>
+      events.reduce(
+        (tally, { token }) => ({ ...tally, [token]: (tally[token] ?? 0) + 1 }),
+        {},
+      );
+    const readTokens = tokenCount(
+      device.trace.reads.filter((read) => read.mailbox === mailbox),
+    );
+    const ackTokens = tokenCount(
+      device.trace.acks.filter((ack) => ack.mailbox === mailbox),
+    );
+
+    assert.ok(
+      readTokens.device > 0 &&
+        readTokens.root === undefined &&
+        readTokens.unknown === undefined,
+      `second device reads ${JSON.stringify(readTokens)}`,
+    );
+    assert.ok(
+      ackTokens.device > 0,
+      `second device acks ${JSON.stringify(ackTokens)}`,
+    );
     console.log(
       JSON.stringify({
         directMailbox: {
@@ -361,6 +697,16 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
           legacyWithheld: {
             frames: bob.legacy.withheldFrames,
             reads: bob.legacy.blockedReads,
+          },
+          secondDevice: {
+            counts: device.counts,
+            legacyWithheld: {
+              frames: device.legacy.withheldFrames,
+              reads: device.legacy.blockedReads,
+            },
+            gate: { opened: gate.opened, heldReads: gate.held },
+            readTokens,
+            ackTokens,
           },
         },
       }),

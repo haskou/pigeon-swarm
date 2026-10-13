@@ -21,6 +21,9 @@ x-browser: &browser
   image: mcr.microsoft.com/playwright:v1.60.0-noble
   entrypoint: [node, /opt/pigeon/tests/call-test-browser-server.mjs]
   shm_size: 256mb
+  environment:
+    PIGEON_TEST_TLS_KEY:
+    PIGEON_TEST_TLS_CERT:
   volumes:
     - .:/opt/pigeon/tests:ro
     - ../node_modules:/opt/pigeon/node_modules:ro

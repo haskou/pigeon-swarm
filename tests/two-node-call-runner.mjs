@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import test from "node:test";
+import { createCallTestCredentials } from "./call-test-https-proxy.mjs";
 import { prepareNatNetwork, verifyNatTraffic } from "./call-test-nat-network.mjs";
 import { canaryForms, matchedForms } from "./canary-scan.mjs";
 
@@ -21,6 +22,7 @@ export function testTwoNodeCalls({ nat = false } = {}) {
       const canary = `pigeon-canary-${randomBytes(16).toString("hex")}`;
       const forms = canaryForms(canary);
       const canaryScanner = resolve("tests/canary-scan.mjs");
+      const gatewayCredentials = nat ? createCallTestCredentials() : undefined;
       const env = {
         ...Object.fromEntries(
           [
@@ -53,6 +55,9 @@ export function testTwoNodeCalls({ nat = false } = {}) {
         CALLS_TURN_EXTERNAL_IP: "",
         CALLS_TURN_USER_QUOTA: "16",
         CALLS_TURN_TOTAL_QUOTA: "128",
+        ...(gatewayCredentials
+          ? { PIGEON_TEST_TLS_KEY: gatewayCredentials.key.toString(), PIGEON_TEST_TLS_CERT: gatewayCredentials.cert.toString() }
+          : {}),
       };
       const deadline = Date.now() + 540000;
       const run = (args, options = {}) =>

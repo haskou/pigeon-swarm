@@ -11,9 +11,9 @@ iptables -N CALL_MEDIA
 iptables -N CALL_WAN_UDP
 iptables -A CALL_WAN_UDP -j ACCEPT
 iptables -A FORWARD -p udp --dport 4102:4133 -j CALL_MEDIA
-iptables -A FORWARD -i "$wan" -o "$lan" -p udp -s 172.29.203.0/24 -m conntrack --ctstate ESTABLISHED,RELATED -j CALL_WAN_UDP
+iptables -A FORWARD -i "$wan" -o "$lan" -p udp -s 203.0.113.0/24 -m conntrack --ctstate ESTABLISHED,RELATED -j CALL_WAN_UDP
 iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -A FORWARD -i "$lan" -o "$wan" -d 172.29.203.0/24 -j ACCEPT
+iptables -A FORWARD -i "$lan" -o "$wan" -d 203.0.113.0/24 -j ACCEPT
 iptables -A FORWARD -d "$NODE_IP" -m conntrack --ctstate DNAT -j ACCEPT
 iptables -t nat -A POSTROUTING -o "$wan" -s "$LAN_SUBNET" -j SNAT --to-source "$PUBLIC_IP"
 # Hairpin traffic: a local browser uses its own node's advertised TURN address.
@@ -23,5 +23,9 @@ for protocol in tcp udp; do
 done
 # Playwright control only; no application data travels over this connection.
 iptables -t nat -A PREROUTING -d "$PUBLIC_IP" -p tcp --dport 9222 -j DNAT --to-destination "$NODE_IP"
+# Node HTTPS: each node is reached at its advertised public address, as a deployed node is.
+for port in 8443 8444; do
+  iptables -t nat -A PREROUTING -d "$PUBLIC_IP" -p tcp --dport "$port" -j DNAT --to-destination "$NODE_IP"
+done
 touch /tmp/router-ready
 exec sleep infinity

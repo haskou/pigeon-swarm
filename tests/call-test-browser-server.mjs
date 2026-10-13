@@ -2,7 +2,11 @@ import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { startCallTestGateways } from "./call-test-https-proxy.mjs";
 
-const gateways = await startCallTestGateways(["127.0.0.1", "127.0.0.1"]);
+// Bound on all interfaces so peers reach this node through its public address.
+const gateways = await startCallTestGateways(
+  ["127.0.0.1", "127.0.0.1"],
+  "0.0.0.0",
+);
 const browser = await chromium.launchServer({
   host: "0.0.0.0",
   port: 9222,

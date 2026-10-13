@@ -20,7 +20,7 @@ Chromium A + app A + TURN A                       Chromium B + app B + TURN B
        10.203.1.10                                      10.203.2.10
             |                                               |
   NAT A: 10.203.1.2                                NAT B: 10.203.2.2
-       172.29.203.11 ------- isolated WAN ----------- 172.29.203.12
+       203.0.113.11 ------- isolated WAN ----------- 203.0.113.12
                                 |
                        Playwright controller
 ```

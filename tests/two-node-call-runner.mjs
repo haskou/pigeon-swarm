@@ -169,8 +169,8 @@ export function testTwoNodeCalls({ nat = false } = {}) {
         env.TEST_PRIVATE_IP_A = env.TEST_IP_A;
         env.TEST_PRIVATE_IP_B = env.TEST_IP_B;
         if (nat) {
-          env.TEST_IP_A = "172.29.203.11";
-          env.TEST_IP_B = "172.29.203.12";
+          env.TEST_IP_A = "203.0.113.11";
+          env.TEST_IP_B = "203.0.113.12";
           await prepareNatNetwork(compose);
         }
         const network = {

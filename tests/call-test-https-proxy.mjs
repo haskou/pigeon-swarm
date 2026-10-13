@@ -7,7 +7,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, X509Certificate } from "node:crypto";
 
-export async function startCallTestGateways(hosts = ["app-a", "app-b"]) {
+export async function startCallTestGateways(
+  hosts = ["app-a", "app-b"],
+  bindHost = "127.0.0.1",
+) {
   const directory = mkdtempSync(join(tmpdir(), "call-test-tls-"));
   const key = join(directory, "key.pem");
   const cert = join(directory, "cert.pem");
@@ -109,7 +112,7 @@ export async function startCallTestGateways(hosts = ["app-a", "app-b"]) {
       });
       await new Promise((resolve, reject) => {
         server.once("error", reject);
-        server.listen(8443 + index, "127.0.0.1", resolve);
+        server.listen(8443 + index, bindHost, resolve);
       });
       servers.push(server);
     }

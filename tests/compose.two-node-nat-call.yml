@@ -40,31 +40,31 @@ services:
       net-b: {condition: service_healthy}
   turn-a:
     environment:
-      CALLS_TURN_EXTERNAL_IP: 172.29.203.11/10.203.1.10
-      CALLS_TURN_ALLOWED_PEER_IPS: 172.29.203.11,172.29.203.12
+      CALLS_TURN_EXTERNAL_IP: 203.0.113.11/10.203.1.10
+      CALLS_TURN_ALLOWED_PEER_IPS: ""
   turn-b:
     environment:
-      CALLS_TURN_EXTERNAL_IP: 172.29.203.12/10.203.2.10
-      CALLS_TURN_ALLOWED_PEER_IPS: 172.29.203.11,172.29.203.12
+      CALLS_TURN_EXTERNAL_IP: 203.0.113.12/10.203.2.10
+      CALLS_TURN_ALLOWED_PEER_IPS: ""
   router-a:
     <<: *router
     environment:
-      PUBLIC_IP: 172.29.203.11
+      PUBLIC_IP: 203.0.113.11
       GATEWAY_IP: 10.203.1.2
       NODE_IP: 10.203.1.10
       LAN_SUBNET: 10.203.1.0/24
     networks:
-      default: {ipv4_address: 172.29.203.11}
+      default: {ipv4_address: 203.0.113.11}
       lan-a: {ipv4_address: 10.203.1.2}
   router-b:
     <<: *router
     environment:
-      PUBLIC_IP: 172.29.203.12
+      PUBLIC_IP: 203.0.113.12
       GATEWAY_IP: 10.203.2.2
       NODE_IP: 10.203.2.10
       LAN_SUBNET: 10.203.2.0/24
     networks:
-      default: {ipv4_address: 172.29.203.12}
+      default: {ipv4_address: 203.0.113.12}
       lan-b: {ipv4_address: 10.203.2.2}
   net-a:
     image: pigeon-call-nat-router:test
@@ -96,14 +96,14 @@ services:
     network_mode: service:app-b
   browser:
     networks: !override
-      default: {ipv4_address: 172.29.203.20}
+      default: {ipv4_address: 203.0.113.20}
 
 networks:
   default:
     internal: true
     enable_ipv6: false
     ipam:
-      config: [{subnet: 172.29.203.0/24}]
+      config: [{subnet: 203.0.113.0/24}]
   lan-a:
     # Docker internal bridges drop forwarded packets even via a custom router.
     # The net-a namespace replaces Docker's gateway before the app can start.

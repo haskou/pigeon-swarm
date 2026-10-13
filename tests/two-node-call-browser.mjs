@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
 import { createClientServer } from "../client/server.mjs";
 import { chromium } from "playwright";
 import { startCallTestGateways } from "./call-test-https-proxy.mjs";
 
 let stage = "browser startup";
-const urls = ["https://localhost:8443", "https://localhost:8444"];
+const startedAt = Date.now();
 const relayAddresses = [process.env.TEST_IP_A, process.env.TEST_IP_B];
 const nat = process.env.PIGEON_TEST_NAT === "true";
+// NAT nodes are dialled at their public addresses, as a deployed node is, so the
+// origin a node advertises as its mailbox home is reachable from the peer.
+const urls = nat
+  ? [`https://${relayAddresses[0]}:8443`, `https://${relayAddresses[1]}:8444`]
+  : ["https://localhost:8443", "https://localhost:8444"];
 const canary = process.env.PIGEON_TEST_CANARY;
 if (!/^pigeon-canary-[a-f0-9]{32}$/.test(canary ?? "")) throw new Error("PIGEON_TEST_CANARY must be set by the runner");
 const { stop: stopGateways, spki } = nat
@@ -139,6 +145,8 @@ try {
       listResponses: [],
       callErrors: [],
       historyResponses: [],
+      mailboxResponses: [],
+      keychainResponses: [],
       rejectedSignals: 0,
     };
     deliveryDiagnostics.push(diagnostics);
@@ -157,6 +165,22 @@ try {
     });
     page.on("response", async (response) => {
       const responseUrl = new URL(response.url());
+      if (responseUrl.pathname.startsWith("/api/mailboxes/")) {
+        diagnostics.mailboxResponses.push({
+          at: Date.now() - startedAt,
+          stage,
+          page: index + 1,
+          method: response.request().method(),
+          mailbox: createHash("sha256").update(responseUrl.pathname.split("/")[3] ?? "").digest("hex").slice(0, 8),
+          port: responseUrl.port,
+          status: response.status(),
+        });
+        if (diagnostics.mailboxResponses.length > 60) diagnostics.mailboxResponses.shift();
+      }
+      if (responseUrl.pathname.startsWith("/api/keychains/")) {
+        diagnostics.keychainResponses.push({ at: Date.now() - startedAt, stage, page: index + 1, method: response.request().method(), port: responseUrl.port, status: response.status() });
+        if (diagnostics.keychainResponses.length > 60) diagnostics.keychainResponses.shift();
+      }
       if (
         response.request().method() === "GET" &&
         /\/conversations\/[^/]+\/messages\/?$/.test(responseUrl.pathname)

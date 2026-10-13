@@ -57,8 +57,10 @@ for Bob.
    same Alice inbox on node A and on node B. Both Alice devices render it
    exactly once, and `alice-2` must have read the inbox from node B.
 5. `alice-1` revokes `alice-2` from Manage devices; the device list drops to
-   one. `alice-1` must then read the inbox on node B again; its client prunes
-   the inbox readers before each first read under a new root.
+   one. The client reports the revoke done only after it has pruned the
+   revoked reader from the inbox on node A and on node B
+   ([pigeon-swarm-ui#397](https://github.com/haskou/pigeon-swarm-ui/pull/397)).
+   `alice-1` must then read the inbox on node B again.
 6. The runner kills node A (`docker compose kill app-a`) and confirms the
    container exited. Node A then answers 502 through its gateway.
 7. Bob sends a message. His append to Alice's inbox on node B must succeed.

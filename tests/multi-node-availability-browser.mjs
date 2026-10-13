@@ -339,8 +339,8 @@ try {
   await closeDialog(alice.page, "device-list");
   // The revoke may already have closed the profile editor behind the list.
   if ((await alice.page.getByTestId("profile-save-button").count()) > 0) await closeDialog(alice.page, "profile-save-button");
-  // The remaining device reconciles an inbox's readers before it reads it, so
-  // a read on the availability server after the revoke comes after its prune.
+  // The remaining device must keep reading the availability server under the
+  // root the revoke rotated to.
   await waitFor(
     () => alice.reads.some((entry) => entry.at > revokedAt && entry.port === portOf(NODE_B) && entry.status === 200),
     60000,

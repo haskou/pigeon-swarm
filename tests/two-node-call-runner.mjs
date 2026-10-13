@@ -56,7 +56,10 @@ export function testTwoNodeCalls({ nat = false } = {}) {
         CALLS_TURN_USER_QUOTA: "16",
         CALLS_TURN_TOTAL_QUOTA: "128",
         ...(gatewayCredentials
-          ? { PIGEON_TEST_TLS_KEY: gatewayCredentials.key.toString(), PIGEON_TEST_TLS_CERT: gatewayCredentials.cert.toString() }
+          ? {
+              PIGEON_TEST_TLS_KEY: gatewayCredentials.key.toString(),
+              PIGEON_TEST_TLS_CERT: gatewayCredentials.cert.toString(),
+            }
           : {}),
       };
       const deadline = Date.now() + 540000;

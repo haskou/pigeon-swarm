@@ -44,7 +44,12 @@ export function createCallTestCredentials() {
 
 export function spkiOf(cert) {
   return createHash("sha256")
-    .update(new X509Certificate(cert).publicKey.export({ type: "spki", format: "der" }))
+    .update(
+      new X509Certificate(cert).publicKey.export({
+        type: "spki",
+        format: "der",
+      }),
+    )
     .digest("base64");
 }
 

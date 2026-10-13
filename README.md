@@ -56,7 +56,8 @@ Docker image usage is documented in [docs/DOCKER_IMAGE.md](docs/DOCKER_IMAGE.md)
 
 Application acceptance tests cover [automatic relay discovery and recovery](docs/RELAY_DISCOVERY_VALIDATION.md),
 [messaging, calls and session recovery between nodes](docs/TWO_NODE_CALL_VALIDATION.md),
-and [complete browser workflows across two NAT routers](docs/NAT_CALL_VALIDATION.md).
+[complete browser workflows across two NAT routers](docs/NAT_CALL_VALIDATION.md)
+and [direct inbox availability when a home node dies](docs/MULTI_NODE_AVAILABILITY_VALIDATION.md).
 
 The complete release check matrix, its residual limits and the external checks are in [docs/RELEASE_VERIFICATION.md](docs/RELEASE_VERIFICATION.md).
 

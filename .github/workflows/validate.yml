@@ -223,6 +223,18 @@ jobs:
           export PIGEON_INDEPENDENT_CLIENT=true
           npm run test:e2e
 
+      - name: Build independent client with mailbox availability servers
+        working-directory: client-source
+        run: |
+          VITE_INDEPENDENT_CLIENT=true \
+            VITE_MAILBOX_AVAILABILITY_SERVERS=https://localhost:8443/api,https://localhost:8444/api \
+            yarn build --outDir "$RUNNER_TEMP/availability-client-dist"
+
+      - name: Verify direct inbox availability across nodes
+        run: |
+          export PIGEON_AVAILABILITY_CLIENT_DIST="$RUNNER_TEMP/availability-client-dist"
+          npm run test:e2e:availability
+
   ui-e2e:
     name: Validate UI against a real node
     needs: changes

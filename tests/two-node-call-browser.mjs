@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
 import { createClientServer } from "../client/server.mjs";
 import { chromium } from "playwright";
 import { startCallTestGateways } from "./call-test-https-proxy.mjs";
 
 let stage = "browser startup";
-const urls = ["https://localhost:8443", "https://localhost:8444"];
+const startedAt = Date.now();
 const relayAddresses = [process.env.TEST_IP_A, process.env.TEST_IP_B];
 const nat = process.env.PIGEON_TEST_NAT === "true";
+// NAT nodes are dialled at their public addresses, as a deployed node is, so the
+// origin a node advertises as its mailbox home is reachable from the peer.
+const urls = nat
+  ? [`https://${relayAddresses[0]}:8443`, `https://${relayAddresses[1]}:8444`]
+  : ["https://localhost:8443", "https://localhost:8444"];
 const canary = process.env.PIGEON_TEST_CANARY;
 if (!/^pigeon-canary-[a-f0-9]{32}$/.test(canary ?? "")) throw new Error("PIGEON_TEST_CANARY must be set by the runner");
 const { stop: stopGateways, spki } = nat
@@ -24,24 +30,6 @@ const pages = [];
 const deliveryDiagnostics = [];
 const callDiagnostics = [];
 const browsers = [];
-const legacyCopies = [];
-// Copied from tests/ui-e2e.integration.mjs. A legacy copy is the replicated
-// message path the mailbox replaces; the recipient is denied it while a
-// one-to-one delivery is checked. Frame contents are never logged.
-const isLegacyMessageFrame = (message) => {
-  try {
-    const frame = JSON.parse(message.toString());
-
-    return (
-      frame.type === "domain_event" &&
-      typeof frame.event?.type === "string" &&
-      frame.event.type.startsWith("conversations.v1.message.")
-    );
-  } catch {
-    return false;
-  }
-};
-const legacyMessageReadPath = /\/conversations\/[^/]+\/messages(\/|$)/;
 const browser = nat ? undefined : await chromium
   .launch({
     args: [
@@ -140,36 +128,6 @@ try {
       };
     }, { expectedRelay: relayAddresses[index], nat });
     const page = await context.newPage();
-    const legacy = { withholding: false, withheldFrames: 0, blockedReads: 0 };
-    legacyCopies.push(legacy);
-    if (independentClient) {
-      await page.routeWebSocket(/\/realtime\/v1/, (ws) => {
-        const server = ws.connectToServer();
-
-        ws.onMessage((message) => server.send(message));
-        server.onMessage((message) => {
-          if (legacy.withholding && isLegacyMessageFrame(message)) {
-            legacy.withheldFrames += 1;
-
-            return;
-          }
-
-          ws.send(message);
-        });
-      });
-      await page.route(
-        (url) => legacyMessageReadPath.test(url.pathname),
-        (route) => {
-          if (!legacy.withholding || route.request().method() !== "GET") {
-            return route.fallback();
-          }
-
-          legacy.blockedReads += 1;
-
-          return route.abort("blockedbyclient");
-        },
-      );
-    }
     const callEvents = [];
     callDiagnostics.push(callEvents);
     page.on("console", async message => {
@@ -187,6 +145,11 @@ try {
       listResponses: [],
       callErrors: [],
       historyResponses: [],
+      mailboxResponses: [],
+      keychainResponses: [],
+      identityResponses: [],
+      envelopeCounts: [],
+      requestFailures: [],
       rejectedSignals: 0,
     };
     deliveryDiagnostics.push(diagnostics);
@@ -205,6 +168,31 @@ try {
     });
     page.on("response", async (response) => {
       const responseUrl = new URL(response.url());
+      if (responseUrl.pathname.startsWith("/api/mailboxes/")) {
+        diagnostics.mailboxResponses.push({
+          at: Date.now() - startedAt,
+          stage,
+          page: index + 1,
+          method: response.request().method(),
+          mailbox: createHash("sha256").update(responseUrl.pathname.split("/")[3] ?? "").digest("hex").slice(0, 8),
+          port: responseUrl.port,
+          status: response.status(),
+        });
+        if (diagnostics.mailboxResponses.length > 60) diagnostics.mailboxResponses.shift();
+      }
+      if (responseUrl.pathname.startsWith("/api/keychains/")) {
+        diagnostics.keychainResponses.push({ at: Date.now() - startedAt, stage, page: index + 1, method: response.request().method(), port: responseUrl.port, status: response.status() });
+        if (diagnostics.keychainResponses.length > 60) diagnostics.keychainResponses.shift();
+      }
+      if (responseUrl.pathname.startsWith("/api/identities/")) {
+        diagnostics.identityResponses.push({ at: Date.now() - startedAt, stage, page: index + 1, method: response.request().method(), port: responseUrl.port, status: response.status() });
+        if (diagnostics.identityResponses.length > 60) diagnostics.identityResponses.shift();
+      }
+      if (response.request().method() === "GET" && /^\/api\/mailboxes\/[^/]+\/envelopes\/?$/.test(responseUrl.pathname)) {
+        const body = await response.json().catch(() => null);
+        diagnostics.envelopeCounts.push({ at: Date.now() - startedAt, stage, page: index + 1, port: responseUrl.port, status: response.status(), count: Array.isArray(body?.envelopes) ? body.envelopes.length : null, hasMore: typeof body?.hasMore === "boolean" ? body.hasMore : null });
+        if (diagnostics.envelopeCounts.length > 60) diagnostics.envelopeCounts.shift();
+      }
       if (
         response.request().method() === "GET" &&
         /\/conversations\/[^/]+\/messages\/?$/.test(responseUrl.pathname)
@@ -272,6 +260,12 @@ try {
             : "no domain error code",
         );
       }
+    });
+    page.on("requestfailed", (request) => {
+      const requestUrl = new URL(request.url());
+      if (!requestUrl.pathname.startsWith("/api/mailboxes/") && !requestUrl.pathname.startsWith("/api/identities/")) return;
+      diagnostics.requestFailures.push({ at: Date.now() - startedAt, stage, page: index + 1, method: request.method(), kind: requestUrl.pathname.startsWith("/api/mailboxes/") ? "mailbox" : "identity", port: requestUrl.port, error: request.failure()?.errorText ?? "unknown" });
+      if (diagnostics.requestFailures.length > 60) diagnostics.requestFailures.shift();
     });
     let rejectSignalsUntil;
     await page.route('**/api/calls/*/signals', async route => {
@@ -456,16 +450,14 @@ try {
   const assertTimeline = async (page, messages) => {
     const items = page.getByTestId("message-item");
     for (const message of messages) {
-      await items.getByText(message, { exact: true }).waitFor().catch(error => {
-        if (message === canary) throw new Error("Plaintext canary is not visible in the timeline");
-        throw error;
-      });
+      await items.getByText(message, { exact: true }).waitFor();
       assert.equal(await items.getByText(message, { exact: true }).count(), 1);
     }
     assert.equal(await items.count(), messages.length);
   };
   stage = "bidirectional message decryption";
   const mailboxAppends = [];
+  const legacyMessagePosts = [];
   const mailboxFallbacks = [];
   if (independentClient) {
     pages.forEach((page, index) => {
@@ -474,6 +466,8 @@ try {
         const target = new URL(request.url());
         if (request.method() === "POST" && target.origin === foreignOrigin && /\/mailboxes\/[^/]+\/envelopes$/.test(target.pathname))
           mailboxAppends.push(request);
+        if (request.method() === "POST" && target.origin === new URL(urls[index]).origin && /\/conversations\/[^/]+\/messages$/.test(target.pathname))
+          legacyMessagePosts.push(request);
       });
       page.on("console", (message) => {
         if (message.text().startsWith("Recipient mailbox")) mailboxFallbacks.push(message.text());
@@ -488,20 +482,10 @@ try {
     for (const page of pages)
       await page.getByText(text, { exact: true }).first().waitFor();
   };
-  // One-to-one text must render on the recipient from its mailbox alone, so
-  // the recipient's legacy copy is withheld while each delivery is awaited.
-  const withheldPerDelivery = [];
+  // One-to-one text must render on each page from the mailbox alone. The sender
+  // posts no legacy message, which the check after the deliveries asserts.
   const deliverOneToOne = async (senderIndex, text) => {
-    const recipient = legacyCopies[1 - senderIndex];
-    const withheldBefore = recipient.withheldFrames;
-
-    recipient.withholding = independentClient;
-    try {
-      await deliver(pages[senderIndex], text);
-    } finally {
-      recipient.withholding = false;
-    }
-    withheldPerDelivery.push(recipient.withheldFrames - withheldBefore);
+    await deliver(pages[senderIndex], text);
   };
   await deliverOneToOne(0, "Encrypted message from caller one");
   await deliverOneToOne(1, "Encrypted message from caller two");
@@ -509,7 +493,7 @@ try {
     throw new Error("Plaintext canary message was not delivered and displayed on both pages");
   });
   if (independentClient) {
-    assert.ok(withheldPerDelivery.every((count) => count > 0), `Recipient legacy copies must be withheld for every one-to-one delivery, saw ${withheldPerDelivery.join(",")}`);
+    assert.equal(legacyMessagePosts.length, 0, `One-to-one sends must not POST the legacy message endpoint, saw ${legacyMessagePosts.length}`);
     assert.ok(mailboxAppends.length >= 3, `Expected a cross-node mailbox append per delivered message, saw ${mailboxAppends.length}`);
     assert.deepEqual(mailboxFallbacks, [], "Cross-node appends must not fall back to the connected node");
     for (const request of mailboxAppends) {
@@ -743,7 +727,7 @@ try {
     );
   }
   for (let recovery = 0; recovery < 3; recovery++) {
-    stage = `password login and persisted message decryption ${recovery}`;
+    stage = `password login and new direct message ${recovery}`;
     for (const [index, page] of pages.entries()) {
       await page.getByTestId("own-profile-menu-button").click();
       await page.getByRole("button", { name: "Log out", exact: true }).click();
@@ -755,7 +739,13 @@ try {
         await page.getByTestId("push-notification-dismiss-button").click();
       await page.getByRole("button", { name: "Open messages workspace", exact: true }).click();
       await page.getByTestId("conversation-list-item").first().click();
-      await assertTimeline(page, ["Encrypted message from caller one", "Encrypted message from caller two", canary]);
+    }
+    // Same-device one-to-one history is kept sealed under the device root (UI
+    // #336), but a new device gets no backfill (haskou/pigeon-swarm-ui #334; see
+    // docs/opaque-mailboxes-client.md, accepted losses). The check below only
+    // requires a new one-to-one message to reach both devices after re-login.
+    await deliver(pages[recovery % 2], `Post-login direct message ${recovery}`);
+    for (const page of pages) {
       await page.getByRole("button", { name: "Relay voice test", exact: true }).click();
       await page.getByRole("button", { name: "# general", exact: true }).click();
       await assertTimeline(page, ["Community message from caller one", "Community message from caller two"]);

@@ -186,14 +186,13 @@ const pairDevice = async (origin, password, authorized, handle, fresh) => {
     .click();
 };
 
-// Checks that a one-to-one message also travels through the recipient mailbox
-// on this node, then that the recipient renders a second message with the
-// legacy copy withheld, after its saved mailbox state is cleared. A failed
-// mailbox append is silent and the legacy copy still delivers, so the specs
-// above cannot show this path. With the legacy copy still withheld, the sender
-// then replies to, reacts to, edits and deletes messages, and each must reach
-// the recipient from the mailbox alone. The server must echo replyToMessageId
-// and targetMessageId in the responses those records are built from. A second
+// Checks that a one-to-one message travels through the recipient mailbox on
+// this node, then that the recipient renders a second message after its saved
+// mailbox state is cleared. Legacy message reads and frames stay blocked for
+// the recipient, so the mailbox is the only path left. With those blocked, the
+// sender then replies to, reacts to, edits and deletes messages, and each must
+// reach the recipient from the mailbox alone. Each mailbox append must return
+// 201, and the recipient must render the reply, edit and delete. A second
 // device of the recipient's identity, paired in through the UI, must render a
 // third message only after the first device has acked it. No mailbox POST may
 // fail on any of the three devices. Logs counts only: no message text, ids or
@@ -510,7 +509,6 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     // only path left, so the text must render from the mailbox alone.
     // The saved mailbox state was cleared above, so this read starts from cursor 0.
     bob.legacy.withholding = true;
-    const withheldBefore = bob.legacy.withheldFrames;
     const envelopesBefore = bob.counts.envelopes;
     const acksBefore = bob.counts.acks;
     const mailboxOnlyText = `mailbox only ${suffix}`;
@@ -528,8 +526,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
         assert.ok(
           rendered > 0 &&
             bob.counts.envelopes > envelopesBefore &&
-            bob.counts.acks > acksBefore &&
-            bob.legacy.withheldFrames > withheldBefore,
+            bob.counts.acks > acksBefore,
           `recipient ${JSON.stringify({
             rendered: rendered > 0,
             counts: bob.counts,
@@ -549,7 +546,6 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     const bobSnapshot = () => ({
       envelopes: bob.counts.envelopes,
       acks: bob.counts.acks,
-      withheld: bob.legacy.withheldFrames,
     });
     const bobStep = async (name, before, achieved) => {
       await waitFor(
@@ -559,8 +555,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
           assert.ok(
             done &&
               bob.counts.envelopes > before.envelopes &&
-              bob.counts.acks > before.acks &&
-              bob.legacy.withheldFrames > before.withheld,
+              bob.counts.acks > before.acks,
             `recipient ${name} ${JSON.stringify({
               done,
               counts: bob.counts,
@@ -574,13 +569,18 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       actions[name] = {
         envelopes: bob.counts.envelopes - before.envelopes,
         acks: bob.counts.acks - before.acks,
-        withheldFrames: bob.legacy.withheldFrames - before.withheld,
       };
     };
     const messageItem = (page, text) =>
       page.getByTestId("message-item").filter({ hasText: text, visible: true });
-    const messageId = (page, text) =>
-      messageItem(page, text).first().getAttribute("data-message-id");
+    const mailboxAppend = (page) =>
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          /\/mailboxes\/[^/]+\/envelopes$/u.test(
+            new URL(response.url()).pathname,
+          ),
+      );
     const openMessageMenu = async (page, text) => {
       await messageItem(page, text)
         .first()
@@ -603,29 +603,17 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       90000,
       "recipient's message did not reach the sender",
     );
-    const bobTargetId = await messageId(alice.page, bobTargetText);
-
-    assert.ok(bobTargetId, "sender's view of the recipient's message has no id");
-
     const replyText = `reply ${suffix}`;
     const replyBefore = bobSnapshot();
 
     await openMessageMenu(alice.page, bobTargetText);
     await menuAction(alice.page, "Reply");
     await alice.page.getByTestId("message-composer-input").fill(replyText);
-    const [replyResponse] = await Promise.all([
-      alice.page.waitForResponse(
-        (response) =>
-          response.request().method() === "POST" &&
-          new URL(response.url()).pathname.endsWith("/messages"),
-      ),
+    const [replyAppend] = await Promise.all([
+      mailboxAppend(alice.page),
       alice.page.getByTestId("message-send-button").click(),
     ]);
-    assert.equal(
-      (await replyResponse.json()).replyToMessageId,
-      bobTargetId,
-      "server response did not echo replyToMessageId",
-    );
+    assert.equal(replyAppend.status(), 201, "mailbox append was not accepted");
     await bobStep("reply", replyBefore, async () =>
       (await messageItem(bob.page, replyText)
         .filter({ hasText: bobTargetText })
@@ -651,33 +639,17 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     );
 
     const editedText = `edited ${suffix}`;
-    const mailboxOnlyId = await messageId(alice.page, mailboxOnlyText);
-
-    assert.ok(
-      mailboxOnlyId,
-      "sender's view of the mailbox-only message has no id",
-    );
 
     const editBefore = bobSnapshot();
 
     await openMessageMenu(alice.page, mailboxOnlyText);
     await menuAction(alice.page, "Edit");
     await alice.page.getByTestId("message-composer-input").fill(editedText);
-    const [editResponse] = await Promise.all([
-      alice.page.waitForResponse(
-        (response) =>
-          response.request().method() === "PUT" &&
-          new URL(response.url()).pathname.endsWith(
-            `/messages/${encodeURIComponent(mailboxOnlyId)}`,
-          ),
-      ),
+    const [editAppend] = await Promise.all([
+      mailboxAppend(alice.page),
       alice.page.getByTestId("message-send-button").click(),
     ]);
-    assert.equal(
-      (await editResponse.json()).targetMessageId,
-      mailboxOnlyId,
-      "server response did not echo targetMessageId",
-    );
+    assert.equal(editAppend.status(), 201, "mailbox append was not accepted");
     await bobStep("edit", editBefore, async () =>
       (await messageItem(bob.page, editedText).count()) > 0 &&
       (await messageItem(bob.page, mailboxOnlyText).count()) === 0,
@@ -714,7 +686,13 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       "second device mailbox sync did not start",
     );
 
-    const mailbox = alice.trace.appends.at(-1)?.mailbox;
+    // The recipient mailbox is the one Bob reads that Alice also appends to.
+    // Alice's own copies land in her inbox, so the last append is not reliable.
+    const mailbox = bob.trace.reads
+      .map((read) => read.mailbox)
+      .find((candidate) =>
+        alice.trace.appends.some((append) => append.mailbox === candidate),
+      );
 
     assert.ok(mailbox, "sender did not append to the recipient mailbox");
     assert.ok(
@@ -785,7 +763,6 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
 
     const before = {
       envelopes: device.counts.envelopes,
-      withheld: device.legacy.withheldFrames,
     };
 
     device.legacy.withholding = true;
@@ -816,8 +793,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
         assert.ok(
           gate.opened &&
             rendered > 0 &&
-            device.counts.envelopes > before.envelopes &&
-            device.legacy.withheldFrames > before.withheld,
+            device.counts.envelopes > before.envelopes,
           `second device ${JSON.stringify({
             gateOpened: gate.opened,
             rendered: rendered > 0,

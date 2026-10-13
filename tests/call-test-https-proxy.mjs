@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, X509Certificate } from "node:crypto";
 
-export async function startCallTestGateways(hosts = ["app-a", "app-b"]) {
+/** Self-signed gateway identity. Browsers pin its SPKI, so each must trust the same key. */
+export function createCallTestCredentials() {
   const directory = mkdtempSync(join(tmpdir(), "call-test-tls-"));
   const key = join(directory, "key.pem");
   const cert = join(directory, "cert.pem");
@@ -37,11 +38,27 @@ export async function startCallTestGateways(hosts = ["app-a", "app-b"]) {
     throw new Error("Test certificate generation failed");
   }
   const credentials = { key: readFileSync(key), cert: readFileSync(cert) };
-  const certificate = new X509Certificate(credentials.cert);
-  const spki = createHash("sha256")
-    .update(certificate.publicKey.export({ type: "spki", format: "der" }))
-    .digest("base64");
   rmSync(directory, { recursive: true });
+  return credentials;
+}
+
+export function spkiOf(cert) {
+  return createHash("sha256")
+    .update(
+      new X509Certificate(cert).publicKey.export({
+        type: "spki",
+        format: "der",
+      }),
+    )
+    .digest("base64");
+}
+
+export async function startCallTestGateways(
+  hosts = ["app-a", "app-b"],
+  bindHost = "127.0.0.1",
+  credentials = createCallTestCredentials(),
+) {
+  const spki = spkiOf(credentials.cert);
   const servers = [];
   const sockets = new Set();
   const stop = async () => {
@@ -109,7 +126,7 @@ export async function startCallTestGateways(hosts = ["app-a", "app-b"]) {
       });
       await new Promise((resolve, reject) => {
         server.once("error", reject);
-        server.listen(8443 + index, "127.0.0.1", resolve);
+        server.listen(8443 + index, bindHost, resolve);
       });
       servers.push(server);
     }

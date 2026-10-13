@@ -26,8 +26,8 @@ export async function prepareNatNetwork(compose) {
     }
     for (const [index, name] of ["a", "b"].entries()) {
       const remote = index === 0 ? "b" : "a";
-      const publicIp = index === 0 ? "172.29.203.12" : "172.29.203.11";
-      const sourceIp = index === 0 ? "172.29.203.11" : "172.29.203.12";
+      const publicIp = index === 0 ? "203.0.113.12" : "203.0.113.11";
+      const sourceIp = index === 0 ? "203.0.113.11" : "203.0.113.12";
       const privateIp = index === 0 ? "10.203.2.10" : "10.203.1.10";
       // Bound and destroy each socket, including when the firewall silently drops SYNs.
       await compose("exec", "-T", `app-${name}`, "node", "--input-type=module", "-e", `

@@ -1,5 +1,6 @@
 const { createRequire } = require("node:module");
 const { createServer } = require("node:http");
+const { dropConnections } = require("./relay-connection-drop.cjs");
 const requireApp = createRequire("/app/package.json");
 requireApp("reflect-metadata");
 const { heliaRuntimeAdapter } = requireApp(
@@ -24,17 +25,13 @@ createServer(async (request, response) => {
   try {
     let closedPrivateConnections;
     if (request.method === "POST" && request.url === "/public/drop") {
-      await Promise.all(
-        [...publicNodes].flatMap((node) =>
-          node.getConnections().map((connection) => connection.close()),
-        ),
+      await dropConnections(
+        [...publicNodes].flatMap((node) => node.getConnections()),
       );
     } else if (request.method === "POST" && request.url === "/private/drop") {
-      const connections = [...privateNodes].flatMap((node) =>
-        node.getConnections(),
+      closedPrivateConnections = await dropConnections(
+        [...privateNodes].flatMap((node) => node.getConnections()),
       );
-      closedPrivateConnections = connections.length;
-      await Promise.all(connections.map((connection) => connection.close()));
     } else if (request.method !== "GET" || request.url !== "/state") {
       response.writeHead(404).end();
       return;

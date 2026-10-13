@@ -124,6 +124,9 @@ jobs:
       - name: Validate restore copy helper
         run: node --test tests/restore-copy.test.mjs
 
+      - name: Validate relay fault link drop
+        run: node --test tests/relay-connection-drop.test.mjs
+
       - name: Verify browser diagnostic redaction
         if: needs.changes.outputs.heavy != 'false'
         run: node --test tests/turn-browser-probe.test.mjs

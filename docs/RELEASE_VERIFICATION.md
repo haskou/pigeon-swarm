@@ -51,6 +51,7 @@ Every CI test step in `validate.yml` appears here exactly once.
 | M15 | Release matrix drift guard | Repository files only | None | `Validate release verification matrix` | Pins, referenced paths, `npm run test:*` scripts and CI test steps match this document | Automated |
 | M16 | Canary scan encodings | Unit tests over synthetic bytes and temporary trees | None | `Validate canary scan encodings` | Each encoding in `tests/canary-scan.mjs` is detected when present, including base64 inside a larger stream at every byte alignment; unrelated bytes are not reported; symbolic links are not followed | Automated |
 | M17 | Restore copy helper | Unit tests over temporary trees | None | `Validate restore copy helper` | Copies keep file contents and modes; a non-empty target, a target inside the source, and a missing source or target are refused without changes; file contents are never printed | Automated |
+| M18 | Relay fault link drop | Unit tests over fake connections | None | `Validate relay fault link drop` | The fault controller of M08 closes each link gracefully; a link whose close fails, as with libp2p's one-second close timeout while a stream waits for send window, is aborted; the controller reports every link as dropped | Automated |
 
 Blocked or unfinished behavior listed in the issue (#29, #32, #33 and their
 linked node and UI issues) is not claimed here. Those rows are tracked by the

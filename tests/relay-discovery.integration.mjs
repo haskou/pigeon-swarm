@@ -72,7 +72,7 @@ test(
           node,
           `
     const response = await fetch('http://127.0.0.1:${port}${path}', {method:${JSON.stringify(method)}, headers:{'content-type':'application/json'}, signal:AbortSignal.timeout(5000), body:${body === undefined ? "undefined" : `JSON.stringify(${JSON.stringify(body)})`}});
-    if (!response.ok) throw new Error('HTTP status ' + response.status + ' for ${method} ${path}');
+    if (!response.ok) throw new Error('HTTP status ' + response.status + ' for ${method} ${path}: ' + (await response.text()).slice(0, 300));
     console.log(JSON.stringify(await response.json()));
   `,
         ),
@@ -362,6 +362,8 @@ test(
           "PIGEON_RELAY_RECORD_TTL_MS=600000",
           "-v",
           `${resolve("tests/relay-runtime-control.cjs")}:/test/control.cjs:ro`,
+          "-v",
+          `${resolve("tests/relay-connection-drop.cjs")}:/test/relay-connection-drop.cjs:ro`,
           image,
           "node",
           "-r",

@@ -564,10 +564,18 @@ test(
         const logs = await docker(["logs", "--tail", "2000", container]).catch(
           () => "",
         );
-        const lines = String(logs)
-          .split("\n")
-          .filter((line) => /call|mutation|reject|warn|error/i.test(line))
-          .slice(-60);
+        // Keep the stack frames that follow an error line: an init failure
+        // otherwise shows only its message.
+        const lines = [];
+        let inError = false;
+        for (const line of String(logs).split("\n")) {
+          if (/call|mutation|reject|warn|error/i.test(line)) {
+            lines.push(line);
+            inError = /error/i.test(line);
+          } else if (inError && /^\s+at\s/.test(line)) lines.push(line);
+          else inError = false;
+        }
+        lines.splice(0, lines.length - 80);
         console.log(
           JSON.stringify({ container, relevantLogLines: lines }, null, 1),
         );

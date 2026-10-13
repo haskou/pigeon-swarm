@@ -349,7 +349,11 @@ try {
     )
       ? `: ${error.message}`
       : "";
-  failure = `Relay traffic probe failed during ${stage}${detail}`;
+  // Name and cause code only: other messages may carry request material.
+  const kind = [error?.name, error?.cause?.code]
+    .filter((part) => /^[A-Za-z_]{1,40}$/.test(part ?? ""))
+    .join("/");
+  failure = `Relay traffic probe failed during ${stage}${detail || (kind ? ` (${kind})` : "")}`;
 } finally {
   for (const { identity, callId } of joined) {
     try {

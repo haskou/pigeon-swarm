@@ -658,7 +658,7 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
     const deleteBefore = bobSnapshot();
 
     await openMessageMenu(alice.page, replyText);
-    await menuAction(alice.page, "Delete");
+    await menuAction(alice.page, "Delete for everyone");
     await bobStep("delete", deleteBefore, async () =>
       (await messageItem(bob.page, replyText).count()) === 0,
     );

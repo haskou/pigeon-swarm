@@ -362,6 +362,8 @@ test(
           "PIGEON_RELAY_RECORD_TTL_MS=600000",
           "-v",
           `${resolve("tests/relay-runtime-control.cjs")}:/test/control.cjs:ro`,
+          "-v",
+          `${resolve("tests/relay-connection-drop.cjs")}:/test/relay-connection-drop.cjs:ro`,
           image,
           "node",
           "-r",

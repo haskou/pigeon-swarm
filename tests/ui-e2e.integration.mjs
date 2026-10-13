@@ -676,15 +676,6 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       device.page,
     );
     await selectConversation(device.page, `Mailbox A ${suffix}`);
-    await waitFor(
-      () =>
-        assert.ok(
-          device.counts.reads > 0,
-          `second device inbox not read; ${JSON.stringify(device.counts.seen)}`,
-        ),
-      90000,
-      "second device mailbox sync did not start",
-    );
 
     // The recipient mailbox is the one Bob reads that Alice also appends to.
     // Alice's own copies land in her inbox, so the last append is not reliable.
@@ -695,9 +686,16 @@ const assertDirectMessageMailboxDelivery = async (uiSource, origin) => {
       );
 
     assert.ok(mailbox, "sender did not append to the recipient mailbox");
-    assert.ok(
-      device.trace.reads.some((read) => read.mailbox === mailbox),
-      "second device reads a different mailbox than the sender appends to",
+    // The paired device first reads the history transfer mailbox, so any read
+    // can precede the inbox read: wait for the recipient mailbox itself.
+    await waitFor(
+      () =>
+        assert.ok(
+          device.trace.reads.some((read) => read.mailbox === mailbox),
+          `second device does not read the recipient mailbox; ${JSON.stringify(device.counts.seen)}`,
+        ),
+      90000,
+      "second device mailbox sync did not reach the recipient mailbox",
     );
 
     // Gate: the second device's envelope reads are held until device A's device

@@ -147,6 +147,9 @@ try {
       historyResponses: [],
       mailboxResponses: [],
       keychainResponses: [],
+      identityResponses: [],
+      envelopeCounts: [],
+      requestFailures: [],
       rejectedSignals: 0,
     };
     deliveryDiagnostics.push(diagnostics);
@@ -180,6 +183,15 @@ try {
       if (responseUrl.pathname.startsWith("/api/keychains/")) {
         diagnostics.keychainResponses.push({ at: Date.now() - startedAt, stage, page: index + 1, method: response.request().method(), port: responseUrl.port, status: response.status() });
         if (diagnostics.keychainResponses.length > 60) diagnostics.keychainResponses.shift();
+      }
+      if (responseUrl.pathname.startsWith("/api/identities/")) {
+        diagnostics.identityResponses.push({ at: Date.now() - startedAt, stage, page: index + 1, method: response.request().method(), port: responseUrl.port, status: response.status() });
+        if (diagnostics.identityResponses.length > 60) diagnostics.identityResponses.shift();
+      }
+      if (response.request().method() === "GET" && /^\/api\/mailboxes\/[^/]+\/envelopes\/?$/.test(responseUrl.pathname)) {
+        const body = await response.json().catch(() => null);
+        diagnostics.envelopeCounts.push({ at: Date.now() - startedAt, stage, page: index + 1, port: responseUrl.port, status: response.status(), count: Array.isArray(body?.envelopes) ? body.envelopes.length : null, hasMore: typeof body?.hasMore === "boolean" ? body.hasMore : null });
+        if (diagnostics.envelopeCounts.length > 60) diagnostics.envelopeCounts.shift();
       }
       if (
         response.request().method() === "GET" &&
@@ -248,6 +260,12 @@ try {
             : "no domain error code",
         );
       }
+    });
+    page.on("requestfailed", (request) => {
+      const requestUrl = new URL(request.url());
+      if (!requestUrl.pathname.startsWith("/api/mailboxes/") && !requestUrl.pathname.startsWith("/api/identities/")) return;
+      diagnostics.requestFailures.push({ at: Date.now() - startedAt, stage, page: index + 1, method: request.method(), kind: requestUrl.pathname.startsWith("/api/mailboxes/") ? "mailbox" : "identity", port: requestUrl.port, error: request.failure()?.errorText ?? "unknown" });
+      if (diagnostics.requestFailures.length > 60) diagnostics.requestFailures.shift();
     });
     let rejectSignalsUntil;
     await page.route('**/api/calls/*/signals', async route => {

@@ -521,6 +521,63 @@ The workflow also accepts `repository_dispatch` with the `source-published` even
 
 Published images include OCI metadata labels, SBOM generation, and provenance attestation through Docker Buildx. Builds use the GitHub Actions build cache.
 
+## Pin bumps
+
+The [validation workflow](../.github/workflows/validate.yml) builds and tests the image from fixed node and UI commits, `PIGEON_SWARM_NODE_SHA` and `PIGEON_SWARM_UI_SHA`. Bump them once per batch of upstream changes, not once per upstream change:
+
+- Only a pin-bump pull request changes the pins. Feature and test pull requests leave them alone.
+- At most one pin-bump pull request is open. When more node or UI changes land while it is open, rerun the helper on its branch instead of opening another one.
+- Wrapper test changes that the new pins require go in the same pin-bump pull request.
+- A wrapper change that needs newer node or UI code lands after the pin-bump pull request that brings that code.
+
+Move both pins to the current `main` of their repositories with the helper. It updates the workflow and [RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md) together and prints the upstream compare links for the pull request body:
+
+```bash
+node scripts/bump-pins.mjs
+```
+
+Pass `--node <commit>` or `--ui <commit>` with a full 40-character commit SHA to pin an earlier commit when the current `main` of that repository fails the wrapper checks.
+
+## Commit titles
+
+Commit and pull request titles use `<type>(<scope>): <one gitmoji> <Capitalised imperative>`, for example `fix(relay): 🐛 Abort fault-dropped links whose graceful close fails`. Pull requests are squash-merged, so the pull request title becomes the commit title on `main`.
+
+The commits below, on `main` up to `f2f9c6f`, do not follow this format. History on `main` is not rewritten, so they stay as they are. Every new commit follows the format.
+
+| Commit | Title |
+| --- | --- |
+| `74cad8e` | `🔧 chore(ci): bump UI and node pins; assert mailbox-only one-to-one delivery (#100)` |
+| `9de6c89` | `📝 docs(docker): document documentation-only validation gate (#99)` |
+| `183e3b6` | `🔧 ci(workflows): skip heavy wrapper checks for documentation-only changes (#98)` |
+| `93f6935` | `chore(ci): 🔧 bump UI and node pins to d96aed5 and 9f1d280 (#96)` |
+| `92af506` | `🧪 test(e2e): cover paired-device login and forgotten-device revocation (#95)` |
+| `a1797fc` | `chore(ci): 🔧 bump UI and node pins to b8f1870 and 5553a17 (#94)` |
+| `3c74039` | `🧪 test(relay): log control fault errors and include message in 500 (#93)` |
+| `ece7842` | `✅ test(e2e): ✅ Assert cross-node mailbox appends for the independent client (#92)` |
+| `14414f6` | `chore(ci): 🔧 bump UI and node pins to 1c780e1 and c87ae17 (#91)` |
+| `38cbe9c` | `🧪 test(ui-e2e): fail on failed mailbox POSTs after UI #268 (#89)` |
+| `39bd4cb` | `test(ui): 🧪 cover mailbox reply, reaction, edit and delete (#88)` |
+| `fdf3f21` | `chore(ci): 🔧 bump UI and node pins to c653f49 and cd946ac (#87)` |
+| `0f8bf65` | `🧪 test(ui-e2e): prove paired second device mailbox delivery against UI #263 (#86)` |
+| `f7b284b` | `chore(ci): 🔧 bump node and UI pins; probe mailbox-only delivery after state clear (#85)` |
+| `d44093b` | `chore(ci): 🔧 bump UI pin to 81c4973 (#84)` |
+| `0160c49` | `test(ui-e2e): 🧪 assert 1:1 delivery through the mailbox without legacy fanout (#83)` |
+| `2694ca4` | `docs(wrapper): 📝 align validation, client and Docker docs with current code (#81)` |
+| `ba13fcc` | `test(relay): 🧪 authenticate traffic probe sockets with realtime tickets (#78)` |
+| `7a8556a` | `✅ test(two-node): wait for keychain replication before cross-node invitation (#76)` |
+| `a9652d0` | `✅ test(restore): verify restored data copies in the two-node run (#74)` |
+| `6b552b5` | `test(probes): ✅ report the node error body on failed requests (#64)` |
+| `0c9862d` | `✅ test: check community content convergence across three real nodes (#62)` |
+| `8962837` | `✅ test: run UI Playwright specs against the real node in the image (#61)` |
+| `1c04d3a` | `⬆️ chore(ci): Validate against current node and UI main (#60)` |
+| `e4b8daa` | `Revert "fix(docker): 🔧 Configure Node runtime diagnostics (#18)"` |
+| `1231e95` | `chore(deps): bump docker/setup-qemu-action from 3 to 4 (#8)` |
+| `546b025` | `chore(deps): bump actions/checkout from 4 to 7 (#9)` |
+| `97d516d` | `chore(deps): bump actions/setup-node from 4 to 6 (#11)` |
+| `aa45c43` | `chore(deps): bump actions/deploy-pages from 4 to 5 (#12)` |
+| `2b66ada` | `chore(deps): bump actions/configure-pages from 5 to 6 (#13)` |
+| `016752d` | `chore(docker): 🔥 remove PM2 runtime` |
+
 ## Source Branches
 
 The source repositories have been checked on GitHub:

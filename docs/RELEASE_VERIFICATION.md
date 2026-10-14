@@ -28,6 +28,9 @@ Both revisions are commits of the public `haskou/pigeon-swarm-node` and
 revisions with `docker build --target production` and passes its image ID as
 `PIGEON_TEST_IMAGE`. Results apply to this image build only.
 
+Move the pins with `scripts/bump-pins.mjs` in the one pin-bump pull request, as
+described in [DOCKER_IMAGE.md](DOCKER_IMAGE.md#pin-bumps).
+
 ## Verification matrix
 
 Every CI test step in `validate.yml` appears here exactly once.
@@ -53,6 +56,7 @@ Every CI test step in `validate.yml` appears here exactly once.
 | M17 | Restore copy helper | Unit tests over temporary trees | None | `Validate restore copy helper` | Copies keep file contents and modes; a non-empty target, a target inside the source, and a missing source or target are refused without changes; file contents are never printed | Automated |
 | M18 | Relay fault link drop | Unit tests over fake connections | None | `Validate relay fault link drop` | The fault controller of M08 closes each link gracefully; a link whose close fails, as with libp2p's one-second close timeout while a stream waits for send window, is aborted; the controller reports every link as dropped | Automated |
 | M19 | Direct inbox availability across nodes | Client built independently with both nodes as mailbox availability servers; two application containers; three Chromium contexts | Recipient's home node killed mid-session | `Verify direct inbox availability across nodes` | A sender appends to the recipient's home and availability server; the recipient's open client keeps reading the inbox from the other node after its home is killed; a device revoked on its home node renders nothing new and its earlier read capabilities are refused by the other node, as listed in [MULTI_NODE_AVAILABILITY_VALIDATION.md](MULTI_NODE_AVAILABILITY_VALIDATION.md) | Automated |
+| M20 | Pin bump helper | Unit tests over temporary copies of the pin files | None | `Validate pin bump helper` | `scripts/bump-pins.mjs` moves both pins in the workflow, the pin table and the reproduction command; abbreviated commits and files that do not record the current pin are refused without changes | Automated |
 
 Blocked or unfinished behavior listed in the issue (#29, #32, #33 and their
 linked node and UI issues) is not claimed here. Those rows are tracked by the

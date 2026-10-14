@@ -681,12 +681,11 @@ try {
       (expected) => document.querySelectorAll("[data-testid=voice-channel-participant]").length === expected,
       count,
     );
-  for (const page of pages) {
+  for (const page of pages)
     await page
       .getByRole("button", { name: "Relay voice test", exact: true })
       .click();
-    await joinVoice(page);
-  }
+  await Promise.all(pages.map(joinVoice));
   await assertAudio("community voice call");
   for (const page of pages) await expectVoiceParticipants(page, 2);
   for (let cycle = 1; cycle <= 3; cycle++) {

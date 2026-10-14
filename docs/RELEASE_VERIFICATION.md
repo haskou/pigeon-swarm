@@ -20,8 +20,8 @@ Status meanings:
 
 | Component | Revision |
 | --- | --- |
-| `PIGEON_SWARM_NODE_SHA` | `33468ec96cd00a6e82a4b9bde5b08df6b1cc66be` |
-| `PIGEON_SWARM_UI_SHA` | `2a84f1b9250fdfd7728ae21accdb0ee3285c45a7` |
+| `PIGEON_SWARM_NODE_SHA` | `384e327caa32e04fa8a28a077329ea0049ee09aa` |
+| `PIGEON_SWARM_UI_SHA` | `89d2cf23df80f12a419a4bd9c7e6a5ddda1c2272` |
 
 Both revisions are commits of the public `haskou/pigeon-swarm-node` and
 `haskou/pigeon-swarm-ui` repositories. CI builds the application image from these
@@ -131,8 +131,8 @@ The source repositories are public. The Dockerfile needs no token for these pins
 
 ```sh
 docker build --target production \
-  --build-arg PIGEON_SWARM_NODE_SHA=33468ec96cd00a6e82a4b9bde5b08df6b1cc66be \
-  --build-arg PIGEON_SWARM_UI_SHA=2a84f1b9250fdfd7728ae21accdb0ee3285c45a7 \
+  --build-arg PIGEON_SWARM_NODE_SHA=384e327caa32e04fa8a28a077329ea0049ee09aa \
+  --build-arg PIGEON_SWARM_UI_SHA=89d2cf23df80f12a419a4bd9c7e6a5ddda1c2272 \
   --iidfile pigeon-test-image.id .
 export PIGEON_TEST_IMAGE="$(cat pigeon-test-image.id)"
 npm ci --ignore-scripts

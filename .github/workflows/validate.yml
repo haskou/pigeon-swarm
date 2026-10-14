@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 env:
-  PIGEON_SWARM_NODE_SHA: 98471ccca81fafc8c2bf40715993999282238d2a
-  PIGEON_SWARM_UI_SHA: 3ca398db2c4e9d62bb84e7ef448a7b426fac423f
+  PIGEON_SWARM_NODE_SHA: 33468ec96cd00a6e82a4b9bde5b08df6b1cc66be
+  PIGEON_SWARM_UI_SHA: 2a84f1b9250fdfd7728ae21accdb0ee3285c45a7
 
 concurrency:
   group: validate-wrapper-${{ github.ref }}
@@ -222,6 +222,18 @@ jobs:
           export PIGEON_CLIENT_DIST="$GITHUB_WORKSPACE/client-source/dist"
           export PIGEON_INDEPENDENT_CLIENT=true
           npm run test:e2e
+
+      - name: Build independent client with mailbox availability servers
+        working-directory: client-source
+        run: |
+          VITE_INDEPENDENT_CLIENT=true \
+            VITE_MAILBOX_AVAILABILITY_SERVERS=https://localhost:8443/api,https://localhost:8444/api \
+            yarn build --outDir "$RUNNER_TEMP/availability-client-dist"
+
+      - name: Verify direct inbox availability across nodes
+        run: |
+          export PIGEON_AVAILABILITY_CLIENT_DIST="$RUNNER_TEMP/availability-client-dist"
+          npm run test:e2e:availability
 
   ui-e2e:
     name: Validate UI against a real node

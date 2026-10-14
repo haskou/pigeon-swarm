@@ -20,8 +20,8 @@ Status meanings:
 
 | Component | Revision |
 | --- | --- |
-| `PIGEON_SWARM_NODE_SHA` | `98471ccca81fafc8c2bf40715993999282238d2a` |
-| `PIGEON_SWARM_UI_SHA` | `3ca398db2c4e9d62bb84e7ef448a7b426fac423f` |
+| `PIGEON_SWARM_NODE_SHA` | `33468ec96cd00a6e82a4b9bde5b08df6b1cc66be` |
+| `PIGEON_SWARM_UI_SHA` | `2a84f1b9250fdfd7728ae21accdb0ee3285c45a7` |
 
 Both revisions are commits of the public `haskou/pigeon-swarm-node` and
 `haskou/pigeon-swarm-ui` repositories. CI builds the application image from these
@@ -52,6 +52,7 @@ Every CI test step in `validate.yml` appears here exactly once.
 | M16 | Canary scan encodings | Unit tests over synthetic bytes and temporary trees | None | `Validate canary scan encodings` | Each encoding in `tests/canary-scan.mjs` is detected when present, including base64 inside a larger stream at every byte alignment; unrelated bytes are not reported; symbolic links are not followed | Automated |
 | M17 | Restore copy helper | Unit tests over temporary trees | None | `Validate restore copy helper` | Copies keep file contents and modes; a non-empty target, a target inside the source, and a missing source or target are refused without changes; file contents are never printed | Automated |
 | M18 | Relay fault link drop | Unit tests over fake connections | None | `Validate relay fault link drop` | The fault controller of M08 closes each link gracefully; a link whose close fails, as with libp2p's one-second close timeout while a stream waits for send window, is aborted; the controller reports every link as dropped | Automated |
+| M19 | Direct inbox availability across nodes | Client built independently with both nodes as mailbox availability servers; two application containers; three Chromium contexts | Recipient's home node killed mid-session | `Verify direct inbox availability across nodes` | A sender appends to the recipient's home and availability server; the recipient's open client keeps reading the inbox from the other node after its home is killed; a device revoked on its home node renders nothing new and its earlier read capabilities are refused by the other node, as listed in [MULTI_NODE_AVAILABILITY_VALIDATION.md](MULTI_NODE_AVAILABILITY_VALIDATION.md) | Automated |
 
 Blocked or unfinished behavior listed in the issue (#29, #32, #33 and their
 linked node and UI issues) is not claimed here. Those rows are tracked by the
@@ -62,8 +63,8 @@ acceptance mapping and the open items below.
 | # | Criterion (abridged) | Evidence | Status |
 | --- | --- | --- | --- |
 | 1 | Calls across two TURN servers and separate networks, blocked UDP, reconnection and no-direct-connection mode | M11 covers two TURN servers behind separate simulated NATs. M10 restarts applications between phases. Not covered: client UDP blocked during a live call, active-call recovery after a relay restart, no-direct-connection mode ([#32](https://github.com/haskou/pigeon-swarm/issues/32)). Remaining evidence: X2. | Partial |
-| 2 | Three nodes with concurrent operations, partitions, restarts and revocations | M08 covers a three-node relay mesh with partitions, restarts, a delegation revocation racing a kick, and six concurrent community operations. Not covered: device or key revocation, attachments, mailbox delivery. | Partial |
-| 3 | Removed members or devices receive no new keys after revocation | No check in this matrix. Key evolution and device revocation are outside these tests and are not claimed. | Open |
+| 2 | Three nodes with concurrent operations, partitions, restarts and revocations | M08 covers a three-node relay mesh with partitions, restarts, a delegation revocation racing a kick, and six concurrent community operations. M19 covers two-node direct mailbox delivery with the home node killed and a device revoked. Not covered: key revocation, attachments, community or group mailbox delivery. | Partial |
+| 3 | Removed members or devices receive no new keys after revocation | M19 covers a revoked device's direct inbox read capabilities on another node and its rendering of later messages. Key evolution and member removal are not claimed. | Partial |
 | 4 | Captures of storage, events, logs, DHT and push do not reveal prohibited fields | Schema contracts (M04), the static [data inventory](privacy/DATA-INVENTORY.md), M16's tests of the canary scanner, and M10's canary scan of stopped data volumes and container logs for copies of a synthetic plaintext canary in every encoding defined by `tests/canary-scan.mjs`, with a planted control per encoding. Not covered: encrypted or compressed storage contents, browser storage, DHT, push and traffic captures. | Partial |
 | 5 | Retention, backups, restore and migration are tested without promising deletion of copies held by others | M10 (non-NAT) copies the stopped volumes with `scripts/restore-copy.sh`, starts a restored node from the copies, and checks the caller identity, node network list and private network peer ID after start and after restart; M17 tests the copy helper. The procedure and its limits are in [BACKUP_RESTORE.md](BACKUP_RESTORE.md). Not covered: backup retention and migration between image versions ([#33](https://github.com/haskou/pigeon-swarm/issues/33)). The restore path is tested only with the image built from the pins. | Partial |
 | 6 | Every failure has redacted evidence and a regression; no guarantee depends only on mocks | Redaction is tested by M06. Integration checks M07–M11 and M14 run real images. M12 uses fixtures and is labelled as such. Regression coverage is per-check, not a general process. | Partial |
@@ -120,7 +121,7 @@ backend `4f43437`. The pinned backend (`b5933856`) has not been re-inventoried.
 - Real home NAT, CGNAT, mobile networks and public reachability (X1, X2).
 - No-direct-connection call mode ([#32](https://github.com/haskou/pigeon-swarm/issues/32)).
 - Device or member revocation effects on key material (MLS and UI key work).
-- Attachments, push notifications and mailbox delivery.
+- Attachments and push notifications; mailbox delivery beyond M19's direct inbox (community and group mailboxes, more than one availability server, sending while one's own home node is down).
 - Storage migration between image versions and retention of backups ([#33](https://github.com/haskou/pigeon-swarm/issues/33)).
 - Criterion 4 beyond the M10 canary: encrypted or compressed storage contents, browser storage, DHT, push and traffic captures from a nonparticipant.
 
@@ -130,8 +131,8 @@ The source repositories are public. The Dockerfile needs no token for these pins
 
 ```sh
 docker build --target production \
-  --build-arg PIGEON_SWARM_NODE_SHA=98471ccca81fafc8c2bf40715993999282238d2a \
-  --build-arg PIGEON_SWARM_UI_SHA=3ca398db2c4e9d62bb84e7ef448a7b426fac423f \
+  --build-arg PIGEON_SWARM_NODE_SHA=33468ec96cd00a6e82a4b9bde5b08df6b1cc66be \
+  --build-arg PIGEON_SWARM_UI_SHA=2a84f1b9250fdfd7728ae21accdb0ee3285c45a7 \
   --iidfile pigeon-test-image.id .
 export PIGEON_TEST_IMAGE="$(cat pigeon-test-image.id)"
 npm ci --ignore-scripts
@@ -143,7 +144,10 @@ npm run test:moderation
 npm run test:e2e
 npm run test:e2e:nat
 npm run test:ui-e2e
+npm run test:e2e:availability
 ```
 
 The `validate.yml` workflow runs the same checks, plus the TURN, client,
 benchmark and browser-probe checks listed in the matrix.
+`npm run test:e2e:availability` also needs a client build; see
+[MULTI_NODE_AVAILABILITY_VALIDATION.md](MULTI_NODE_AVAILABILITY_VALIDATION.md).

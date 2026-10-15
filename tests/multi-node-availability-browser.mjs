@@ -147,6 +147,8 @@ const pair = async ({ page: authorized }, handle, { page: fresh }) => {
     45000,
     "Pairing verification codes differ",
   );
+  // The authorized device confirms its own password before it authorizes.
+  await authorized.getByTestId("device-pairing-password-input").fill(PASSWORD);
   await authorized.getByTestId("device-pairing-submit").click();
   const completion = authorized.getByTestId("device-pairing-completion-output");
   await completion.waitFor({ state: "visible" });

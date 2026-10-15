@@ -13,6 +13,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { KeyPair, SHA256Hash } from "@haskou/pigeon-swarm-crypto";
 
 const MUTATION_DOMAIN = "pigeon:public-mutation:v2\n";
+const COMMUNITY_OPERATION_DOMAIN = "pigeon:community-operation:v1\n";
 const FIRST_POSITION = { predecessor: null, sequence: 0 };
 
 export class HttpError extends Error {
@@ -193,9 +194,6 @@ const entityId = (kind, communityId, creatorId, createdAt) =>
 export const deriveCommunityId = (networkId, ownerIdentityId, nonce) =>
   sha256Url(canonicalJson({ networkId, nonce, ownerIdentityId }));
 
-export const deriveInviteToken = (communityId, creatorId, nonce) =>
-  sha256Url(JSON.stringify([communityId, creatorId, nonce]));
-
 const membershipRequestId = (communityId, type, creatorId, identityId, at) =>
   sha256(
     JSON.stringify([communityId, type, creatorId, identityId, at]),
@@ -214,13 +212,18 @@ function signOperation(actor, input) {
     scopeType: "community_operation",
   };
   const recordId = `community:${input.communityId}:op:${sha256Url(canonicalJson(body))}`;
+  // The author's identity key signs the record id so members can verify the
+  // author from the operation itself; the payload digest covers it.
+  const identitySignature = actor.identity
+    .sign(`${COMMUNITY_OPERATION_DOMAIN}${recordId}`)
+    .toString();
   const mutation = signMutation(actor, {
     kind: "put",
-    payload: { ...body, id: recordId },
+    payload: { ...body, id: recordId, identitySignature },
     recordId,
     store: "communityOperations",
   });
-  return { createdAt: input.createdAt, mutation, parents };
+  return { createdAt: input.createdAt, identitySignature, mutation, parents };
 }
 
 function signModerationLog(actor, input) {

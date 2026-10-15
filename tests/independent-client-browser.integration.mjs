@@ -301,8 +301,9 @@ test('independent built client browser contract with explicitly fake backend fix
       banner.getBoundingClientRect();
       await loaded;
     }, remote.origin);
-    await page.waitForFunction(() => globalThis.imageCspViolations.length === 2, undefined, { timeout: 2000 });
-    assert.deepEqual((await page.evaluate(() => globalThis.imageCspViolations)).sort(), [`${remote.origin}/avatar.png`, `${remote.origin}/banner.png`]);
+    // The response header and the client's meta policy each report a blocked image.
+    await page.waitForFunction(() => new Set(globalThis.imageCspViolations).size === 2, undefined, { timeout: 2000 });
+    assert.deepEqual([...new Set(await page.evaluate(() => globalThis.imageCspViolations))].sort(), [`${remote.origin}/avatar.png`, `${remote.origin}/banner.png`]);
     assert.deepEqual(remote.requests, []);
     const dimensions = await page.evaluate(async () => {
       const response = await fetch('/logo.png');

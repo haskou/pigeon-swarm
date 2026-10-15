@@ -131,7 +131,8 @@ export function createTwoNodeFixture({ composeFiles, projectPrefix, deadlineMs, 
  * with the other node connected. `companions` start after the restart, before
  * the convergence wait. Returns the network and each node's peer ID and port.
  */
-export async function startTwoNodeNetwork({ env, run, compose, nat }, { companions = [] } = {}) {
+export async function startTwoNodeNetwork(fixture, { companions = [] } = {}) {
+  const { env, run, compose, nat } = fixture;
   await compose("up", "-d", "--wait", "--wait-timeout", "90", "app-a", "app-b", "browser");
   for (const name of ["a", "b"]) {
     env[`TEST_IP_${name.toUpperCase()}`] = await compose(
@@ -223,55 +224,70 @@ export async function startTwoNodeNetwork({ env, run, compose, nat }, { companio
     await compose("restart", `app-${name}`);
     await compose("up", "-d", "--wait", "--wait-timeout", "90", `app-${name}`);
   }
-  for (const name of ["a", "b"]) {
-    const address = await compose(
-      "exec",
-      "-T",
-      `app-${name}`,
-      "node",
-      "-e",
-      "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)",
-    );
-    assert.ok(
-      address === env[`TEST_PRIVATE_IP_${name.toUpperCase()}`],
-      "Fixture node address must survive restart",
-    );
-  }
+  for (const name of ["a", "b"]) await assertNodeAddressSurvived(fixture, name);
   await compose("up", "-d", "--wait", "--wait-timeout", "90", "app-a", "app-b", ...companions);
-  await Promise.all(
-    ["a", "b"].map(async (name, index) => {
-      const logs = await run(["logs", "--no-color", `app-${name}`]);
-      const startedPeers = [...(logs.stdout + logs.stderr).matchAll(STARTED)];
-      assert.ok(
-        startedPeers.at(-1)?.[1] === peers[index].id,
-        "Private network peer identity must survive restart",
-      );
-      const readiness = await run(
-        ["exec", "-T", `app-${name}`, "node", "--input-type=module"],
-        {
-          timeout: 70000,
-          input: `
-            const deadline = Date.now() + 60000;
-            let summary;
-            while (Date.now() < deadline) {
-              const response = await fetch('http://127.0.0.1:8080/api/peers/', {signal:AbortSignal.timeout(5000)});
-              const peers = await response.json();
-              const network = peers.networkSynchronization?.networks?.find(network => network.id === ${JSON.stringify(network.id)});
-              summary = {state:network?.state,connected:network?.connectedPeerIds?.length,replicating:network?.replicationPeerIds?.length,stores:network?.totalStoreCount,converged:network?.convergedStoreCount};
-              if (network?.connectedPeerIds?.includes(${JSON.stringify(peers[1 - index].id)}) && network.totalStoreCount > 0 && network.state === 'converged') {
-                console.log('Private network ready: ' + JSON.stringify(summary));
-                process.exit(0);
-              }
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            console.error('Private network readiness failed: ' + JSON.stringify(summary));
-            process.exitCode = 1;
-          `,
-        },
-      );
-      assert.equal(readiness.status, 0, readiness.stdout + readiness.stderr);
-      console.log(`Node ${name}: ${readiness.stdout.trim()}`);
-    }),
-  );
+  await Promise.all(["a", "b"].map((_, index) => awaitNetworkReady(fixture, network, peers, index)));
   return { network, peers };
+}
+
+/**
+ * Restarts one node (`"a"` or `"b"`) of a running two-node network, then
+ * requires the same Docker address and private network peer ID and waits until
+ * both nodes report the network converged with each other connected again.
+ */
+export async function restartNode(fixture, name, { network, peers }) {
+  await fixture.compose("restart", `app-${name}`);
+  await fixture.compose("up", "-d", "--wait", "--wait-timeout", "90", `app-${name}`);
+  await assertNodeAddressSurvived(fixture, name);
+  await Promise.all(["a", "b"].map((_, index) => awaitNetworkReady(fixture, network, peers, index)));
+}
+
+async function assertNodeAddressSurvived({ env, compose }, name) {
+  const address = await compose(
+    "exec",
+    "-T",
+    `app-${name}`,
+    "node",
+    "-e",
+    "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)",
+  );
+  assert.ok(
+    address === env[`TEST_PRIVATE_IP_${name.toUpperCase()}`],
+    "Fixture node address must survive restart",
+  );
+}
+
+async function awaitNetworkReady({ run }, network, peers, index) {
+  const name = ["a", "b"][index];
+  const logs = await run(["logs", "--no-color", `app-${name}`]);
+  const startedPeers = [...(logs.stdout + logs.stderr).matchAll(STARTED)];
+  assert.ok(
+    startedPeers.at(-1)?.[1] === peers[index].id,
+    "Private network peer identity must survive restart",
+  );
+  const readiness = await run(
+    ["exec", "-T", `app-${name}`, "node", "--input-type=module"],
+    {
+      timeout: 70000,
+      input: `
+        const deadline = Date.now() + 60000;
+        let summary;
+        while (Date.now() < deadline) {
+          const response = await fetch('http://127.0.0.1:8080/api/peers/', {signal:AbortSignal.timeout(5000)});
+          const peers = await response.json();
+          const network = peers.networkSynchronization?.networks?.find(network => network.id === ${JSON.stringify(network.id)});
+          summary = {state:network?.state,connected:network?.connectedPeerIds?.length,replicating:network?.replicationPeerIds?.length,stores:network?.totalStoreCount,converged:network?.convergedStoreCount};
+          if (network?.connectedPeerIds?.includes(${JSON.stringify(peers[1 - index].id)}) && network.totalStoreCount > 0 && network.state === 'converged') {
+            console.log('Private network ready: ' + JSON.stringify(summary));
+            process.exit(0);
+          }
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        console.error('Private network readiness failed: ' + JSON.stringify(summary));
+        process.exitCode = 1;
+      `,
+    },
+  );
+  assert.equal(readiness.status, 0, readiness.stdout + readiness.stderr);
+  console.log(`Node ${name}: ${readiness.stdout.trim()}`);
 }

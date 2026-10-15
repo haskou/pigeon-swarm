@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
+import { createInterface } from "node:readline";
 import { createClientServer } from "../client/server.mjs";
 import { chromium } from "playwright";
 import { startCallTestGateways } from "./call-test-https-proxy.mjs";
@@ -141,9 +142,12 @@ try {
     });
     const diagnostics = {
       connectionAcks: 0,
+      socketCloses: 0,
       conversationEvents: 0,
       listResponses: [],
       callErrors: [],
+      callListResponses: [],
+      callResourceResponses: [],
       historyResponses: [],
       mailboxResponses: [],
       keychainResponses: [],
@@ -154,6 +158,7 @@ try {
     };
     deliveryDiagnostics.push(diagnostics);
     page.on("websocket", (socket) => {
+      socket.on("close", () => diagnostics.socketCloses++);
       socket.on("framereceived", ({ payload }) => {
         try {
           const message = JSON.parse(String(payload));
@@ -208,6 +213,23 @@ try {
         });
         if (diagnostics.historyResponses.length > 20)
           diagnostics.historyResponses.shift();
+      }
+      if (responseUrl.pathname === "/api/calls/" && response.request().method() === "GET") {
+        const body = await response.json().catch(() => undefined);
+        const calls = Array.isArray(body) ? body : body?.calls ?? body?.data;
+        diagnostics.callListResponses.push({ stage, status: response.status(), count: Array.isArray(calls) ? calls.length : null });
+        if (diagnostics.callListResponses.length > 10) diagnostics.callListResponses.shift();
+      }
+      if (/^\/api\/calls\/[^/]+\/?$/.test(responseUrl.pathname) && response.request().method() === "GET") {
+        const body = await response.json().catch(() => undefined);
+        const status = (value) => (typeof value === "string" && /^[a-z_]+$/.test(value) ? value : "unknown");
+        diagnostics.callResourceResponses.push({
+          stage,
+          status: response.status(),
+          callStatus: body?.status === undefined ? null : status(body.status),
+          participantStatuses: Array.isArray(body?.participants) ? body.participants.map((participant) => status(participant?.status)).sort() : null,
+        });
+        if (diagnostics.callResourceResponses.length > 10) diagnostics.callResourceResponses.shift();
       }
       if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
         const body = await response.json().catch(() => ({}));
@@ -606,6 +628,34 @@ try {
   };
   await assertAudio("direct call");
   assert.ok(deliveryDiagnostics.every(({ rejectedSignals }) => rejectedSignals > 0), "Both clients must recover from deliberately rejected signals");
+  if (!nat) {
+    // The runner restarts the callee's node (app-b) for real while the call is
+    // active; its separate TURN service keeps relaying the established media.
+    stage = "callee node restart during direct call";
+    const callee = deliveryDiagnostics[1];
+    const before = { acks: callee.connectionAcks, closes: callee.socketCloses };
+    console.log("RESTART-CALLEE-NODE");
+    const stdin = createInterface({ input: process.stdin });
+    const [answer] = await once(stdin, "line");
+    stdin.close();
+    process.stdin.destroy();
+    assert.equal(answer, "restarted", "Runner did not restart the callee's node");
+    stage = "callee realtime reconnection after node restart";
+    const reconnectDeadline = Date.now() + 90000;
+    while (!(callee.socketCloses > before.closes && callee.connectionAcks > before.acks)) {
+      assert.ok(Date.now() < reconnectDeadline, "The callee's realtime connection did not close and reconnect around the node restart");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    for (const page of pages)
+      await page.getByRole("button", { name: "Leave call", exact: true }).waitFor({ timeout: 30000 });
+    // Give call recovery after the reconnection time to (wrongly) duplicate peers.
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const livePeers = () =>
+      Promise.all(pages.map((page) => page.evaluate(() => window.callProbePeers.filter((peer) => peer.connectionState !== "closed").length)));
+    assert.deepEqual(await livePeers(), [1, 1], "Node restart must not duplicate call connections");
+    await assertAudio("direct call after callee node restart");
+    assert.deepEqual(await livePeers(), [1, 1], "Node restart must not duplicate call connections");
+  }
   await pages[0]
     .getByRole("button", { name: "Leave call", exact: true })
     .click();

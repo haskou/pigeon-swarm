@@ -66,6 +66,7 @@ services:
       CALLS_TURN_USER_QUOTA: ${CALLS_TURN_USER_QUOTA:-16}
       CALLS_TURN_TOTAL_QUOTA: ${CALLS_TURN_TOTAL_QUOTA:-128}
       CALLS_TURN_ALLOWED_PEER_IPS: ${CALLS_TURN_ALLOWED_PEER_IPS:-}
+      PIGEON_TURN_JOINS_NODE_NAMESPACE: "true"
     volumes:
       - ./scripts/check-turn-runtime.sh:/opt/pigeon/check-turn-runtime.sh:ro
       - ./scripts/run-turn-from-runtime-config.sh:/opt/pigeon/run-turn-from-runtime-config.sh:ro

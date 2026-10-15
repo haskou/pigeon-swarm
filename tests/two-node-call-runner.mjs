@@ -5,7 +5,7 @@ import test from "node:test";
 import { createCallTestCredentials } from "./call-test-https-proxy.mjs";
 import { verifyNatTraffic } from "./call-test-nat-network.mjs";
 import { canaryForms, matchedForms } from "./canary-scan.mjs";
-import { createTwoNodeFixture, startTwoNodeNetwork } from "./two-node-fixture.mjs";
+import { createTwoNodeFixture, restartNode, startTwoNodeNetwork } from "./two-node-fixture.mjs";
 
 export function testTwoNodeCalls({ nat = false } = {}) {
   test(
@@ -64,6 +64,7 @@ export function testTwoNodeCalls({ nat = false } = {}) {
         }
         const { network, peers } = await startTwoNodeNetwork(fixture, { companions: ["turn-a", "turn-b"] });
         if (nat) await compose("up", "-d", "--wait", "--wait-timeout", "60", "browser-a", "browser-b");
+        let restarting;
         const result = await run(
           [
             "exec",
@@ -82,10 +83,31 @@ export function testTwoNodeCalls({ nat = false } = {}) {
             "node",
             "/opt/pigeon/tests/two-node-call-browser.mjs",
           ],
-          { timeout: 300000, progress: true },
+          {
+            timeout: 360000,
+            progress: true,
+            keepStdin: true,
+            // During the direct call the browser script prints the marker and
+            // waits on stdin; the callee's node is then restarted for real.
+            onStdout: (stdout, child) => {
+              if (restarting || !stdout.includes("RESTART-CALLEE-NODE")) return;
+              restarting = restartNode(fixture, "b", { network, peers }).then(
+                () => {
+                  child.stdin.write("restarted\n");
+                },
+                (error) => {
+                  child.stdin.write("restart failed\n");
+                  return error;
+                },
+              );
+            },
+          },
         );
+        const restartError = await restarting;
+        if (restartError) throw restartError;
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.match(result.stdout, /PASS two-node call/);
+        if (!nat) assert.ok(restarting, "The callee's node was not restarted during the call");
         if (nat) await verifyNatTraffic(compose);
         const before = nat ? undefined : await identitySnapshot("app-a");
         if (!nat) {

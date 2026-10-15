@@ -147,6 +147,7 @@ try {
       listResponses: [],
       callErrors: [],
       callListResponses: [],
+      callResourceResponses: [],
       historyResponses: [],
       mailboxResponses: [],
       keychainResponses: [],
@@ -218,6 +219,17 @@ try {
         const calls = Array.isArray(body) ? body : body?.calls ?? body?.data;
         diagnostics.callListResponses.push({ stage, status: response.status(), count: Array.isArray(calls) ? calls.length : null });
         if (diagnostics.callListResponses.length > 10) diagnostics.callListResponses.shift();
+      }
+      if (/^\/api\/calls\/[^/]+\/?$/.test(responseUrl.pathname) && response.request().method() === "GET") {
+        const body = await response.json().catch(() => undefined);
+        const status = (value) => (typeof value === "string" && /^[a-z_]+$/.test(value) ? value : "unknown");
+        diagnostics.callResourceResponses.push({
+          stage,
+          status: response.status(),
+          callStatus: body?.status === undefined ? null : status(body.status),
+          participantStatuses: Array.isArray(body?.participants) ? body.participants.map((participant) => status(participant?.status)).sort() : null,
+        });
+        if (diagnostics.callResourceResponses.length > 10) diagnostics.callResourceResponses.shift();
       }
       if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
         const body = await response.json().catch(() => ({}));

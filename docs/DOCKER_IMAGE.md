@@ -97,6 +97,10 @@ For installations that intentionally retain a separate coturn service, set
 `PIGEON_TURN_MODE=external` and start Compose with `--profile external-turn`.
 Enable both together to avoid two TURN processes competing for the same ports.
 The optional service retains the existing private runtime-volume integration.
+It shares the `app` network namespace. If `app` restarts, Docker leaves `turn`
+in the old namespace, which has only loopback. `turn` detects this, exits after
+five seconds, and its restart policy joins the new namespace. Calls in progress
+then reconnect their media through a new ICE negotiation.
 The default mode is `embedded`; it requires no additional service. When moving
 an older two-service stack to the bundled image, stop its `turn` service first
 (`docker compose --profile external-turn stop turn`), then recreate `app`.

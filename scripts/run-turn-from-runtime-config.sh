@@ -232,6 +232,23 @@ unset shared_secret
 
 write_turn_config
 
+# This service shares the node container's network namespace. When the node
+# container restarts, Docker leaves this container in the old namespace, which
+# only has loopback, so TURN stays healthy on 127.0.0.1 but unreachable from
+# outside. Exit when that happens, so the restart policy joins the node's new
+# namespace. The grace period lets the node container finish starting first.
+readonly namespace_rejoin_grace_seconds=5
+
+has_external_interface() {
+  awk -F: 'NR > 2 { name = $1; gsub(/[ \t]/, "", name); if (name != "lo") found = 1 }
+    END { exit !found }' /proc/net/dev 2>/dev/null
+}
+
+network_attached=false
+if has_external_interface; then
+  network_attached=true
+fi
+
 trap 'stop_turn; exit 0' INT TERM
 
 while true; do
@@ -255,6 +272,13 @@ while true; do
     status=0
     wait "$turn_pid" || status="$?"
     echo "TURN stopped unexpectedly: status=$status" >&2
+    exit 1
+  fi
+
+  if [ "$network_attached" = true ] && ! has_external_interface; then
+    stop_turn
+    echo 'TURN lost the node network namespace after a node restart; exiting so Docker rejoins the new one.' >&2
+    sleep "$namespace_rejoin_grace_seconds"
     exit 1
   fi
 

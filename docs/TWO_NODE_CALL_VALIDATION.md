@@ -43,8 +43,10 @@ The scenario checks:
   callee's realtime connection must close and be acknowledged again, both
   browsers must keep the call, each must hold exactly one live peer connection,
   and inbound relay audio must keep increasing in both. The runner then waits
-  until both nodes report the private network converged again. The callee's
-  separate TURN service is not restarted.
+  until both nodes report the private network converged again. The runner does
+  not restart the callee's separate TURN service. The service must detect that
+  it lost `app-b`'s network namespace and rejoin through its restart policy.
+  Media must then recover through ICE restart.
 - Leaving and rejoining voice, including another call after password login.
 - Removing participants after a normal departure and after a client loses network access and closes without a successful leave request.
 - Three explicit logout/password-login cycles, with exact retained private
@@ -83,7 +85,8 @@ isolated topology, negative network controls and remaining coverage limits.
 This is automated evidence for application signalling and bidirectional media
 between independent relays on a local Docker network. It does not establish public
 reachability, real home NAT/CGNAT behavior, blocked-UDP fallback, or recovery of an
-active call after a TURN relay restart. It also does not establish every feature or
+active call after a TURN relay restart without a node restart. It also does not
+establish every feature or
 security guarantee in issue #34: concurrent three-node mutations, revocation,
 captures of DHT and push traffic, and retention and storage migration remain
 separate acceptance scenarios. The existing single-server media test covers

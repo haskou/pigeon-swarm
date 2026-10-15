@@ -232,11 +232,13 @@ unset shared_secret
 
 write_turn_config
 
-# This service shares the node container's network namespace. When the node
-# container restarts, Docker leaves this container in the old namespace, which
-# only has loopback, so TURN stays healthy on 127.0.0.1 but unreachable from
-# outside. Exit when that happens, so the restart policy joins the node's new
-# namespace. The grace period lets the node container finish starting first.
+# The external TURN service (PIGEON_TURN_JOINS_NODE_NAMESPACE=true) shares the
+# node container's network namespace. When the node container restarts, Docker
+# leaves this container in the old namespace, which only has loopback, so TURN
+# stays healthy on 127.0.0.1 but unreachable from outside. Exit when that
+# happens, so the restart policy joins the node's new namespace. The grace
+# period lets the node container finish starting first. Embedded TURN runs in
+# the node's own namespace and never exits for this reason.
 readonly namespace_rejoin_grace_seconds=5
 
 has_external_interface() {
@@ -245,7 +247,7 @@ has_external_interface() {
 }
 
 network_attached=false
-if has_external_interface; then
+if [ "${PIGEON_TURN_JOINS_NODE_NAMESPACE:-false}" = true ] && has_external_interface; then
   network_attached=true
 fi
 

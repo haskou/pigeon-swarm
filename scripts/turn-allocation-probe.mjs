@@ -112,28 +112,56 @@ export async function openTransport(transport, port) {
   };
 }
 
+const describe = (response) => `STUN type 0x${response.type.toString(16)}, error code ${errorCode(response) ?? 'none'}`;
+
+// RFC 8656 §7.4: 437 means the server still binds this client transport address
+// to another session. Coturn keeps UDP sessions that failed authentication for up
+// to a minute, so a reused source port can collide with an earlier check. Retry
+// from three different addresses, holding mismatched ones open so none is reused.
+async function authenticatedAllocate(transport, port, secret, expiresIn) {
+  const mismatched = [];
+  try {
+    while (mismatched.length < 3) {
+      const connection = await openTransport(transport, port);
+      let attempt;
+      try {
+        const requestedTransport = attribute(0x0019, Buffer.from([17, 0, 0, 0]));
+        const challenge = await connection.exchange(message(0x0003, [requestedTransport]));
+        const realm = challenge.attributes.get(0x0014);
+        const nonce = challenge.attributes.get(0x0015);
+        if (challenge.type !== 0x0113 || errorCode(challenge) !== 401 || !realm?.length || !nonce?.length) {
+          throw new Error('TURN did not require authentication with a realm and nonce.');
+        }
+        const username = `${Math.floor(Date.now() / 1000) + expiresIn}:deployment-probe`;
+        const password = createHmac('sha1', secret).update(username).digest('base64');
+        const key = createHash('md5').update(`${username}:${realm.toString()}:${password}`).digest();
+        const auth = [attribute(0x0006, username), attribute(0x0014, realm), attribute(0x0015, nonce)];
+        const result = await connection.exchange(message(0x0003, [requestedTransport, ...auth], key), key);
+        attempt = { connection, result, auth, key };
+      } catch (error) {
+        connection.close();
+        throw error;
+      }
+      if (attempt.result.type !== 0x0113 || errorCode(attempt.result) !== 437) return attempt;
+      mismatched.push(connection);
+    }
+    throw new Error('TURN reported an allocation mismatch (437) from three client addresses.');
+  } finally {
+    for (const connection of mismatched) connection.close();
+  }
+}
+
 async function check(transport, port, secret, expiresIn, expectedAllocation) {
-  const connection = await openTransport(transport, port);
+  const { connection, result, auth, key } = await authenticatedAllocate(transport, port, secret, expiresIn);
   let release;
   try {
-    const requestedTransport = attribute(0x0019, Buffer.from([17, 0, 0, 0]));
-    const challenge = await connection.exchange(message(0x0003, [requestedTransport]));
-    const realm = challenge.attributes.get(0x0014);
-    const nonce = challenge.attributes.get(0x0015);
-    if (challenge.type !== 0x0113 || errorCode(challenge) !== 401 || !realm?.length || !nonce?.length) {
-      throw new Error('TURN did not require authentication with a realm and nonce.');
-    }
-    const username = `${Math.floor(Date.now() / 1000) + expiresIn}:deployment-probe`;
-    const password = createHmac('sha1', secret).update(username).digest('base64');
-    const key = createHash('md5').update(`${username}:${realm.toString()}:${password}`).digest();
-    const auth = [attribute(0x0006, username), attribute(0x0014, realm), attribute(0x0015, nonce)];
-    const result = await connection.exchange(message(0x0003, [requestedTransport, ...auth], key), key);
     if (!expectedAllocation) {
-      if (result.type !== 0x0113 || errorCode(result) !== 401) throw new Error(`TURN did not reject invalid credentials with 401 (STUN type 0x${result.type.toString(16)}, error code ${errorCode(result) ?? 'none'}).`);
+      if (result.type !== 0x0113 || errorCode(result) !== 401) throw new Error(`TURN did not reject invalid credentials with 401 (${describe(result)}).`);
       return;
     }
     if (result.type !== 0x0103 || !result.integrityValid || !result.attributes.has(0x0016)) {
-      throw new Error('Authenticated allocation failed; check that backend and coturn use the same secret.');
+      const hint = errorCode(result) === 401 ? '; check that backend and coturn use the same secret' : '';
+      throw new Error(`Authenticated allocation failed (${describe(result)})${hint}.`);
     }
     release = async () => {
       const released = await connection.exchange(message(0x0004, [attribute(0x000d, Buffer.alloc(4)), ...auth], key), key);

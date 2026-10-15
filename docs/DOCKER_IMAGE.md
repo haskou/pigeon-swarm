@@ -222,9 +222,12 @@ The check uses the backend container's issuer secret, verifies authenticated
 allocation over UDP and TCP (and TLS when the TLS overlay is enabled), and requires
 wrong-secret and expired credentials
 to receive an authentication rejection. It verifies response integrity and
-releases successful allocations. A failed valid allocation explicitly points
-to a possible backend/coturn secret mismatch. Neither the shared secret nor
-temporary credentials are passed as command-line arguments or printed.
+releases successful allocations. A failed allocation reports its STUN error
+code; a 401 explicitly points to a possible backend/coturn secret mismatch. An
+allocation mismatch (437), such as a reused source port that coturn still binds
+to an earlier check, is retried from up to three client addresses as RFC 8656
+recommends. Neither the shared secret nor temporary credentials are passed as
+command-line arguments or printed.
 
 The automated equivalent, `node --test tests/turn-runtime.integration.mjs`,
 uses the real pinned coturn image with an isolated Node fixture in the shared

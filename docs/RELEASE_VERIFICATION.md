@@ -20,7 +20,7 @@ Status meanings:
 
 | Component | Revision |
 | --- | --- |
-| `PIGEON_SWARM_NODE_SHA` | `79d1f77dc59ce0e82d54394b816740f68fade0da` |
+| `PIGEON_SWARM_NODE_SHA` | `413375f802e2c79f198ae43459839c2d083e8cb5` |
 | `PIGEON_SWARM_UI_SHA` | `74545552cff227f883a00e1040118beba09ee94b` |
 
 Both revisions are commits of the public `haskou/pigeon-swarm-node` and
@@ -135,7 +135,7 @@ The source repositories are public. The Dockerfile needs no token for these pins
 
 ```sh
 docker build --target production \
-  --build-arg PIGEON_SWARM_NODE_SHA=79d1f77dc59ce0e82d54394b816740f68fade0da \
+  --build-arg PIGEON_SWARM_NODE_SHA=413375f802e2c79f198ae43459839c2d083e8cb5 \
   --build-arg PIGEON_SWARM_UI_SHA=74545552cff227f883a00e1040118beba09ee94b \
   --iidfile pigeon-test-image.id .
 export PIGEON_TEST_IMAGE="$(cat pigeon-test-image.id)"

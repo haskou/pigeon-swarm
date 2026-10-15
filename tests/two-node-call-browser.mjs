@@ -146,6 +146,7 @@ try {
       conversationEvents: 0,
       listResponses: [],
       callErrors: [],
+      callListResponses: [],
       historyResponses: [],
       mailboxResponses: [],
       keychainResponses: [],
@@ -211,6 +212,12 @@ try {
         });
         if (diagnostics.historyResponses.length > 20)
           diagnostics.historyResponses.shift();
+      }
+      if (responseUrl.pathname === "/api/calls/" && response.request().method() === "GET") {
+        const body = await response.json().catch(() => undefined);
+        const calls = Array.isArray(body) ? body : body?.calls ?? body?.data;
+        diagnostics.callListResponses.push({ stage, status: response.status(), count: Array.isArray(calls) ? calls.length : null });
+        if (diagnostics.callListResponses.length > 10) diagnostics.callListResponses.shift();
       }
       if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
         const body = await response.json().catch(() => ({}));

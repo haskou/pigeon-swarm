@@ -14,7 +14,10 @@ async function configuration() {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const endpoint = new URL('calls/ice-servers', api);
   const timestamp = Date.now();
-  const payload = JSON.stringify({ bodyHash: createHash('sha256').update('{}').digest('hex'), method: 'GET', path: endpoint.pathname, timestamp });
+  // SignedHttpRequestSignature preimage: domain line plus RFC 8785 JSON. The
+  // keys are already sorted and every value is a string or a safe integer, so
+  // JSON.stringify yields the canonical form.
+  const payload = 'pigeon:signed-http-request:v1\n' + JSON.stringify({ bodyHash: createHash('sha256').update('{}').digest('hex'), method: 'GET', path: endpoint.pathname, timestamp });
   const response = await fetch(endpoint, {
     headers: {
       'x-identity-id': publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),

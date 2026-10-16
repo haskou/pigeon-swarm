@@ -10,7 +10,12 @@
 // /app), where the crypto package is installed next to the node itself.
 import { createHash, randomBytes } from "node:crypto";
 
-import { KeyPair, SHA256Hash } from "@haskou/pigeon-swarm-crypto";
+import {
+  IdentitySignature,
+  KeyPair,
+  SHA256Hash,
+  SignedHttpRequestSignature,
+} from "@haskou/pigeon-swarm-crypto";
 
 const MUTATION_DOMAIN = "pigeon:public-mutation:v2\n";
 const COMMUNITY_OPERATION_DOMAIN = "pigeon:community-operation:v1\n";
@@ -79,9 +84,9 @@ export async function createActor() {
 // Identity-signed request headers; the signed path is the full URL path.
 export function requestHeaders(actor, method, path, bodyText) {
   const timestamp = Date.now();
-  const payload = JSON.stringify({
-    bodyHash: sha256(bodyText),
-    method: method.toUpperCase(),
+  const payload = SignedHttpRequestSignature.signingContent({
+    body: bodyText,
+    method,
     path,
     timestamp,
   });
@@ -156,7 +161,9 @@ export async function publishIdentity(request, actor, networks, name) {
   };
   return request(actor, "POST", "identities/", {
     ...unsigned,
-    signature: actor.identity.sign(JSON.stringify(unsigned)).toString(),
+    signature: actor.identity
+      .sign(IdentitySignature.signingContent(unsigned))
+      .toString(),
   });
 }
 

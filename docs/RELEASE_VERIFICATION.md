@@ -58,6 +58,7 @@ Every CI test step in `validate.yml` appears here exactly once.
 | M19 | Direct inbox availability across nodes | Client built independently with both nodes as mailbox availability servers; two application containers; three Chromium contexts | Recipient's home node killed mid-session | `Verify direct inbox availability across nodes` | A sender appends to the recipient's home and availability server; the recipient's open client keeps reading the inbox from the other node after its home is killed; a device revoked on its home node renders nothing new and its earlier read capabilities are refused by the other node, as listed in [MULTI_NODE_AVAILABILITY_VALIDATION.md](MULTI_NODE_AVAILABILITY_VALIDATION.md) | Automated |
 | M20 | Pin bump helper | Unit tests over temporary copies of the pin files | None | `Validate pin bump helper` | `scripts/bump-pins.mjs` moves both pins in the workflow, the pin table and the reproduction command; abbreviated commits and files that do not record the current pin are refused without changes | Automated |
 | M21 | Image publishing contract | Contract tests over `publish-docker.yml` and the change classifier; unit tests of `scripts/publish-sources.mjs` over temporary copies of `validate.yml` | None | `Validate image publishing contract` | The image publishes only after `Validate wrapper` succeeds for a push to `main` in this repository, from the `validate.yml` pins of that wrapper commit; dispatch payloads, inputs, variables and upstream `main` never select sources; missing, abbreviated or duplicated pins are refused; a push to `main` runs every check | Automated |
+| M22 | Contact presence between users on different nodes | Client built independently; two application containers; two Chromium contexts, each user connected to their own node | None | `Verify contact presence between users on different nodes` | Contacts who share their status in a direct conversation see each other online; each update is accepted only on the contact's home node; a contact who goes invisible is shown offline once the last update expires, as listed in [TWO_NODE_PRESENCE_VALIDATION.md](TWO_NODE_PRESENCE_VALIDATION.md) | Automated |
 
 Blocked or unfinished behavior listed in the issue (#29, #32, #33 and their
 linked node and UI issues) is not claimed here. Those rows are tracked by the
@@ -150,9 +151,12 @@ npm run test:e2e
 npm run test:e2e:nat
 npm run test:ui-e2e
 npm run test:e2e:availability
+npm run test:e2e:presence
 ```
 
 The `validate.yml` workflow runs the same checks, plus the TURN, client,
 benchmark and browser-probe checks listed in the matrix.
-`npm run test:e2e:availability` also needs a client build; see
-[MULTI_NODE_AVAILABILITY_VALIDATION.md](MULTI_NODE_AVAILABILITY_VALIDATION.md).
+`npm run test:e2e:availability` and `npm run test:e2e:presence` also need a
+client build; see
+[MULTI_NODE_AVAILABILITY_VALIDATION.md](MULTI_NODE_AVAILABILITY_VALIDATION.md)
+and [TWO_NODE_PRESENCE_VALIDATION.md](TWO_NODE_PRESENCE_VALIDATION.md).

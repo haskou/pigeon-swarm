@@ -13,7 +13,8 @@
     "test:privacy": "node --test tests/privacy-contracts.test.mjs",
     "test:release": "node --test tests/release-verification.test.mjs",
     "test:e2e:nat": "node --test tests/two-node-nat-call.integration.mjs",
-    "test:e2e:availability": "node --test tests/multi-node-availability.integration.mjs"
+    "test:e2e:availability": "node --test tests/multi-node-availability.integration.mjs",
+    "test:e2e:presence": "node --test tests/two-node-presence.integration.mjs"
   },
   "devDependencies": {
     "ajv": "8.17.1",

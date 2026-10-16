@@ -75,7 +75,8 @@ const openDevice = async (name, node) => {
     const url = new URL(request.url());
     const match = url.pathname.match(envelopesPath);
     if (request.method() !== "GET" || !match || url.origin !== NODE_B) return;
-    const authorization = (await request.allHeaders()).authorization;
+    // A read still in flight when the page closes has no headers left to read.
+    const authorization = (await request.allHeaders().catch(() => ({}))).authorization;
     if (!/^Bearer \S+$/.test(authorization ?? "")) return;
     const tokens = device.readTokens.get(match[1]) ?? new Set();
     tokens.add(authorization);

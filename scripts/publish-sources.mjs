@@ -21,6 +21,7 @@ const fail = (message) => {
 const { values } = parseArgs({ options: { wrapper: { type: "string" } } });
 if (!fullSha.test(values.wrapper ?? "")) fail("--wrapper must be a full 40-character commit SHA");
 
+const workflow = readFileSync(resolve(root, ".github/workflows/validate.yml"), "utf8");
 const pin = (variable) => {
   // Any declaration counts, so a job-level override in validate.yml cannot make
   // validation test a different pair than the one published.

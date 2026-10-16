@@ -17,14 +17,17 @@ permissions:
   id-token: write
   packages: write
 
+# Queue instead of cancelling: an older run must never cancel a newer publish.
+# An older run that starts later fails the main-tip check below.
 concurrency:
   group: publish-docker
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publish:
     name: Build and publish
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
+    # Dependabot pushes skip the image and browser checks in validate.yml.
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.actor.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -37,10 +40,17 @@ jobs:
       - name: Resolve validated sources
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           VALIDATED_WRAPPER_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${VALIDATED_WRAPPER_SHA}"
+          # A tag named main, or a re-run of an older main run, must not publish.
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if [[ "${main_sha}" != "${VALIDATED_WRAPPER_SHA}" ]]; then
+            echo "::error::Validated commit ${VALIDATED_WRAPPER_SHA} is not the tip of main (${main_sha}); refusing to publish."
+            exit 1
+          fi
           echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "${GITHUB_ENV}"
           node scripts/publish-sources.mjs --wrapper "${VALIDATED_WRAPPER_SHA}" >> "${GITHUB_ENV}"
 

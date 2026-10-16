@@ -49,6 +49,20 @@ test("publishing refuses a validation run that failed or did not come from a pus
   assert.match(condition, /github\.event\.workflow_run\.event == 'push'/);
   assert.match(condition, /github\.event\.workflow_run\.head_branch == 'main'/);
   assert.match(condition, /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/);
+  // Dependabot pushes skip the image and browser checks in validate.yml.
+  assert.match(condition, /github\.event\.workflow_run\.actor\.login != 'dependabot\[bot\]'/);
+});
+
+test("publishing refuses a validated commit that is no longer the tip of main", () => {
+  // A tag named main reports head_branch main, and a re-run of an older main
+  // run would publish an older pair over latest.
+  const tipCheck = publishWorkflow.indexOf('gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha');
+  assert.ok(tipCheck > 0, "publish-docker.yml must read the current main tip");
+  assert.match(publishWorkflow, /if \[\[ "\$\{main_sha\}" != "\$\{VALIDATED_WRAPPER_SHA\}" \]\]; then\n.*\n {12}exit 1\n/);
+  assert.ok(tipCheck < publishWorkflow.indexOf("node scripts/publish-sources.mjs"), "the tip check must run before sources resolve");
+  assert.ok(tipCheck < publishWorkflow.indexOf("docker/build-push-action"), "the tip check must run before the image is pushed");
+  // An older run must not cancel a newer publish.
+  assert.match(publishWorkflow, /^concurrency:\n {2}group: publish-docker\n {2}cancel-in-progress: false$/m);
 });
 
 test("publishing builds the validated wrapper commit from its pinned sources only", () => {
@@ -97,6 +111,8 @@ test("publish-sources refuses pins it cannot trust", () => {
     "an abbreviated pin": `  PIGEON_SWARM_NODE_SHA: ${node}\n  PIGEON_SWARM_UI_SHA: 2222222\n`,
     "a branch name": `  PIGEON_SWARM_NODE_SHA: main\n  PIGEON_SWARM_UI_SHA: ${ui}\n`,
     "a pin declared twice": `  PIGEON_SWARM_NODE_SHA: ${node}\n  PIGEON_SWARM_NODE_SHA: ${"3".repeat(40)}\n  PIGEON_SWARM_UI_SHA: ${ui}\n`,
+    "a job-level override": `  PIGEON_SWARM_NODE_SHA: ${node}\n  PIGEON_SWARM_UI_SHA: ${ui}\njobs:\n  validate:\n    env:\n      PIGEON_SWARM_UI_SHA: ${"3".repeat(40)}\n`,
+    "a pin outside the top-level env": `  PIGEON_SWARM_NODE_SHA: ${node}\njobs:\n  validate:\n    env:\n      PIGEON_SWARM_UI_SHA: ${ui}\n`,
   };
   for (const [name, body] of Object.entries(cases)) {
     const result = runScript(validateFixture(body), "--wrapper", wrapper);

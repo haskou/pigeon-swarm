@@ -21,12 +21,17 @@ const fail = (message) => {
 const { values } = parseArgs({ options: { wrapper: { type: "string" } } });
 if (!fullSha.test(values.wrapper ?? "")) fail("--wrapper must be a full 40-character commit SHA");
 
-const workflow = readFileSync(resolve(root, ".github/workflows/validate.yml"), "utf8");
 const pin = (variable) => {
-  const values = [...workflow.matchAll(new RegExp(`^ {2}${variable}: (\\S+)$`, "gm"))].map((match) => match[1]);
-  if (values.length !== 1) fail(`validate.yml must declare ${variable} exactly once`);
-  if (!fullSha.test(values[0])) fail(`validate.yml ${variable} must be a full 40-character commit SHA`);
-  return values[0];
+  // Any declaration counts, so a job-level override in validate.yml cannot make
+  // validation test a different pair than the one published.
+  const declaration = new RegExp(`^([ \\t-]*)["']?${variable}["']?[ \\t]*:[ \\t]*(\\S*)`, "gm");
+  const declarations = [...workflow.matchAll(declaration)];
+  if (declarations.length !== 1 || declarations[0][1] !== "  ") {
+    fail(`validate.yml must declare ${variable} exactly once, in the top-level env`);
+  }
+  const value = declarations[0][2];
+  if (!fullSha.test(value)) fail(`validate.yml ${variable} must be a full 40-character commit SHA`);
+  return value;
 };
 
 const node = pin("PIGEON_SWARM_NODE_SHA");

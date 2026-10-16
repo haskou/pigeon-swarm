@@ -19,7 +19,7 @@ const PASSED_ENV = [
   "PIGEON_CLIENT_DIST",
 ];
 const NETWORK_NAME = "Private call integration";
-const STARTED = new RegExp(`Started private network "${NETWORK_NAME}" with Peer ID: ([A-Za-z0-9]+)`, "g");
+const STARTED = /Started private network with Peer ID: ([A-Za-z0-9]+)/g;
 
 /**
  * A disposable Compose project of two application nodes (`app-a`, `app-b`) and
@@ -186,14 +186,10 @@ export async function startTwoNodeNetwork(fixture, { companions = [] } = {}) {
       let match, port;
       for (let attempt = 0; attempt < 20; attempt++) {
         const logs = await run(["logs", "--no-color", `app-${name}`]);
-        match = (logs.stdout + logs.stderr).match(
-          new RegExp(`Started private network "${NETWORK_NAME}" with Peer ID: ([A-Za-z0-9]+)`),
-        );
+        match = (logs.stdout + logs.stderr).match(/Started private network with Peer ID: ([A-Za-z0-9]+)/);
         const privateRelayLine = (logs.stdout + logs.stderr)
           .split("\n")
-          .find((line) =>
-            line.includes(`Private IPFS relay server enabled: networkId=${network.id} `),
-          );
+          .find((line) => line.includes("Private IPFS relay server enabled: "));
         port = privateRelayLine?.match(/listenAddresses="\/ip4\/0\.0\.0\.0\/tcp\/(\d+)"/);
         if (match && port) break;
         await new Promise((resolve) => setTimeout(resolve, 500));

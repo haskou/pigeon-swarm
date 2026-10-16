@@ -516,17 +516,15 @@ The `.dockerignore` file allowlists the build context: only the Dockerfile, `doc
 
 ## Publishing
 
-The [publish workflow](../.github/workflows/publish-docker.yml) publishes the image on a push to `main`, on the `source-published` `repository_dispatch` event described below, and on manual `workflow_dispatch` runs with optional `node_ref` and `ui_ref` inputs.
+The [publish workflow](../.github/workflows/publish-docker.yml) publishes only the node and UI pair that the wrapper validated. It runs when the [validation workflow](../.github/workflows/validate.yml) completes for a push to `main`. It publishes only if that run succeeded, came from a push to `main` in this repository by someone other than Dependabot (whose runs skip the image checks), and validated the commit that is still the tip of `main`; a tag named `main` or a re-run of an older run is refused. It checks out the validated wrapper commit and builds the `PIGEON_SWARM_NODE_SHA` and `PIGEON_SWARM_UI_SHA` pins from that commit's `validate.yml`; [`scripts/publish-sources.mjs`](../scripts/publish-sources.mjs) refuses anything other than one full commit SHA for each, declared once in the top-level `env`. Dispatch payloads, workflow inputs, repository variables and upstream `main` never select the sources. New node or UI code reaches the image only through a [pin bump](#pin-bumps). The `latest`, `main` and `sha-<wrapper commit>` tags and the `org.opencontainers.image.revision` label name the validated wrapper commit. Publish runs queue instead of cancelling each other. To republish, re-run the latest successful `Validate wrapper` run on `main`.
 
-The [validation workflow](../.github/workflows/validate.yml) runs on every push and pull request. It validates the Docker Compose example and checks that the public configuration stays simple. A change that only touches Markdown outside `.github/`, or images under `docs/`, skips the heavy checks (browser, coturn, production image, multi-node and independent-client jobs); the light checks always run.
+The validation workflow runs on every push and pull request. It validates the Docker Compose example and checks that the public configuration stays simple. A pull request, or a push outside `main`, that only touches Markdown outside `.github/`, or images under `docs/`, skips the heavy checks (browser, coturn, production image, multi-node and independent-client jobs); the light checks always run. A push to `main` always runs every check, because its success is what allows the image to be published.
 
 For GitHub Actions, add this repository secret if the source repositories are private:
 
 ```text
 SOURCE_REPOSITORIES_TOKEN
 ```
-
-The workflow also accepts `repository_dispatch` with the `source-published` event type. Source repositories can call that event after their own `main` branch changes to request a fresh combined image.
 
 Published images include OCI metadata labels, SBOM generation, and provenance attestation through Docker Buildx. Builds use the GitHub Actions build cache.
 

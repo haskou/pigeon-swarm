@@ -45,8 +45,7 @@ This repository provides:
 * simple default runtime configuration
 * persistent IPFS and embedded local storage without an external database service
 * owner-managed relay configuration for private-network nodes
-* automatic image publishing when `main` changes
-* a dispatch path for the source repositories to request a fresh image
+* automatic image publishing of the validated node and UI pins after `main` passes validation
 
 The bundled TURN service automatically generates a private per-installation secret
 and persists it with local storage across restarts. No shared default or manual

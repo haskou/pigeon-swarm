@@ -130,6 +130,9 @@ jobs:
       - name: Validate pin bump helper
         run: node --test tests/bump-pins.test.mjs
 
+      - name: Validate image publishing contract
+        run: node --test tests/publish-docker.test.mjs
+
       - name: Verify browser diagnostic redaction
         if: needs.changes.outputs.heavy != 'false'
         run: node --test tests/turn-browser-probe.test.mjs

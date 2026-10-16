@@ -1,5 +1,5 @@
 name: Classify changes
-description: Sets heavy=false when a pull request or push changes only documentation; otherwise heavy=true
+description: Sets heavy=false when a pull request or a push outside main changes only documentation; otherwise heavy=true
 
 outputs:
   heavy:
@@ -16,6 +16,7 @@ runs:
         EVENT_NAME: ${{ github.event_name }}
         PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PUSH_REF: ${{ github.ref }}
         PUSH_BEFORE: ${{ github.event.before }}
         PUSH_AFTER: ${{ github.sha }}
       run: bash "$GITHUB_ACTION_PATH/classify.sh"

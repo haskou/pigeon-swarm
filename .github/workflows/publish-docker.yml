@@ -1,20 +1,16 @@
 name: Publish Docker image
 
+# Publishes only the node and UI pair that Validate wrapper tested: the pins in
+# validate.yml at a wrapper commit on main whose validation passed with every
+# check (pushes to main never skip the heavy checks). See docs/DOCKER_IMAGE.md.
 on:
-  push:
+  workflow_run:
+    workflows:
+      - Validate wrapper
+    types:
+      - completed
     branches:
       - main
-  repository_dispatch:
-    types:
-      - source-published
-  workflow_dispatch:
-    inputs:
-      node_ref:
-        description: Branch, tag, or commit for the backend repository.
-        required: false
-      ui_ref:
-        description: Branch, tag, or commit for the frontend repository.
-        required: false
 
 permissions:
   contents: read
@@ -22,99 +18,31 @@ permissions:
   packages: write
 
 concurrency:
-  group: publish-docker-${{ github.ref }}
+  group: publish-docker
   cancel-in-progress: true
 
 jobs:
   publish:
     name: Build and publish
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out image project
+      - name: Check out validated image project
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
-      - name: Resolve image and source inputs
+      - name: Resolve validated sources
         shell: bash
         env:
-          NODE_REPOSITORY_VAR: ${{ vars.PIGEON_SWARM_NODE_REPOSITORY }}
-          NODE_REF_VAR: ${{ vars.PIGEON_SWARM_NODE_REF }}
-          NODE_REF_INPUT: ${{ inputs.node_ref }}
-          NODE_REF_PAYLOAD: ${{ github.event.client_payload.node_ref }}
-          SOURCE_REPOSITORIES_TOKEN: ${{ secrets.SOURCE_REPOSITORIES_TOKEN }}
-          UI_REPOSITORY_VAR: ${{ vars.PIGEON_SWARM_UI_REPOSITORY }}
-          UI_REF_VAR: ${{ vars.PIGEON_SWARM_UI_REF }}
-          UI_REF_INPUT: ${{ inputs.ui_ref }}
-          UI_REF_PAYLOAD: ${{ github.event.client_payload.ui_ref }}
+          VALIDATED_WRAPPER_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
-          node_repository="${NODE_REPOSITORY_VAR:-https://github.com/haskou/pigeon-swarm-node.git}"
-          node_ref="${NODE_REF_INPUT:-${NODE_REF_PAYLOAD:-${NODE_REF_VAR:-main}}}"
-          ui_repository="${UI_REPOSITORY_VAR:-https://github.com/haskou/pigeon-swarm-ui.git}"
-          ui_ref="${UI_REF_INPUT:-${UI_REF_PAYLOAD:-${UI_REF_VAR:-main}}}"
-          github_auth_header=""
-
-          if [ -n "${SOURCE_REPOSITORIES_TOKEN}" ]; then
-            github_auth_header="$(printf 'x-access-token:%s' "${SOURCE_REPOSITORIES_TOKEN}" | base64 | tr -d '\n')"
-          fi
-
-          git_with_auth() {
-            if [ -n "${github_auth_header}" ]; then
-              git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${github_auth_header}" "$@"
-            else
-              git "$@"
-            fi
-          }
-
-          resolve_ref_sha() {
-            repository="$1"
-            ref="$2"
-
-            if [[ "${ref}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-              echo "${ref}"
-              return
-            fi
-
-            refs="$(git_with_auth ls-remote "${repository}" \
-              "refs/heads/${ref}" \
-              "refs/tags/${ref}" \
-              "refs/tags/${ref}^{}")"
-
-            sha="$(printf '%s\n' "${refs}" | awk '$2 ~ /\^\{\}$/ { print $1; exit }')"
-
-            if [ -z "${sha}" ]; then
-              sha="$(printf '%s\n' "${refs}" | awk '$2 ~ /^refs\/heads\// { print $1; exit }')"
-            fi
-
-            if [ -z "${sha}" ]; then
-              sha="$(printf '%s\n' "${refs}" | awk '$2 ~ /^refs\/tags\// { print $1; exit }')"
-            fi
-
-            if [ -z "${sha}" ]; then
-              echo "Could not resolve ${repository} ref ${ref}" >&2
-              exit 1
-            fi
-
-            echo "${sha}"
-          }
-
-          node_sha="$(resolve_ref_sha "${node_repository}" "${node_ref}")"
-          ui_sha="$(resolve_ref_sha "${ui_repository}" "${ui_ref}")"
-
-          echo "Resolved backend source ${node_ref} to ${node_sha}"
-          echo "Resolved frontend source ${ui_ref} to ${ui_sha}"
-
-          {
-            echo "IMAGE_NAME=${image_name}"
-            echo "PIGEON_SWARM_NODE_REPOSITORY=${node_repository}"
-            echo "PIGEON_SWARM_NODE_REF=${node_ref}"
-            echo "PIGEON_SWARM_NODE_SHA=${node_sha}"
-            echo "PIGEON_SWARM_UI_REPOSITORY=${ui_repository}"
-            echo "PIGEON_SWARM_UI_REF=${ui_ref}"
-            echo "PIGEON_SWARM_UI_SHA=${ui_sha}"
-          } >> "${GITHUB_ENV}"
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${VALIDATED_WRAPPER_SHA}"
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "${GITHUB_ENV}"
+          node scripts/publish-sources.mjs --wrapper "${VALIDATED_WRAPPER_SHA}" >> "${GITHUB_ENV}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -135,10 +63,15 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           flavor: latest=false
+          # Under workflow_run, the generated commit tag and revision label would
+          # name the default-branch head, not the validated wrapper commit.
           tags: |
             type=raw,value=latest
-            type=ref,event=branch
-            type=sha,prefix=sha-
+            type=raw,value=main
+            type=raw,value=sha-${{ env.WRAPPER_SHORT_SHA }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.WRAPPER_SHA }}
+            org.opencontainers.image.version=main
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -151,11 +84,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            PIGEON_SWARM_NODE_REPOSITORY=${{ env.PIGEON_SWARM_NODE_REPOSITORY }}
-            PIGEON_SWARM_NODE_REF=${{ env.PIGEON_SWARM_NODE_REF }}
             PIGEON_SWARM_NODE_SHA=${{ env.PIGEON_SWARM_NODE_SHA }}
-            PIGEON_SWARM_UI_REPOSITORY=${{ env.PIGEON_SWARM_UI_REPOSITORY }}
-            PIGEON_SWARM_UI_REF=${{ env.PIGEON_SWARM_UI_REF }}
             PIGEON_SWARM_UI_SHA=${{ env.PIGEON_SWARM_UI_SHA }}
             VITE_API_SERVER_URL=/api
             IMAGE_SOURCE=https://github.com/${{ github.repository }}

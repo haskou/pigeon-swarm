@@ -229,6 +229,11 @@ jobs:
           export PIGEON_INDEPENDENT_CLIENT=true
           npm run test:e2e
 
+      - name: Verify contact presence between users on different nodes
+        run: |
+          export PIGEON_CLIENT_DIST="$GITHUB_WORKSPACE/client-source/dist"
+          npm run test:e2e:presence
+
       - name: Build independent client with mailbox availability servers
         working-directory: client-source
         run: |

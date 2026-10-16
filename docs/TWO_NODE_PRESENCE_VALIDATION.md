@@ -45,15 +45,16 @@ Node A is Alice's home. Node B is Bob's.
 2. Alice invites Bob by identity id and Bob accepts from his notifications.
    Bob's row for Alice shows no status.
 3. Bob turns on "Share status" in the conversation menu. His client creates
-   and reads his presence inbox on node B. Bob sees Alice offline.
-4. Alice turns on "Share status"; her client creates and reads her presence
-   inbox on node A. Bob must see Alice online within 90 s. Alice's update must
-   have been appended with a 2xx status to Bob's presence inbox on node B, and
-   never accepted on node A.
+   and reads an inbox on node B. Bob sees Alice offline.
+4. Alice turns on "Share status"; her client creates and reads an inbox on
+   node A. Bob must see Alice online within 90 s. Since sharing, Alice's
+   client appends only presence updates: one must have been accepted, with a
+   2xx status, by node B into an inbox Bob created there, and none accepted
+   by node A.
 5. Alice must see Bob online within 240 s. Bob's first update was refused
    because Alice's inbox did not exist yet, so his client paused for two
-   minutes before refreshing. His update must have been appended with a 2xx
-   status to Alice's presence inbox on node A, and never accepted on node B.
+   minutes before refreshing. One of his updates must have been accepted by
+   node A into an inbox Alice created there, and none accepted by node B.
 6. Alice picks Invisible from her profile menu. Bob must see her offline
    within 180 s: the 90 s lifetime of her last update, the 30 s read interval,
    and the 5 s re-evaluation. Bob never sees the Invisible status.

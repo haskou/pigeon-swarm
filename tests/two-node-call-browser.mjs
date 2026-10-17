@@ -462,8 +462,32 @@ try {
     });
     let rejectSignalsUntil;
     const deferredRestartOffers = new Set();
-    const rejectAsUnknownParticipant = (route) =>
-      route.fulfill({
+    await page.route('**/api/calls/*/signals', async route => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      rejectSignalsUntil ??= Date.now() + 300;
+      if (Date.now() < rejectSignalsUntil) {
+        diagnostics.rejectedSignals++;
+      } else if (restartAt === undefined) {
+        await route.continue();
+        return;
+      } else {
+        // After the callee's node restart a node may not know yet that the
+        // recipient re-joined, so the first delivery of each recovery offer is
+        // refused while its trickled candidates go through: the answerer gets
+        // the candidates of a new ICE generation before the offer that starts it.
+        const { signalType, payload } = route.request().postDataJSON() ?? {};
+        const generation = typeof payload?.sdp === "string" ? [...payload.sdp.matchAll(/^a=ice-ufrag:(\S+)/gm)].map((match) => match[1]).join(" ") : "";
+        if (signalType !== "offer" || deferredRestartOffers.has(generation)) {
+          await route.continue();
+          return;
+        }
+        deferredRestartOffers.add(generation);
+        diagnostics.deferredRestartOffers++;
+      }
+      await route.fulfill({
         status: 409,
         contentType: 'application/json',
         headers: {
@@ -473,32 +497,6 @@ try {
         },
         body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
       });
-    await page.route('**/api/calls/*/signals', async route => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
-      rejectSignalsUntil ??= Date.now() + 300;
-      if (Date.now() < rejectSignalsUntil) {
-        diagnostics.rejectedSignals++;
-        await rejectAsUnknownParticipant(route);
-        return;
-      }
-      // After the callee's node restart a node may not know yet that the
-      // recipient re-joined, so the first delivery of each recovery offer is
-      // refused while its trickled candidates go through: the answerer gets
-      // the candidates of a new ICE generation before the offer that starts it.
-      if (restartAt !== undefined) {
-        const { signalType, payload } = route.request().postDataJSON() ?? {};
-        const generation = typeof payload?.sdp === "string" ? [...payload.sdp.matchAll(/^a=ice-ufrag:(\S+)/gm)].map((match) => match[1]).join(" ") : "";
-        if (signalType === "offer" && !deferredRestartOffers.has(generation)) {
-          deferredRestartOffers.add(generation);
-          diagnostics.deferredRestartOffers++;
-          await rejectAsUnknownParticipant(route);
-          return;
-        }
-      }
-      await route.continue();
     });
     page.setDefaultTimeout(45000);
     pages.push(page);

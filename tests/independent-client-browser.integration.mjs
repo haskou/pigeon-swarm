@@ -21,6 +21,10 @@ async function listen(server, t) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
+// The app reads the invitation from the link fragment once a node is chosen,
+// strips the address bar and keeps the invitation for this browser session.
+const pendingInvite = (page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('pigeon.pendingCommunityInvite')));
+
 async function fakeNode(t, contract, tls) {
   const requests = [];
   const handle = (req, res) => {
@@ -153,18 +157,22 @@ test('independent built client browser contract with explicitly fake backend fix
   await t.test('initial community invite path and key fragment survive choosing a compatible node', async (subtest) => {
     const node = await fakeNode(subtest, { protocol: 'pigeon-swarm', apiVersion: 2 });
     const page = await pageFor(subtest);
-    const inviteUrl = `${origin}/invite/community/disposable-token#k=disposable-secret`;
+    const inviteUrl = `${origin}/invite/community#c=disposable-community&k=disposable-secret`;
     await page.goto(inviteUrl);
     await page.getByLabel('Node address').waitFor();
+    assert.equal(page.url(), inviteUrl);
     await choose(page, `${node.origin}/api`);
     await page.getByRole('link', { name: 'Change node' }).waitFor();
     await page.waitForFunction(() => document.querySelector('.app-screen'));
-    assert.equal(page.url(), inviteUrl);
+    assert.equal(page.url(), `${origin}/`);
+    assert.deepEqual(await pendingInvite(page), { communityId: 'disposable-community', secret: 'disposable-secret' });
     await page.getByRole('link', { name: 'Change node' }).click();
     await page.getByLabel('Node address').waitFor();
     await choose(page, `${node.origin}/api`);
     await page.getByRole('link', { name: 'Change node' }).waitFor();
-    assert.equal(page.url(), inviteUrl);
+    assert.equal(page.url(), `${origin}/`);
+    assert.deepEqual(await pendingInvite(page), { communityId: 'disposable-community', secret: 'disposable-secret' });
+    assert.equal(clientRequests.some((url) => url.includes('disposable-secret')), false);
   });
 
   for (const previouslySelected of [false, true]) {
@@ -178,7 +186,7 @@ test('independent built client browser contract with explicitly fake backend fix
         await page.getByRole('link', { name: 'Change node' }).waitFor();
       }
       const invite = await page.context().newPage();
-      const inviteUrl = `${origin}/invite/community/disposable-token?source=shared#k=disposable-secret`;
+      const inviteUrl = `${origin}/invite/community?source=shared#c=disposable-community&k=disposable-secret`;
       await invite.goto(inviteUrl);
       if (previouslySelected) await invite.getByRole('link', { name: 'Change node' }).waitFor();
       else await invite.getByLabel('Node address').waitFor();
@@ -187,14 +195,22 @@ test('independent built client browser contract with explicitly fake backend fix
       await choose(page, `${second.origin}/api`);
       await page.getByRole('link', { name: 'Change node' }).waitFor();
       await invite.getByRole('heading', { name: 'Connect to a node' }).waitFor();
-      assert.equal(new URL(invite.url()).pathname, '/invite/community/disposable-token');
-      assert.equal(new URL(invite.url()).hash, '#k=disposable-secret');
+      if (previouslySelected) {
+        // The app already took the invitation off the address bar and into the session.
+        assert.equal(new URL(invite.url()).pathname, '/connect');
+        assert.equal(new URL(invite.url()).hash, '');
+        assert.deepEqual(await pendingInvite(invite), { communityId: 'disposable-community', secret: 'disposable-secret' });
+      } else {
+        assert.equal(new URL(invite.url()).pathname, '/invite/community');
+        assert.equal(new URL(invite.url()).hash, '#c=disposable-community&k=disposable-secret');
+      }
       assert.notEqual(await invite.evaluate(() => globalThis.documentId), initialDocument);
       assert.equal(await invite.getByRole('link', { name: 'Change node' }).count(), 0);
       await choose(invite, `${second.origin}/api`);
       await invite.getByRole('link', { name: 'Change node' }).waitFor();
       await invite.waitForFunction(() => document.querySelector('.app-screen'));
-      assert.equal(invite.url(), inviteUrl);
+      assert.equal(invite.url(), `${origin}/`);
+      assert.deepEqual(await pendingInvite(invite), { communityId: 'disposable-community', secret: 'disposable-secret' });
       assert.equal(clientRequests.some((url) => url.includes('disposable-secret')), false);
     });
   }

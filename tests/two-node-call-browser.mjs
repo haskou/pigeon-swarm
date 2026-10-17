@@ -76,6 +76,45 @@ const messageDecryptionState = (page) =>
     )
     .catch(() => ({unavailable: true}));
 
+// Per page (caller, callee): the probe timeline since the callee node restart
+// in milliseconds after it, and every live peer's ICE candidates and pairs.
+let restartAt;
+const restartIceDiagnostics = () =>
+  Promise.all(pages.map((page) => page.evaluate(async (since) => ({
+    timeline: window.callProbeTimeline
+      .filter((entry) => entry.at >= since)
+      .map(({ at, ...entry }) => ({ ms: at - since, ...entry })),
+    peers: await Promise.all(window.callProbePeers.map(async (peer, index) => {
+      if (peer.connectionState === "closed") return { peer: index, closed: true };
+      const stats = [...(await peer.getStats()).values()];
+      const byId = new Map(stats.map((stat) => [stat.id, stat]));
+      const candidate = (stat) => stat && ({
+        type: stat.candidateType,
+        address: stat.address,
+        port: stat.port,
+        protocol: stat.protocol,
+        relayProtocol: stat.relayProtocol,
+        ufrag: window.callProbeUfragLabel(stat.usernameFragment),
+      });
+      const transport = stats.find((stat) => stat.type === "transport");
+      return {
+        peer: index,
+        iceRole: transport?.iceRole,
+        selectedPairChanges: transport?.selectedCandidatePairChanges,
+        local: stats.filter((stat) => stat.type === "local-candidate").map(candidate),
+        remote: stats.filter((stat) => stat.type === "remote-candidate").map(candidate),
+        pairs: stats.filter((stat) => stat.type === "candidate-pair").map((pair) => ({
+          state: pair.state,
+          nominated: pair.nominated,
+          selected: pair.id === transport?.selectedCandidatePairId,
+          local: byId.get(pair.localCandidateId)?.candidateType,
+          remote: byId.get(pair.remoteCandidateId)?.candidateType,
+          remotePort: byId.get(pair.remoteCandidateId)?.port,
+        })),
+      };
+    })),
+  }), restartAt).catch((error) => ({ unavailable: error?.name ?? "Error" }))));
+
 try {
   for (const [index, url] of urls.entries()) {
     const client = nat ? await chromium.connect(`ws://${relayAddresses[index]}:9222/pigeon`) : browser;
@@ -93,6 +132,29 @@ try {
           "getClientCapabilities",
           { configurable: true, value: undefined },
         );
+      // When each call signal arrived and what the peer connections did with
+      // it, for the callee node restart (#127). ICE username fragments become
+      // per-page generation labels (u1, u2, ...); raw fragments, passwords,
+      // SDP, identity ids and signal ids are never recorded.
+      const ufragLabels = new Map();
+      const ufragLabel = (ufrag) => {
+        if (typeof ufrag !== "string" || !ufrag) return null;
+        if (!ufragLabels.has(ufrag)) ufragLabels.set(ufrag, `u${ufragLabels.size + 1}`);
+        return ufragLabels.get(ufrag);
+      };
+      const descriptionUfrags = (sdp) =>
+        [...new Set([...String(sdp ?? "").matchAll(/^a=ice-ufrag:([^\r\n]+)$/gm)].map((match) => ufragLabel(match[1].trim())))];
+      const candidateType = (candidate) => /\styp ([a-z]+)/.exec(String(candidate ?? ""))?.[1] ?? null;
+      const candidateUfrag = (init) => init?.usernameFragment ?? /\sufrag (\S+)/.exec(String(init?.candidate ?? ""))?.[1];
+      const seenSignals = new Set();
+      window.callProbeUfragLabel = ufragLabel;
+      window.callProbeTimeline = [];
+      const note = (entry) => {
+        window.callProbeTimeline.push({ at: Date.now(), ...entry });
+        if (window.callProbeTimeline.length > 600) window.callProbeTimeline.shift();
+      };
+      const liveRemoteUfrags = () =>
+        (window.callProbePeers ?? []).flatMap((peer) => peer.connectionState === "closed" ? [] : [descriptionUfrags(peer.remoteDescription?.sdp)]);
       // Why a call peer closed: the closing code path (function names from the
       // stack) and the last call event this page received before it, by event
       // type and call id. Identity ids and payloads are never recorded.
@@ -106,7 +168,21 @@ try {
             try {
               const { type, event } = JSON.parse(data);
               if (type !== "domain_event" || typeof event?.type !== "string") return;
-              if (!/^calls\.v1\.[a-z_.]+$/.test(event.type) || event.type === "calls.v1.signal.sent") return;
+              if (!/^calls\.v1\.[a-z_.]+$/.test(event.type)) return;
+              if (event.type === "calls.v1.signal.sent") {
+                const { payload, signalId, signalType } = event.attributes ?? {};
+                note({
+                  event: "signal-arrived",
+                  signalType: ["offer", "answer", "ice_candidate"].includes(signalType) ? signalType : "other",
+                  ...(signalType === "ice_candidate"
+                    ? { type: candidateType(payload?.candidate), ufrag: ufragLabel(candidateUfrag(payload)) }
+                    : { ufrags: descriptionUfrags(payload?.sdp) }),
+                  redelivered: seenSignals.has(signalId),
+                });
+                if (typeof signalId === "string") seenSignals.add(signalId);
+                return;
+              }
+              note({ event: "call-event", type: event.type });
               const callId = event.attributes?.callId ?? event.aggregate_id;
               const participants = event.attributes?.liveCall?.participants;
               lastCallEvent = {
@@ -132,7 +208,16 @@ try {
               .map((line) => /^\s*at (?:async )?([A-Za-z_$][\w$.<>]*) \(/.exec(line)?.[1] ?? "anonymous"),
             lastCallEvent,
           };
+          note({ event: "close", peer: this.callProbeIndex });
           return super.close();
+        }
+        restartIce() {
+          note({ event: "restart-ice", peer: this.callProbeIndex });
+          return super.restartIce();
+        }
+        setConfiguration(...args) {
+          note({ event: "set-configuration", peer: this.callProbeIndex });
+          return super.setConfiguration(...args);
         }
         constructor(configuration, ...rest) {
           const iceServers = (configuration?.iceServers || []).flatMap(
@@ -151,17 +236,44 @@ try {
             nat ? configuration : { ...configuration, iceServers, iceTransportPolicy: "relay" },
             ...rest,
           );
+          this.callProbeIndex = window.callProbePeers.length;
           window.callProbePeers.push(this);
+          const peer = this.callProbeIndex;
+          this.addEventListener("icecandidate", ({ candidate }) =>
+            note({ event: "candidate-gathered", peer, type: candidate ? candidateType(candidate.candidate) : "end", ufrag: ufragLabel(candidate?.usernameFragment) }));
+          this.addEventListener("iceconnectionstatechange", () => note({ event: "ice", peer, state: this.iceConnectionState }));
+          this.addEventListener("connectionstatechange", () => note({ event: "connection", peer, state: this.connectionState }));
           for (const method of ["setLocalDescription", "setRemoteDescription", "addIceCandidate", "createOffer", "createAnswer"]) {
             const original = this[method].bind(this);
             this[method] = async (...args) => {
-              try { return await original(...args); }
-              catch (error) {
+              if (method === "setRemoteDescription")
+                note({ event: "remote-description-applying", peer, type: args[0]?.type, ufrags: descriptionUfrags(args[0]?.sdp), signalling: this.signalingState });
+              try {
+                const result = await original(...args);
+                if (method === "setLocalDescription" || method === "setRemoteDescription") {
+                  const description = method === "setLocalDescription" ? this.localDescription : this.remoteDescription;
+                  note({ event: method === "setLocalDescription" ? "local-description-set" : "remote-description-set", peer, requested: args[0]?.type ?? "implicit", type: description?.type, ufrags: descriptionUfrags(description?.sdp), signalling: this.signalingState });
+                }
+                if (method === "addIceCandidate")
+                  note({ event: "candidate-added", peer, type: candidateType(args[0]?.candidate), ufrag: ufragLabel(candidateUfrag(args[0])) });
+                return result;
+              } catch (error) {
+                note({ event: "operation-failed", peer, method, name: error.name });
                 window.callProbeErrors.push({ method, name: error.name, state: this.signalingState });
                 throw error;
               }
             };
           }
+        }
+      };
+      // The client builds an RTCIceCandidate for each remote candidate it
+      // applies, then may skip addIceCandidate; record the remote description
+      // generations of the live peers it would have been checked against.
+      const OriginalCandidate = window.RTCIceCandidate;
+      window.RTCIceCandidate = class extends OriginalCandidate {
+        constructor(...args) {
+          super(...args);
+          note({ event: "candidate-applying", type: this.type ?? candidateType(this.candidate), ufrag: ufragLabel(this.usernameFragment), liveRemoteUfrags: liveRemoteUfrags() });
         }
       };
     }, { expectedRelay: relayAddresses[index], nat });
@@ -671,6 +783,7 @@ try {
     stage = "callee node restart during direct call";
     const callee = deliveryDiagnostics[1];
     const before = { acks: callee.connectionAcks, closes: callee.socketCloses };
+    restartAt = Date.now();
     console.log("RESTART-CALLEE-NODE");
     const stdin = createInterface({ input: process.stdin });
     const [answer] = await once(stdin, "line");
@@ -683,6 +796,7 @@ try {
       assert.ok(Date.now() < reconnectDeadline, "The callee's realtime connection did not close and reconnect around the node restart");
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    console.log(`Callee realtime reconnected ${Date.now() - restartAt} ms after the restart request`);
     for (const page of pages)
       await page.getByRole("button", { name: "Leave call", exact: true }).waitFor({ timeout: 30000 });
     // Give call recovery after the reconnection time to (wrongly) duplicate peers.
@@ -692,6 +806,8 @@ try {
     assert.deepEqual(await livePeers(), [1, 1], "Node restart must not duplicate call connections");
     await assertAudio("direct call after callee node restart");
     assert.deepEqual(await livePeers(), [1, 1], "Node restart must not duplicate call connections");
+    console.log("Restart ICE diagnostics:", JSON.stringify(await restartIceDiagnostics()));
+    restartAt = undefined;
   }
   await pages[0]
     .getByRole("button", { name: "Leave call", exact: true })
@@ -861,6 +977,8 @@ try {
 } catch (error) {
   console.log("WebRTC operation errors:", JSON.stringify(await Promise.all(pages.map(page => page.evaluate(() => window.callProbeErrors).catch(() => [])))));
   console.log("Call lifecycle events:", JSON.stringify(callDiagnostics));
+  if (restartAt !== undefined)
+    console.log("Restart ICE diagnostics:", JSON.stringify(await restartIceDiagnostics()));
   console.log("WebRTC lifecycle diagnostics:", JSON.stringify(await Promise.all(pages.map(page => page.evaluate(() =>
     window.callProbePeers.map(peer => ({
       connection: peer.connectionState,

@@ -325,6 +325,7 @@ try {
       envelopeCounts: [],
       requestFailures: [],
       rejectedSignals: 0,
+      deferredRestartOffers: 0,
     };
     deliveryDiagnostics.push(diagnostics);
     page.on("websocket", (socket) => {
@@ -460,6 +461,18 @@ try {
       if (diagnostics.requestFailures.length > 60) diagnostics.requestFailures.shift();
     });
     let rejectSignalsUntil;
+    const deferredRestartOffers = new Set();
+    const rejectAsUnknownParticipant = (route) =>
+      route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        headers: {
+          'access-control-allow-origin': new URL(page.url()).origin,
+          'access-control-allow-credentials': 'true',
+          vary: 'Origin',
+        },
+        body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
+      });
     await page.route('**/api/calls/*/signals', async route => {
       if (route.request().method() !== 'POST') {
         await route.continue();
@@ -468,17 +481,22 @@ try {
       rejectSignalsUntil ??= Date.now() + 300;
       if (Date.now() < rejectSignalsUntil) {
         diagnostics.rejectedSignals++;
-        await route.fulfill({
-          status: 409,
-          contentType: 'application/json',
-          headers: {
-            'access-control-allow-origin': new URL(page.url()).origin,
-            'access-control-allow-credentials': 'true',
-            vary: 'Origin',
-          },
-          body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
-        });
+        await rejectAsUnknownParticipant(route);
         return;
+      }
+      // After the callee's node restart a node may not know yet that the
+      // recipient re-joined, so the first delivery of each recovery offer is
+      // refused while its trickled candidates go through: the answerer gets
+      // the candidates of a new ICE generation before the offer that starts it.
+      if (restartAt !== undefined) {
+        const { signalType, payload } = route.request().postDataJSON() ?? {};
+        const generation = typeof payload?.sdp === "string" ? [...payload.sdp.matchAll(/^a=ice-ufrag:(\S+)/gm)].map((match) => match[1]).join(" ") : "";
+        if (signalType === "offer" && !deferredRestartOffers.has(generation)) {
+          deferredRestartOffers.add(generation);
+          diagnostics.deferredRestartOffers++;
+          await rejectAsUnknownParticipant(route);
+          return;
+        }
       }
       await route.continue();
     });
@@ -800,7 +818,8 @@ try {
   assert.ok(deliveryDiagnostics.every(({ rejectedSignals }) => rejectedSignals > 0), "Both clients must recover from deliberately rejected signals");
   if (!nat) {
     // The runner restarts the callee's node (app-b) for real while the call is
-    // active; its separate TURN service keeps relaying the established media.
+    // active. Its TURN service shares app-b's network namespace and restarts
+    // with it, so the call recovers with a new ICE generation or a new peer.
     stage = "callee node restart during direct call";
     const callee = deliveryDiagnostics[1];
     const before = { acks: callee.connectionAcks, closes: callee.socketCloses };
@@ -827,6 +846,7 @@ try {
     assert.deepEqual(await livePeers(), [1, 1], "Node restart must not duplicate call connections");
     await assertAudio("direct call after callee node restart");
     assert.deepEqual(await livePeers(), [1, 1], "Node restart must not duplicate call connections");
+    assert.ok(deliveryDiagnostics.some(({ deferredRestartOffers }) => deferredRestartOffers > 0), "Recovery must have negotiated through a deferred offer");
     console.log("Restart ICE diagnostics:", JSON.stringify(await restartIceDiagnostics()));
     restartAt = undefined;
   }

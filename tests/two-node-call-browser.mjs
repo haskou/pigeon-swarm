@@ -151,10 +151,38 @@ try {
       window.callProbeTimeline = [];
       const note = (entry) => {
         window.callProbeTimeline.push({ at: Date.now(), ...entry });
-        if (window.callProbeTimeline.length > 600) window.callProbeTimeline.shift();
+        if (window.callProbeTimeline.length > 2000) window.callProbeTimeline.shift();
       };
       const liveRemoteUfrags = () =>
         (window.callProbePeers ?? []).flatMap((peer) => peer.connectionState === "closed" ? [] : [descriptionUfrags(peer.remoteDescription?.sdp)]);
+      const signalSummary = (signalType, payload) => ({
+        signalType: ["offer", "answer", "ice_candidate"].includes(signalType) ? signalType : "other",
+        ...(signalType === "ice_candidate"
+          ? { type: candidateType(payload?.candidate), ufrag: ufragLabel(candidateUfrag(payload)) }
+          : { ufrags: descriptionUfrags(payload?.sdp) }),
+      });
+      // Each call signal this page posted and how its node answered it.
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        let signal;
+        try {
+          const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+          if (init?.method === "POST" && /\/calls\/[^/]+\/signals$/.test(url.pathname)) {
+            const { signalType, payload } = JSON.parse(init.body);
+            signal = signalSummary(signalType, payload);
+          }
+        } catch {}
+        if (!signal) return originalFetch(input, init);
+        try {
+          const response = await originalFetch(input, init);
+          const code = response.ok ? undefined : await response.clone().json().then((body) => body?.code, () => undefined);
+          note({ event: "signal-posted", ...signal, status: response.status, ...(typeof code === "string" ? { code } : {}) });
+          return response;
+        } catch (error) {
+          note({ event: "signal-post-failed", ...signal, name: error?.name });
+          throw error;
+        }
+      };
       // Why a call peer closed: the closing code path (function names from the
       // stack) and the last call event this page received before it, by event
       // type and call id. Identity ids and payloads are never recorded.
@@ -171,14 +199,7 @@ try {
               if (!/^calls\.v1\.[a-z_.]+$/.test(event.type)) return;
               if (event.type === "calls.v1.signal.sent") {
                 const { payload, signalId, signalType } = event.attributes ?? {};
-                note({
-                  event: "signal-arrived",
-                  signalType: ["offer", "answer", "ice_candidate"].includes(signalType) ? signalType : "other",
-                  ...(signalType === "ice_candidate"
-                    ? { type: candidateType(payload?.candidate), ufrag: ufragLabel(candidateUfrag(payload)) }
-                    : { ufrags: descriptionUfrags(payload?.sdp) }),
-                  redelivered: seenSignals.has(signalId),
-                });
+                note({ event: "signal-arrived", ...signalSummary(signalType, payload), redelivered: seenSignals.has(signalId) });
                 if (typeof signalId === "string") seenSignals.add(signalId);
                 return;
               }

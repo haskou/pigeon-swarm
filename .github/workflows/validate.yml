@@ -194,7 +194,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '24.22'
 
       - name: Build independent client
         working-directory: client-source
@@ -269,7 +269,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '24.22'
 
       - name: Install client test tooling
         working-directory: client-source

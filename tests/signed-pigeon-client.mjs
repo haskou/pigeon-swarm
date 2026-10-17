@@ -159,7 +159,7 @@ export async function publishIdentity(request, actor, networks, name) {
     timestamp: Date.now(),
     version: 1,
   };
-  return request(actor, "POST", "identities/", {
+  return request(actor, "POST", "identities", {
     ...unsigned,
     signature: actor.identity
       .sign(IdentitySignature.signingContent(unsigned))
@@ -319,7 +319,7 @@ export class SignedCommunities {
       networkId: input.networkId,
       parents: [],
     });
-    return this.request(actor, "POST", "communities/", {
+    return this.request(actor, "POST", "communities", {
       autoJoinEnabled: input.autoJoinEnabled,
       description: input.description,
       discoverable: input.discoverable,
@@ -417,8 +417,15 @@ export class SignedCommunities {
     return this.request(
       actor,
       "POST",
-      `communities/${encodeURIComponent(community.id)}/join-requests`,
-      { acceptedAt, acceptedMutation, createdAt, mutation, operation },
+      "community-membership-requests",
+      {
+        acceptedAt,
+        acceptedMutation,
+        communityId: community.id,
+        createdAt,
+        mutation,
+        operation,
+      },
     );
   }
 
@@ -621,7 +628,7 @@ export class SignedCalls {
       recordId: payload.id,
       store: "calls",
     });
-    return this.request(actor, "POST", "calls/", {
+    return this.request(actor, "POST", "calls", {
       channelId: scope.channelId,
       communityId: scope.communityId,
       mutation,

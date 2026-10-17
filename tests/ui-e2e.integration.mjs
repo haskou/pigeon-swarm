@@ -915,13 +915,13 @@ const startNode = async (name) => {
   ]);
   await waitFor(
     async () => {
-      const response = await fetch(`${origin}/api/node/`);
+      const response = await fetch(`${origin}/api/node`);
       assert.ok(response.ok, `node status ${response.status}`);
     },
     120000,
     "node did not become ready",
   );
-  const registered = await fetch(`${origin}/api/node/networks/`, {
+  const registered = await fetch(`${origin}/api/node/networks`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(network),

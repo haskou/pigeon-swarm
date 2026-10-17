@@ -48,7 +48,7 @@ test('actual backend issuer and browser audio through TURN UDP, TCP and TLS afte
     compose('up', '-d', '--wait', '--wait-timeout', '90', 'app');
     assert.equal(compose('exec', '-T', '--user', '1000:1000', 'app', 'node', '-e', "console.log(Object.values(require('node:os').networkInterfaces()).flat().find(ip => ip.family === 'IPv4' && !ip.internal).address)").trim(), ip);
     const setup = run('docker', ['compose', 'exec', '-T', 'app', 'node', '--input-type=module'], { input: `
-      const result = await fetch('http://127.0.0.1:8080/api/node/relay-configuration/', {
+      const result = await fetch('http://127.0.0.1:8080/api/node/relay-configuration', {
         method: 'PUT', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ publicHost: ${JSON.stringify(ip)}, callsRelay: { port: 4101 },
           privateRelay: { enabled: true, portStart: 4102, portEnd: 4105, publicationEnabled: false, discoveryEnabled: false },

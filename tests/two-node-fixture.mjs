@@ -170,8 +170,8 @@ export async function startTwoNodeNetwork(fixture, { companions = [] } = {}) {
       {
         input: `
           for (const [path, method, body] of [
-            ['node/relay-configuration/', 'PUT', {publicHost: ${JSON.stringify(ip)}, callsRelay: {port:4101}, privateRelay: {enabled:true,portStart:4102,portEnd:4133,publicationEnabled:false,discoveryEnabled:false},publicNetwork:{enabled:false},manualRelayMultiaddrs:[]}],
-            ['node/networks/', 'POST', ${JSON.stringify(network)}]
+            ['node/relay-configuration', 'PUT', {publicHost: ${JSON.stringify(ip)}, callsRelay: {port:4101}, privateRelay: {enabled:true,portStart:4102,portEnd:4133,publicationEnabled:false,discoveryEnabled:false},publicNetwork:{enabled:false},manualRelayMultiaddrs:[]}],
+            ['node/networks', 'POST', ${JSON.stringify(network)}]
           ]) {
             const response = await fetch('http://127.0.0.1:8080/api/' + path, {method,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
             if (!response.ok) throw new Error('Fixture setup failed: ' + path + ' status ' + response.status);
@@ -207,7 +207,7 @@ export async function startTwoNodeNetwork(fixture, { companions = [] } = {}) {
       ["exec", "-T", `app-${name}`, "node", "--input-type=module"],
       {
         input: `
-          const url = 'http://127.0.0.1:8080/api/node/relay-configuration/';
+          const url = 'http://127.0.0.1:8080/api/node/relay-configuration';
           const configuration = {publicHost:${JSON.stringify(localIp)},callsRelay:{port:4101},privateRelay:{enabled:true,portStart:4102,portEnd:4133,publicationEnabled:false,discoveryEnabled:false},publicNetwork:{enabled:false},manualRelayMultiaddrs:[${JSON.stringify(remote)}]};
           const response = await fetch(url, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(configuration) });
           if (!response.ok) throw new Error('Manual bootstrap failed: ' + response.status);
@@ -269,7 +269,7 @@ async function awaitNetworkReady({ run }, network, peers, index) {
         const deadline = Date.now() + 60000;
         let summary;
         while (Date.now() < deadline) {
-          const response = await fetch('http://127.0.0.1:8080/api/peers/', {signal:AbortSignal.timeout(5000)});
+          const response = await fetch('http://127.0.0.1:8080/api/peers', {signal:AbortSignal.timeout(5000)});
           const peers = await response.json();
           const network = peers.networkSynchronization?.networks?.find(network => network.id === ${JSON.stringify(network.id)});
           summary = {state:network?.state,connected:network?.connectedPeerIds?.length,replicating:network?.replicationPeerIds?.length,stores:network?.totalStoreCount,converged:network?.convergedStoreCount};

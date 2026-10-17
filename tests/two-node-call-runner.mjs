@@ -45,7 +45,7 @@ export function testTwoNodeCalls({ nat = false } = {}) {
               return response.json();
             };
             const identity = await get('identities/${caller}');
-            const { networks } = await get('node/networks/');
+            const { networks } = await get('node/networks');
             console.log(JSON.stringify({
               identity: { id: identity.id, handle: identity.profile?.handle, networks: [...identity.networks].sort() },
               nodeNetworks: networks.map(({ id, name }) => ({ id, name })).sort((a, b) => a.id.localeCompare(b.id)),

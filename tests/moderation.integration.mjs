@@ -94,7 +94,7 @@ test(
             name,
             "node",
             "-e",
-            `fetch(${JSON.stringify(nodeUrl + "node/")}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))`,
+            `fetch(${JSON.stringify(nodeUrl + "node")}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))`,
           ]);
           break;
         } catch (error) {
@@ -108,7 +108,7 @@ test(
         name,
         "node",
         "-e",
-        `fetch(${JSON.stringify(nodeUrl + "node/networks/")}, {method: "POST", headers: {"content-type": "application/json"}, body: ${JSON.stringify(JSON.stringify(network))}}).then((r) => process.exit(r.ok ? 0 : 1))`,
+        `fetch(${JSON.stringify(nodeUrl + "node/networks")}, {method: "POST", headers: {"content-type": "application/json"}, body: ${JSON.stringify(JSON.stringify(network))}}).then((r) => process.exit(r.ok ? 0 : 1))`,
       ]);
       await docker([
         "cp",

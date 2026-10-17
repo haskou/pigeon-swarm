@@ -222,11 +222,11 @@ try {
         });
         if (diagnostics.mailboxResponses.length > 60) diagnostics.mailboxResponses.shift();
       }
-      if (responseUrl.pathname.startsWith("/api/keychains/")) {
+      if (responseUrl.pathname.startsWith("/api/keychains")) {
         diagnostics.keychainResponses.push({ at: Date.now() - startedAt, stage, page: index + 1, method: response.request().method(), port: responseUrl.port, status: response.status() });
         if (diagnostics.keychainResponses.length > 60) diagnostics.keychainResponses.shift();
       }
-      if (responseUrl.pathname.startsWith("/api/identities/")) {
+      if (responseUrl.pathname.startsWith("/api/identities")) {
         diagnostics.identityResponses.push({ at: Date.now() - startedAt, stage, page: index + 1, method: response.request().method(), port: responseUrl.port, status: response.status() });
         if (diagnostics.identityResponses.length > 60) diagnostics.identityResponses.shift();
       }
@@ -251,7 +251,7 @@ try {
         if (diagnostics.historyResponses.length > 20)
           diagnostics.historyResponses.shift();
       }
-      if (responseUrl.pathname === "/api/calls/" && response.request().method() === "GET") {
+      if (responseUrl.pathname === "/api/calls" && response.request().method() === "GET") {
         const body = await response.json().catch(() => undefined);
         const calls = Array.isArray(body) ? body : body?.calls ?? body?.data;
         diagnostics.callListResponses.push({ stage, status: response.status(), count: Array.isArray(calls) ? calls.length : null });
@@ -268,7 +268,7 @@ try {
         });
         if (diagnostics.callResourceResponses.length > 10) diagnostics.callResourceResponses.shift();
       }
-      if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls/")) {
+      if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/api/calls")) {
         const body = await response.json().catch(() => ({}));
         const suffix = responseUrl.pathname.split('/').at(-1);
         const operation = ['signals', 'heartbeat', 'participants', 'me'].includes(suffix) ? suffix : 'call';
@@ -281,7 +281,7 @@ try {
       if (
         response.status() >= 400 &&
         responseUrl.pathname.startsWith("/api/") &&
-        !responseUrl.pathname.startsWith("/api/calls/")
+        !responseUrl.pathname.startsWith("/api/calls")
       ) {
         const body = await response.json().catch(() => ({}));
         console.log(
@@ -296,7 +296,7 @@ try {
         );
       }
       if (
-        new URL(response.url()).pathname === "/api/conversations/" &&
+        new URL(response.url()).pathname === "/api/conversations" &&
         response.request().method() === "GET"
       ) {
         const body = await response.json().catch(() => undefined);
@@ -308,7 +308,7 @@ try {
       }
       if (
         response.status() >= 400 &&
-        new URL(response.url()).pathname === "/api/identities/"
+        new URL(response.url()).pathname === "/api/identities"
       ) {
         const body = await response.json().catch(() => ({}));
         console.log(
@@ -322,7 +322,7 @@ try {
     });
     page.on("requestfailed", (request) => {
       const requestUrl = new URL(request.url());
-      if (!requestUrl.pathname.startsWith("/api/mailboxes/") && !requestUrl.pathname.startsWith("/api/identities/")) return;
+      if (!requestUrl.pathname.startsWith("/api/mailboxes/") && !requestUrl.pathname.startsWith("/api/identities")) return;
       diagnostics.requestFailures.push({ at: Date.now() - startedAt, stage, page: index + 1, method: request.method(), kind: requestUrl.pathname.startsWith("/api/mailboxes/") ? "mailbox" : "identity", port: requestUrl.port, error: request.failure()?.errorText ?? "unknown" });
       if (diagnostics.requestFailures.length > 60) diagnostics.requestFailures.shift();
     });
@@ -424,7 +424,7 @@ try {
       converged = await page
         .evaluate(
           async ({nodeUrl, networkId}) => {
-            const response = await fetch(`${nodeUrl}/api/peers/`, {
+            const response = await fetch(`${nodeUrl}/api/peers`, {
               signal: AbortSignal.timeout(5000),
             });
             if (!response.ok) return false;

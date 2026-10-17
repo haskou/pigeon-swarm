@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_BUILD_IMAGE=node:24.15-bookworm
-ARG NODE_RUNTIME_IMAGE=node:24.15-bookworm-slim
+ARG NODE_BUILD_IMAGE=node:24.22-bookworm
+ARG NODE_RUNTIME_IMAGE=node:24.22-bookworm-slim
 
 FROM --platform=$BUILDPLATFORM ${NODE_BUILD_IMAGE} AS sources
 ARG PIGEON_SWARM_NODE_REF=main

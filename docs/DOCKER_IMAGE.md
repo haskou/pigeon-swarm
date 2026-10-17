@@ -319,7 +319,7 @@ does not emulate a router or test a real external network. Browser media
 acceptance remains tracked in #29.
 
 Once the node relay configuration is saved, authenticated calls to
-`GET /api/calls/ice-servers` return the local TURN URLs plus a temporary
+`GET /api/call-ice-servers` return the local TURN URLs plus a temporary
 `username` and `credential`. Locally issued credentials require the private TURN
 secret described above. Leaf nodes use TURN URLs from signed records of a
 currently connected relay. Private-network relays issue their own temporary

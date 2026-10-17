@@ -436,7 +436,7 @@ export class SignedCommunities {
     return this.request(
       actor,
       "DELETE",
-      `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}/kick`,
+      `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}`,
       {
         moderationLog: signModerationLog(actor, {
           frontier: parents,

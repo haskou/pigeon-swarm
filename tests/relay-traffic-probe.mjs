@@ -230,7 +230,7 @@ try {
     lastHeartbeatAt = Date.now();
     await Promise.all(
       identities.map((identity) =>
-        request(0, identity, "POST", `${callRoute}/participants/me/heartbeat`, {
+        request(0, identity, "PATCH", `${callRoute}/participants/me`, {
           mediaConnections: [],
         }),
       ),

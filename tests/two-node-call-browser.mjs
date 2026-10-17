@@ -461,7 +461,6 @@ try {
       if (diagnostics.requestFailures.length > 60) diagnostics.requestFailures.shift();
     });
     let rejectSignalsUntil;
-    const deferredRestartOffers = new Set();
     await page.route('**/api/calls/*/signals', async route => {
       if (route.request().method() !== 'POST') {
         await route.continue();
@@ -470,33 +469,29 @@ try {
       rejectSignalsUntil ??= Date.now() + 300;
       if (Date.now() < rejectSignalsUntil) {
         diagnostics.rejectedSignals++;
-      } else if (restartAt === undefined) {
-        await route.continue();
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          headers: {
+            'access-control-allow-origin': new URL(page.url()).origin,
+            'access-control-allow-credentials': 'true',
+            vary: 'Origin',
+          },
+          body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
+        });
         return;
-      } else {
-        // After the callee's node restart a node may not know yet that the
-        // recipient re-joined, so the first delivery of each recovery offer is
-        // refused while its trickled candidates go through: the answerer gets
-        // the candidates of a new ICE generation before the offer that starts it.
-        const { signalType, payload } = route.request().postDataJSON() ?? {};
-        const generation = typeof payload?.sdp === "string" ? [...payload.sdp.matchAll(/^a=ice-ufrag:(\S+)/gm)].map((match) => match[1]).join(" ") : "";
-        if (signalType !== "offer" || deferredRestartOffers.has(generation)) {
-          await route.continue();
-          return;
-        }
-        deferredRestartOffers.add(generation);
-        diagnostics.deferredRestartOffers++;
       }
-      await route.fulfill({
-        status: 409,
-        contentType: 'application/json',
-        headers: {
-          'access-control-allow-origin': new URL(page.url()).origin,
-          'access-control-allow-credentials': 'true',
-          vary: 'Origin',
-        },
-        body: JSON.stringify({ code: 'CallParticipantNotFoundError' }),
-      });
+      // Around the callee's node restart the nodes deliver each signal on its
+      // own retry schedule, so a recovery offer can reach the answerer after
+      // the candidates trickled behind it. Hold each recovery offer, with the
+      // description it was sent with, until its candidates have overtaken it.
+      // A refused offer would not do: its retry re-reads the local description,
+      // which by then carries the gathered candidates.
+      if (restartAt !== undefined && route.request().postDataJSON()?.signalType === "offer") {
+        diagnostics.deferredRestartOffers++;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      await route.continue();
     });
     page.setDefaultTimeout(45000);
     pages.push(page);

@@ -461,6 +461,7 @@ try {
       if (diagnostics.requestFailures.length > 60) diagnostics.requestFailures.shift();
     });
     let rejectSignalsUntil;
+    const postedCandidates = new Map();
     await page.route('**/api/calls/*/signals', async route => {
       if (route.request().method() !== 'POST') {
         await route.continue();
@@ -484,14 +485,26 @@ try {
       // Around the callee's node restart the nodes deliver each signal on its
       // own retry schedule, so a recovery offer can reach the answerer after
       // the candidates trickled behind it. Hold each recovery offer, with the
-      // description it was sent with, until its candidates have overtaken it.
-      // A refused offer would not do: its retry re-reads the local description,
-      // which by then carries the gathered candidates.
-      if (restartAt !== undefined && route.request().postDataJSON()?.signalType === "offer") {
+      // description it was sent with, until a candidate of its generation has
+      // been posted, so that candidate reaches the answerer first. A refused
+      // offer would not do: its retry re-reads the local description, which by
+      // then carries the gathered candidates. The hold stays short so both
+      // sides restarting ICE do not cross their offers more than they would.
+      const { signalType, payload } = route.request().postDataJSON() ?? {};
+      if (restartAt !== undefined && signalType === "offer") {
         diagnostics.deferredRestartOffers++;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const generation = [...String(payload?.sdp ?? "").matchAll(/^a=ice-ufrag:([^\r\n]+)$/gm)].map((match) => match[1].trim());
+        await Promise.race([
+          ...generation.map((ufrag) => (postedCandidates.get(ufrag) ?? postedCandidates.set(ufrag, Promise.withResolvers()).get(ufrag)).promise),
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
       await route.continue();
+      if (restartAt === undefined || signalType !== "ice_candidate") return;
+      await route.request().response();
+      const ufrag = payload?.usernameFragment ?? /\sufrag (\S+)/.exec(String(payload?.candidate ?? ""))?.[1];
+      (postedCandidates.get(ufrag) ?? postedCandidates.set(ufrag, Promise.withResolvers()).get(ufrag)).resolve();
     });
     page.setDefaultTimeout(45000);
     pages.push(page);

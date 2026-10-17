@@ -57,7 +57,7 @@ async function issueTicket(index, identity) {
     index,
     identity,
     "POST",
-    "realtime/v1/tickets",
+    "realtime/tickets",
     {},
   );
   check(
@@ -69,7 +69,7 @@ async function issueTicket(index, identity) {
 }
 
 async function connect(index, identity) {
-  const url = new URL("realtime/v1", nodes[index]);
+  const url = new URL("realtime", nodes[index]);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   const ticket = await issueTicket(index, identity);
   const socket = new WebSocket(url, [realtimeProtocol, `ticket.${ticket}`]);

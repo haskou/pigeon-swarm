@@ -34,9 +34,9 @@ async function fakeNode(t, contract, tls) {
       return res.end('globalThis.backendCodeExecuted = true;');
     }
     const body = req.url === '/api/client-contract' ? contract
-      : req.url === '/api/node/networks/' ? { networks: [] }
-        : req.url === '/api/node/' ? { id: 'fake-node', name: 'Negative-test fixture', owner: null }
-          : req.url === '/api/peers/' ? { peers: [], ipfsPeers: [], networkSynchronization: null }
+      : req.url === '/api/node/networks' ? { networks: [] }
+        : req.url === '/api/node' ? { id: 'fake-node', name: 'Negative-test fixture', owner: null }
+          : req.url === '/api/peers' ? { peers: [], ipfsPeers: [], networkSynchronization: null }
             : {};
     res.end(JSON.stringify(body));
   };
@@ -207,13 +207,13 @@ test('independent built client browser contract with explicitly fake backend fix
     const page = await pageFor(subtest);
     await page.goto(origin);
     const gateDocument = await page.evaluate(() => globalThis.documentId);
-    const firstBootstrap = page.waitForResponse(`${first.origin}/api/node/networks/`);
+    const firstBootstrap = page.waitForResponse(`${first.origin}/api/node/networks`);
     await choose(page, `${first.origin}/api`);
     await firstBootstrap;
     await page.getByRole('link', { name: 'Change node' }).waitFor();
     await page.waitForFunction(() => document.querySelector('.app-screen'));
     assert.notEqual(await page.evaluate(() => globalThis.documentId), gateDocument);
-    assert.ok(first.requests.includes('/api/node/networks/'));
+    assert.ok(first.requests.includes('/api/node/networks'));
     assert.equal(first.requests.includes('/malicious.js'), false);
     assert.equal(await page.evaluate(() => globalThis.backendCodeExecuted), undefined);
     const firstScope = createHash('sha256').update(`${first.origin}/api`).digest('hex');
@@ -226,7 +226,7 @@ test('independent built client browser contract with explicitly fake backend fix
     await page.getByRole('link', { name: 'Change node' }).click();
     await page.getByLabel('Node address').waitFor();
     const choosingDocument = await page.evaluate(() => globalThis.documentId);
-    const secondBootstrap = page.waitForResponse(`${second.origin}/api/node/networks/`);
+    const secondBootstrap = page.waitForResponse(`${second.origin}/api/node/networks`);
     await choose(page, `${second.origin}/api`);
     await secondBootstrap;
     await page.getByRole('link', { name: 'Change node' }).waitFor();
@@ -241,7 +241,7 @@ test('independent built client browser contract with explicitly fake backend fix
     assert.equal(reads.includes(`pigeon-swarm-credentials:${secondScope}`), false);
     assert.equal(reads.includes(`pigeon-swarm-credentials:${firstScope}`), false);
     assert.equal(reads.includes('pigeon-swarm-credentials'), false);
-    assert.ok(second.requests.includes('/api/node/networks/'));
+    assert.ok(second.requests.includes('/api/node/networks'));
     assert.equal(new URL(page.url()).origin, origin);
   });
 

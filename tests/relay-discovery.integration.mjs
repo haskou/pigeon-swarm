@@ -371,12 +371,12 @@ test(
           "dist/index.js",
         ]);
         await wait("application ready", () =>
-          request(node, "/api/node/").then(
+          request(node, "/api/node").then(
             () => true,
             () => false,
           ),
         );
-        await request(node, "/api/node/relay-configuration/", "PUT", {
+        await request(node, "/api/node/relay-configuration", "PUT", {
           publicHost: `11.254.0.${octet}`,
           callsRelay: { port: 4101 },
           privateRelay: {
@@ -390,7 +390,7 @@ test(
           manualRelayMultiaddrs: [],
         });
         if (delayPublic) await publicNetwork(node, false);
-        await request(node, "/api/node/networks/", "POST", network);
+        await request(node, "/api/node/networks", "POST", network);
       };
       await start("a", 10);
       await start("b", 11, true);

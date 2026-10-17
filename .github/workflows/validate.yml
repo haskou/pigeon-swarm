@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 env:
-  PIGEON_SWARM_NODE_SHA: 29849d8bd802084daafd3a4184c995fae364d10b
-  PIGEON_SWARM_UI_SHA: dc951247cb4c9761099d0c1c8fae943277411f23
+  PIGEON_SWARM_NODE_SHA: f808108b9ca8c9acf4ab79e4eebc6e68cb185f19
+  PIGEON_SWARM_UI_SHA: b1407c56c20be46211afa494e90ea2241aca7a64
 
 concurrency:
   group: validate-wrapper-${{ github.ref }}

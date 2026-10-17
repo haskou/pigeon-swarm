@@ -227,7 +227,7 @@ try {
       () =>
         device.page.evaluate(
           async ({ node, networkId }) => {
-            const response = await fetch(`${node}/api/peers/`, { signal: AbortSignal.timeout(5000) });
+            const response = await fetch(`${node}/api/peers`, { signal: AbortSignal.timeout(5000) });
             if (!response.ok) return false;
             const network = (await response.json()).networkSynchronization?.networks?.find((entry) => entry.id === networkId);
             return network?.state === "converged" && network.connectedPeerIds?.length > 0 && network.totalStoreCount > 0;
@@ -359,7 +359,7 @@ try {
   since = killedAt;
   const homeStatus = await bob.page.evaluate(async (node) => {
     try {
-      return (await fetch(`${node}/api/peers/`, { signal: AbortSignal.timeout(5000) })).status;
+      return (await fetch(`${node}/api/peers`, { signal: AbortSignal.timeout(5000) })).status;
     } catch {
       return "unreachable";
     }

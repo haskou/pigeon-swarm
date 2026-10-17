@@ -93,10 +93,47 @@ try {
           "getClientCapabilities",
           { configurable: true, value: undefined },
         );
+      // Why a call peer closed: the closing code path (function names from the
+      // stack) and the last call event this page received before it, by event
+      // type and call id. Identity ids and payloads are never recorded.
+      let lastCallEvent = null;
+      const OriginalSocket = window.WebSocket;
+      window.WebSocket = class extends OriginalSocket {
+        constructor(...args) {
+          super(...args);
+          this.addEventListener("message", ({ data }) => {
+            if (typeof data !== "string") return;
+            try {
+              const { type, event } = JSON.parse(data);
+              if (type !== "domain_event" || typeof event?.type !== "string") return;
+              if (!/^calls\.v1\.[a-z_.]+$/.test(event.type) || event.type === "calls.v1.signal.sent") return;
+              const callId = event.attributes?.callId ?? event.aggregate_id;
+              const participants = event.attributes?.liveCall?.participants;
+              lastCallEvent = {
+                type: event.type,
+                callId: typeof callId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(callId) ? callId : "unknown",
+                revision: Number.isSafeInteger(event.attributes?.liveCallRevision) ? event.attributes.liveCallRevision : null,
+                joinedParticipants: Array.isArray(participants) ? participants.filter((participant) => participant?.status === "joined").length : null,
+              };
+            } catch {}
+          });
+        }
+      };
       const Original = window.RTCPeerConnection;
       window.callProbePeers = [];
       window.callProbeErrors = [];
       window.RTCPeerConnection = class extends Original {
+        close() {
+          this.callProbeClose ??= {
+            connection: this.connectionState,
+            closer: (new Error().stack ?? "")
+              .split("\n")
+              .slice(2, 8)
+              .map((line) => /^\s*at (?:async )?([A-Za-z_$][\w$.<>]*) \(/.exec(line)?.[1] ?? "anonymous"),
+            lastCallEvent,
+          };
+          return super.close();
+        }
         constructor(configuration, ...rest) {
           const iceServers = (configuration?.iceServers || []).flatMap(
             (server) => {
@@ -220,7 +257,7 @@ try {
         diagnostics.callListResponses.push({ stage, status: response.status(), count: Array.isArray(calls) ? calls.length : null });
         if (diagnostics.callListResponses.length > 10) diagnostics.callListResponses.shift();
       }
-      if (/^\/api\/calls\/[^/]+\/?$/.test(responseUrl.pathname) && response.request().method() === "GET") {
+      if (/^\/api\/calls\/(?!ice-servers\/?$)[^/]+\/?$/.test(responseUrl.pathname) && response.request().method() === "GET") {
         const body = await response.json().catch(() => undefined);
         const status = (value) => (typeof value === "string" && /^[a-z_]+$/.test(value) ? value : "unknown");
         diagnostics.callResourceResponses.push({
@@ -832,6 +869,7 @@ try {
       localDescription: peer.localDescription?.type,
       remoteDescription: peer.remoteDescription?.type,
       tracks: peer.getSenders().map(sender => sender.track?.readyState),
+      closed: peer.callProbeClose,
     })),
   ).catch(() => [])))));
   console.log(

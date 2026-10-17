@@ -103,6 +103,19 @@ export function testTwoNodeCalls({ nat = false } = {}) {
             },
           },
         );
+        if (!nat) {
+          // turn-b shares app-b's network namespace and exits to rejoin the new
+          // one after a restart (scripts/run-turn-from-runtime-config.sh). Only
+          // the timestamps of those two lifecycle lines are printed (#127).
+          const turnLogs = await run(["logs", "--no-color", "--timestamps", "turn-b"]);
+          const lifecycle = (turnLogs.stdout + turnLogs.stderr).split("\n").flatMap((line) => {
+            const at = /^(?:\S+\s+\|\s+)?(\d{4}-\d\d-\d\dT[\d:.]+Z)\s/.exec(line)?.[1];
+            if (line.includes("lost the node network namespace")) return [{ at, event: "lost-namespace" }];
+            if (line.includes("Starting TURN from persisted node configuration")) return [{ at, event: "started" }];
+            return [];
+          });
+          console.log("TURN B lifecycle:", JSON.stringify(lifecycle));
+        }
         const restartError = await restarting;
         if (restartError) throw restartError;
         assert.equal(result.status, 0, result.stdout + result.stderr);

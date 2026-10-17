@@ -20,8 +20,8 @@ Status meanings:
 
 | Component | Revision |
 | --- | --- |
-| `PIGEON_SWARM_NODE_SHA` | `f808108b9ca8c9acf4ab79e4eebc6e68cb185f19` |
-| `PIGEON_SWARM_UI_SHA` | `f733165e1bad4961630c11fa61c46d25d6d8d696` |
+| `PIGEON_SWARM_NODE_SHA` | `71ac4a8dbc495026d2f055ee73b368721d7dc985` |
+| `PIGEON_SWARM_UI_SHA` | `43f56ef247be13ffa47bbedd448fa77e9de43777` |
 
 Both revisions are commits of the public `haskou/pigeon-swarm-node` and
 `haskou/pigeon-swarm-ui` repositories. CI builds the application image from these
@@ -59,6 +59,7 @@ Every CI test step in `validate.yml` appears here exactly once.
 | M20 | Pin bump helper | Unit tests over temporary copies of the pin files | None | `Validate pin bump helper` | `scripts/bump-pins.mjs` moves both pins in the workflow, the pin table and the reproduction command; abbreviated commits and files that do not record the current pin are refused without changes | Automated |
 | M21 | Image publishing contract | Contract tests over `publish-docker.yml` and the change classifier; unit tests of `scripts/publish-sources.mjs` over temporary copies of `validate.yml` | None | `Validate image publishing contract` | The image publishes only after `Validate wrapper` succeeds for a push to `main` in this repository, from the `validate.yml` pins of that wrapper commit; dispatch payloads, inputs, variables and upstream `main` never select sources; missing, abbreviated or duplicated pins are refused; a push to `main` runs every check | Automated |
 | M22 | Contact presence between users on different nodes | Client built independently; two application containers; two Chromium contexts, each user connected to their own node | None | `Verify contact presence between users on different nodes` | Contacts who share their status in a direct conversation see each other online; each update is accepted only on the contact's home node; a contact who goes invisible is shown offline once the last update expires, as listed in [TWO_NODE_PRESENCE_VALIDATION.md](TWO_NODE_PRESENCE_VALIDATION.md) | Automated |
+| M23 | Removed verb-style endpoint paths | Static scan of the tracked probes, client sources and documents | None | `Reject removed verb-style endpoint paths` | No tracked file under `tests`, `docs`, `scripts`, `client` or `site`, and not `README.md`, names a verb-style node path that issue #606 replaced with a resource and method | Automated |
 
 Blocked or unfinished behavior listed in the issue (#29, #32, #33 and their
 linked node and UI issues) is not claimed here. Those rows are tracked by the
@@ -137,8 +138,8 @@ The source repositories are public. The Dockerfile needs no token for these pins
 
 ```sh
 docker build --target production \
-  --build-arg PIGEON_SWARM_NODE_SHA=f808108b9ca8c9acf4ab79e4eebc6e68cb185f19 \
-  --build-arg PIGEON_SWARM_UI_SHA=f733165e1bad4961630c11fa61c46d25d6d8d696 \
+  --build-arg PIGEON_SWARM_NODE_SHA=71ac4a8dbc495026d2f055ee73b368721d7dc985 \
+  --build-arg PIGEON_SWARM_UI_SHA=43f56ef247be13ffa47bbedd448fa77e9de43777 \
   --iidfile pigeon-test-image.id .
 export PIGEON_TEST_IMAGE="$(cat pigeon-test-image.id)"
 npm ci --ignore-scripts

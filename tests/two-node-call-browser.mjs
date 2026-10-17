@@ -387,7 +387,7 @@ try {
         diagnostics.callListResponses.push({ stage, status: response.status(), count: Array.isArray(calls) ? calls.length : null });
         if (diagnostics.callListResponses.length > 10) diagnostics.callListResponses.shift();
       }
-      if (/^\/api\/calls\/(?!ice-servers\/?$)[^/]+\/?$/.test(responseUrl.pathname) && response.request().method() === "GET") {
+      if (/^\/api\/calls\/[^/]+\/?$/.test(responseUrl.pathname) && response.request().method() === "GET") {
         const body = await response.json().catch(() => undefined);
         const status = (value) => (typeof value === "string" && /^[a-z_]+$/.test(value) ? value : "unknown");
         diagnostics.callResourceResponses.push({

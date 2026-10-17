@@ -12,7 +12,7 @@ assert.ok(['udp', 'tcp', 'tls'].includes(mode), 'Choose udp, tcp or tls');
 
 async function configuration() {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-  const endpoint = new URL('calls/ice-servers', api);
+  const endpoint = new URL('call-ice-servers', api);
   const timestamp = Date.now();
   // SignedHttpRequestSignature preimage: domain line plus RFC 8785 JSON. The
   // keys are already sorted and every value is a string or a safe integer, so

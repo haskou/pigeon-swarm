@@ -338,7 +338,7 @@ export class SignedCommunities {
     return this.request(
       actor,
       "POST",
-      `communities/${encodeURIComponent(community.id)}/channels/${type}`,
+      `communities/${encodeURIComponent(community.id)}/channels`,
       {
         moderationLog: signModerationLog(actor, {
           frontier: parents,
@@ -349,6 +349,7 @@ export class SignedCommunities {
           target: { id: channelId, type: "channel" },
         }),
         name,
+        type,
         operation: await this.operation(
           actor,
           community.id,
@@ -436,7 +437,7 @@ export class SignedCommunities {
     return this.request(
       actor,
       "DELETE",
-      `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}/kick`,
+      `communities/${encodeURIComponent(community.id)}/members/${encodeURIComponent(identityId)}`,
       {
         moderationLog: signModerationLog(actor, {
           frontier: parents,

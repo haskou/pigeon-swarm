@@ -64,7 +64,7 @@ checks both the saved key and identity persistence, in addition to connectivity.
 Every phase creates a new community, roster and voice channel through signed HTTP
 requests. Every participating node must return the complete expected community
 document. Each socket first obtains its own single-use realtime ticket with a
-signed request, then connects to `/realtime/v1` and must select the
+signed request, then connects to `/realtime` and must select the
 `pigeon-realtime.v1` subprotocol. These authenticated WebSockets then receive
 fresh call signals over each adjacent node pair. Assertions include the delivery
 ID, sender, recipient, call, unique payload and valid expiry. A

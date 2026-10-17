@@ -9,6 +9,7 @@ import test from 'node:test';
 const removed = [
   ['POST /communities/{id}/channels/text', /\/channels\/text\b/],
   ['POST /communities/{id}/channels/voice', /\/channels\/voice\b/],
+  ['POST /communities/{id}/channels/{type}', /\/channels\/\$\{/],
   ['DELETE /communities/{id}/members/{identityId}/kick', /\/kick(?![-\w])/],
   ['GET /communities/discover', /\/communities\/discover\b/],
   ['POST /polls/{pollId}/close', /\/polls\/.*\/close\b/],

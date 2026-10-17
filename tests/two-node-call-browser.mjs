@@ -90,8 +90,6 @@ const restartIceDiagnostics = () =>
       const byId = new Map(stats.map((stat) => [stat.id, stat]));
       const candidate = (stat) => stat && ({
         type: stat.candidateType,
-        address: stat.address,
-        port: stat.port,
         protocol: stat.protocol,
         relayProtocol: stat.relayProtocol,
         ufrag: window.callProbeUfragLabel(stat.usernameFragment),
@@ -109,7 +107,6 @@ const restartIceDiagnostics = () =>
           selected: pair.id === transport?.selectedCandidatePairId,
           local: byId.get(pair.localCandidateId)?.candidateType,
           remote: byId.get(pair.remoteCandidateId)?.candidateType,
-          remotePort: byId.get(pair.remoteCandidateId)?.port,
         })),
       };
     })),

@@ -64,6 +64,7 @@ Failure diagnostics distinguish preview requests from timeline history and
 report response status, result count, pagination and call operation/signal type.
 They exclude message bodies, identity IDs and key material.
 Decryption timeouts also report per-node counts of message items and encrypted states (decrypt-failed or missing-key), classified by DOM class and copy presence without logging message text.
+Each closed call peer reports why it closed: the function names on the stack that called `close()`, and the last call event the page received before that call (event type, call id, live call revision and joined participant count). Signal events, identity IDs and payloads are left out.
 The canary scan covers the encodings listed above in application data files and container logs. It does not cover encrypted or compressed storage contents, browser storage, DHT, push, or traffic captures.
 
 For media verification, each browser is restricted to the UDP TURN URL advertised
